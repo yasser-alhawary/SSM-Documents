@@ -1,0 +1,87 @@
+description: |
+  ### Document name - AWSConfigRemediation-EnforceHTTPSOnOpenSearchDomain
+
+  ## What does this document do?
+  This runbook enables `EnforceHTTPS` on a given Amazon OpenSearch Service domain using the [UpdateDomainConfig](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/configuration-api.html#configuration-api-actions-updatedomainconfig) API.
+
+  ## Input Parameters
+  * DomainName: (Required) The name of the Amazon OpenSearch Service domain for which you want to enforce HTTPS.
+  * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  * UpdateOpenSearchDomainConfigAndVerify.Output: Success message or failure exception.
+
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  DomainName:
+    type: String
+    description: (Required) The name of the Amazon OpenSearch Service domain for which you want to enforce HTTPS.
+    allowedPattern: (d{12}/)?[a-z]{1}[a-z0-9-]{2,28}
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(?:aws|aws-us-gov|aws-cn):iam::d{12}:role/[w+=,.@/-]+$
+outputs:
+  - UpdateOpenSearchDomainConfigAndVerify.Output
+mainSteps:
+  - name: UpdateOpenSearchDomainConfigAndVerify
+    action: "aws:executeScript"
+    description: |
+      ## UpdateOpenSearchDomainConfigAndVerify
+      Makes UpdateDomainConfig API call using domain name to enable `EnforceHTTPS` on Amazon OpenSearch service domain and verifies its state.
+      ## Outputs
+      * Output: Success message or failure exception.
+    timeoutSeconds: 600
+    inputs:
+      Runtime: python3.8
+      Handler: handler
+      InputPayload:
+        DomainName: "{{ DomainName }}"
+      Script: |-
+        import boto3
+        import re
+        from botocore.config import Config
+
+        config = Config(
+            retries={
+                "max_attempts": 10,
+                "mode": "standard"
+            }
+        )
+
+        opensearch_client = boto3.client("opensearch", config=config)
+
+        def update_enforce_https(domain_name):
+            return opensearch_client.update_domain_config(
+                DomainName=domain_name, DomainEndpointOptions={"EnforceHTTPS": True}
+            )
+
+        def verify_open_search_domain_enforce_https_status(domain_name):
+            describe_domain_response = opensearch_client.describe_domain(
+                DomainName=domain_name
+            )
+            if describe_domain_response["DomainStatus"]["DomainEndpointOptions"]["EnforceHTTPS"]:
+                return True
+            return False
+
+        def handler(event, context):
+            domain_name = event["DomainName"]
+            domain_pattern = r"(d{12}/)?[a-z]{1}[a-z0-9-]{2,28}"
+            if re.match(domain_pattern, domain_name):
+                domain_name = domain_name.split("/")[-1]
+            update_domain_response = update_enforce_https(domain_name)['ResponseMetadata']
+            enforce_https_status = verify_open_search_domain_enforce_https_status(domain_name)
+            if enforce_https_status:
+                return {
+                    "output": {
+                        "message": "Verification of EnforceHTTPS on Amazon OpenSearch service domain is successful.",
+                        "HTTPResponse": update_domain_response,
+                    }
+                }
+            raise Exception(
+                "VERIFICATION OF ENFORCEHTTPS ON AMAZON OPENSEARCH SERVICE DOMAIN FAILED."
+            )
+    outputs:
+      - Name: Output
+        Selector: $.Payload.output
+        Type: StringMap

@@ -1,0 +1,452 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-SimulateS3ObjectsAccidentalDeleteTest_2020-04-01
+
+            ## Intent
+            Test the case where all versions of files in the bucket were deleted and restored from the backup bucket
+
+            ## Type
+            TEST
+
+            ## Risk
+            High
+
+            ## Requirements
+              * S3 bucket that will be cleaned
+              * Objects on that bucket are constantly requested during test
+              * Alarm for metric [4xxErrors](https://docs.aws.amazon.com/AmazonS3/latest/userguide/metrics-dimensions.html) setup for the S3 bucket
+              * S3 bucket that will be used for backup
+
+            ## Depends on
+              * AWSResilienceHub-RestoreS3BucketFromBackupSOP_2020-09-21
+              * AWSResilienceHub-CleanS3BucketUtil_2020-03-03
+
+            ## Permissions required for AutomationAssumeRole
+              * s3:DeleteObject
+              * s3:GetObject
+              * s3:GetObject*
+              * s3:DeleteObjectVersion
+              * s3:ListBucket
+              * s3:ListBucketVersions
+              * s3:ListObjectsV2
+              * s3:ListObjectVersions
+              * s3:PutObject
+              * ssm:StartAutomationExecution
+              * ssm:GetAutomationExecution
+              * sns:Publish
+              * ssm:GetParameters
+              * cloudwatch:DescribeAlarms
+              * iam:PassRole
+
+            ##### Permissions required in case KMS encryption is used
+              * kms:GenerateDataKey
+              * kms:Decrypt
+              * kms:Encrypt
+
+            ## Supports Rollback
+            Yes. Restore objects in the bucket and clean bucket used for backup
+
+            ## Cancellation behavior
+            Restore objects in the bucket and clean bucket used for backup
+
+            ## Inputs
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: ARN of the IAM role with permissions listed above
+
+            ### (Required) S3BucketWhereObjectsWillBeDeletedFrom
+              * type: String
+              * description: The S3 Bucket Name where objects will be deleted
+
+            ### (Required) S3BucketToRestoreWhereObjectWillBeCopiedTo
+              * type: String
+              * description: The S3 Bucket Name where objects will be copied
+
+            ### (Required) S3UserErrorAlarmName
+              * type: String
+              * description: Alarm for metric [4xxErrors](https://docs.aws.amazon.com/AmazonS3/latest/userguide/metrics-dimensions.html) setup for the S3 bucket
+
+            ### (Required) SNSTopicARNForManualApproval
+              * type: String
+              * description: The ARN of the SNS Topic where a user will receive the notification about the manual approval of bucket clean-up if some files exist there
+
+            ### (Required) IAMPrincipalForManualApproval
+              * type: String
+              * description: ARN of AWS authenticated principal who are able to either approve or reject the clean-up of bucket if there are some files. Can be either an AWS Identity and Access Management (IAM) user name or IAM user ARN or IAM role ARN or IAM assume role user ARN
+
+            ### (Optional) ForceCleanBucketToRestoreWhereObjectWillBeCopiedTo
+              * type: String
+              * description: If true, approve cleaning of the bucket automatically where objects will be copied to if they exist there. Otherwise, give a user a chance to decide
+              * default: false
+
+            ### (Optional) IsRollback
+              * type: String
+              * description: Run the rollback steps of the document. True or False. If True, the parameter PreviousExecutionId should also be specified
+              * default: false
+
+            ### (Optional) PreviousExecutionId
+              * type: String
+              * description: SSM execution ID of the previous execution of this document for which resources need to be cleaned up
+
+            ## Details
+            The document injects failure by clearing all objects from the bucket. Those objects should be constantly
+            requested to trigger alarm for metric `4xxErrors`. In case of issues users should manually restore bucket
+            from the backup using AWSResilienceHub-RestoreS3BucketFromBackupSOP_2020-09-21 SOP.
+
+            ## Steps executed in normal flow
+              * CheckIsRollback
+              * AssertAlarmToBeGreenBeforeTest
+              * BackupS3BucketWhereObjectsWillBeDeletedFrom
+              * CleanS3BucketWhereObjectsWillBeDeletedFrom
+              * AssertAlarmToBeRed
+              * RollbackCurrentExecution
+              * AssertAlarmToBeGreen
+
+            ## Steps executed in rollback flow
+              * CheckIsRollback
+              * GetInputsFromPreviousExecution
+              * AssertInputsFromPreviousExecution
+              * GetS3BucketWhereObjectCouldBeDeletedFrom
+              * GetS3BucketToRestoreWhereObjectWasCopiedTo
+              * RollbackPreviousExecution
+
+            ## Outputs
+            None
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  S3BucketWhereObjectsWillBeDeletedFrom:
+    type: String
+    description: (Required) The S3 Bucket Name where objects will be deleted.
+  S3BucketToRestoreWhereObjectWillBeCopiedTo:
+    type: String
+    description: (Required) The S3 Bucket Name where objects will be copied.
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+  S3UserErrorAlarmName:
+    type: String
+    description: (Required) Alarm for metric `4xxErrors` setup for the S3 bucket
+  SNSTopicARNForManualApproval:
+    type: String
+    description: (Required) The ARN of the SNS Topic where a user will receive the notification about the manual approval of bucket clean-up if some files exist there.
+  IAMPrincipalForManualApproval:
+    type: String
+    description: (Required) ARN of AWS authenticated principal who are able to either approve or reject the clean-up of bucket if there are some files. Can be either an AWS Identity and Access
+      Management (IAM) user name or IAM user ARN or IAM role ARN or IAM assume role user ARN
+  IsRollback:
+    type: String
+    description: >-
+      (Optional) Provide true to cleanup appliance created in previous execution. Can be true or false
+    default: 'false'
+  PreviousExecutionId:
+    type: String
+    description: >-
+      (Optional) Previous execution id for which resources need to be cleaned up.
+    default: ''
+  ForceCleanBucketToRestoreWhereObjectWillBeCopiedTo:
+    type: Boolean
+    description: |-
+      (Optional) If it is true, approve cleaning of the bucket automatically where objects will be copied to if they exist there.
+      Otherwise, give a user a chance to decide. It is false by default.
+    default: false
+mainSteps:
+  - name: CheckIsRollback
+    description: Check if document should be executed in rollback mode
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: GetInputsFromPreviousExecution
+          Variable: "{{IsRollback}}"
+          StringEquals: 'true'
+      Default: AssertAlarmToBeGreenBeforeTest
+
+  - name: GetInputsFromPreviousExecution
+    description: Get input from previous execution. This will be used to validate that rollback is executed with the same input
+    action: aws:executeScript
+    outputs:
+      - Name: S3BucketWhereObjectsWillBeDeletedFrom
+        Selector: '$.Payload.S3BucketWhereObjectsWillBeDeletedFrom[0]'
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: get_inputs_from_ssm_execution
+      InputPayload:
+        ExecutionId: '{{ PreviousExecutionId }}'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def get_inputs_from_ssm_execution(events, context):
+            output = {}
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events:
+                raise KeyError('Requires ExecutionId')
+        
+            if not events['ExecutionId']:
+                raise KeyError('Requires not empty ExecutionId')
+        
+            response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+            response_parameters = response['AutomationExecution']['Parameters']
+            # TODO DIG-853
+            for parameter in response_parameters:
+                output[parameter] = response_parameters[parameter]
+        
+            return output
+        
+        
+
+
+  - name: AssertInputsFromPreviousExecution
+    description: Validate that rollback is executed with the same input
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: GetS3BucketWhereObjectCouldBeDeletedFrom
+          Variable: '{{ GetInputsFromPreviousExecution.S3BucketWhereObjectsWillBeDeletedFrom }}'
+          StringEquals: '{{ S3BucketWhereObjectsWillBeDeletedFrom }}'
+    isEnd: true
+
+  - name: GetS3BucketWhereObjectCouldBeDeletedFrom
+    description: Get S3 bucket used for backup that may be cleared during rollback
+    action: aws:executeScript
+    outputs:
+      - Name: S3BucketWhereObjectCouldBeDeletedFrom
+        Selector: $.Payload.S3BackupBucketName
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: get_inputs_from_ssm_step_execution
+      InputPayload:
+        ExecutionId: '{{PreviousExecutionId}}'
+        StepName: 'BackupS3BucketWhereObjectsWillBeDeletedFrom'
+        ResponseField: 'S3BackupBucketName'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def get_inputs_from_ssm_step_execution(events, context):
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events or 'StepName' not in events or 'ResponseField' not in events:
+                raise KeyError('Requires ExecutionId, StepName and ResponseField in events')
+        
+            ssm_response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+            for step in ssm_response['AutomationExecution']['StepExecutions']:
+                if step['StepName'] == events['StepName']:
+                    response_fields = events['ResponseField'].split(',')
+                    output = {}
+                    for response_field in response_fields:
+                        step_output = step['Inputs'][response_field]
+                        output[response_field] = json.loads(step_output)
+                    return output
+        
+            # Could not find step name
+            raise Exception('Can not find step name % in ssm execution response', events['StepName'])
+        
+        
+
+  - name: GetS3BucketToRestoreWhereObjectWasCopiedTo
+    description: Get S3 bucket to restore files to for rollback
+    action: aws:executeScript
+    outputs:
+      - Name: S3BucketToRestoreWhereObjectWasCopiedTo
+        Selector: $.Payload.S3BucketToRestoreName
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: get_inputs_from_ssm_step_execution
+      InputPayload:
+        ExecutionId: '{{PreviousExecutionId}}'
+        StepName: 'BackupS3BucketWhereObjectsWillBeDeletedFrom'
+        ResponseField: 'S3BucketToRestoreName'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def get_inputs_from_ssm_step_execution(events, context):
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events or 'StepName' not in events or 'ResponseField' not in events:
+                raise KeyError('Requires ExecutionId, StepName and ResponseField in events')
+        
+            ssm_response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+            for step in ssm_response['AutomationExecution']['StepExecutions']:
+                if step['StepName'] == events['StepName']:
+                    response_fields = events['ResponseField'].split(',')
+                    output = {}
+                    for response_field in response_fields:
+                        step_output = step['Inputs'][response_field]
+                        output[response_field] = json.loads(step_output)
+                    return output
+        
+            # Could not find step name
+            raise Exception('Can not find step name % in ssm execution response', events['StepName'])
+        
+        
+
+  - name: RollbackPreviousExecution
+    description: Execute SOP AWSResilienceHub-RestoreS3BucketFromBackupSOP_2020-09-21 to restore S3 bucket from backup
+    action: aws:executeAutomation
+    inputs:
+      DocumentName: AWSResilienceHub-RestoreS3BucketFromBackupSOP_2020-09-21
+      RuntimeParameters:
+        AutomationAssumeRole: '{{AutomationAssumeRole}}'
+        SNSTopicARNForManualApproval: '{{SNSTopicARNForManualApproval}}'
+        IAMPrincipalForManualApproval: '{{IAMPrincipalForManualApproval}}'
+        S3BackupBucketName: '{{GetS3BucketToRestoreWhereObjectWasCopiedTo.S3BucketToRestoreWhereObjectWasCopiedTo}}'
+        S3BucketToRestoreName: '{{GetS3BucketWhereObjectCouldBeDeletedFrom.S3BucketWhereObjectCouldBeDeletedFrom}}'
+    isEnd: true
+  - name: AssertAlarmToBeGreenBeforeTest
+    description: Ensure alarm is green before starting test. Fail if alarm is not green within expected time.
+    action: aws:waitForAwsResourceProperty
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{S3UserErrorAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: ["OK"]
+  - name: BackupS3BucketWhereObjectsWillBeDeletedFrom
+    description: |-
+      Execute SOP AWSResilienceHub-RestoreS3BucketFromBackupSOP_2020-09-21 to create a backup that will be cleaned.
+      If bucket for backup is not empty, user's approval to clean it will be requested or bucket will be cleaned
+      automatically if `ApproveCleanRestoreBucketAutomatically` is true.
+    action: aws:executeAutomation
+    inputs:
+      DocumentName: AWSResilienceHub-RestoreS3BucketFromBackupSOP_2020-09-21
+      RuntimeParameters:
+        AutomationAssumeRole: '{{AutomationAssumeRole}}'
+        SNSTopicARNForManualApproval: '{{SNSTopicARNForManualApproval}}'
+        IAMPrincipalForManualApproval: '{{IAMPrincipalForManualApproval}}'
+        S3BackupBucketName: '{{S3BucketWhereObjectsWillBeDeletedFrom}}'
+        S3BucketToRestoreName: '{{S3BucketToRestoreWhereObjectWillBeCopiedTo}}'
+        ApproveCleanRestoreBucketAutomatically: '{{ForceCleanBucketToRestoreWhereObjectWillBeCopiedTo}}'
+  - name: CleanS3BucketWhereObjectsWillBeDeletedFrom
+    description: Execute SSM document AWSResilienceHub-CleanS3BucketUtil_2020-03-03 to clean the specified bucket
+    action: aws:executeAutomation
+    onCancel: 'step:TriggerRollback'
+    inputs:
+      DocumentName: AWSResilienceHub-CleanS3BucketUtil_2020-03-03
+      RuntimeParameters:
+        AutomationAssumeRole: '{{AutomationAssumeRole}}'
+        S3BucketNameToClean: '{{S3BucketWhereObjectsWillBeDeletedFrom}}'
+  - name: AssertAlarmToBeRed
+    description: Wait for expected alarm to be red after failure is injected
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    # Timeout value here should be less than default timeout of 1200s, to ensure TimedOut status
+    timeoutSeconds: 600
+    onFailure: 'step:RollbackCurrentExecution'
+    onCancel: 'step:TriggerRollback'
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{S3UserErrorAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: [ "ALARM" ]
+  - name: RollbackCurrentExecution
+    description: Execute SOP AWSResilienceHub-RestoreS3BucketFromBackupSOP_2020-09-21 to restore bucket from backup
+    action: aws:executeAutomation
+    onCancel: 'step:TriggerRollback'
+    inputs:
+      DocumentName: AWSResilienceHub-RestoreS3BucketFromBackupSOP_2020-09-21
+      RuntimeParameters:
+        AutomationAssumeRole: '{{AutomationAssumeRole}}'
+        SNSTopicARNForManualApproval: '{{SNSTopicARNForManualApproval}}'
+        IAMPrincipalForManualApproval: '{{IAMPrincipalForManualApproval}}'
+        S3BackupBucketName: '{{S3BucketToRestoreWhereObjectWillBeCopiedTo}}'
+        S3BucketToRestoreName: '{{S3BucketWhereObjectsWillBeDeletedFrom}}'
+  - name: AssertAlarmToBeGreen
+    description: Wait for the alarm to be green after test is complete
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 1200
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{S3UserErrorAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: [ "OK" ]
+    isEnd: true
+  - name: TriggerRollback
+    description: This step is executed when ssm document is cancelled while it was in progress. This step starts a new execution of document in rollback mode to rollback the changes made as part of normal execution
+    action: 'aws:executeScript'
+    onFailure: Abort
+    outputs:
+      - Name: RollbackExecutionId
+        Selector: $.Payload.RollbackExecutionId
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: start_rollback_execution
+      InputPayload:
+        ExecutionId: '{{automation:EXECUTION_ID}}'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def start_rollback_execution(events, context):
+            output = {}
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events or not events['ExecutionId']:
+                raise KeyError('Requires not empty ExecutionId')
+        
+            response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+        
+            # Get parameters for current execution and add IsRollback and PreviousExecutionId
+            response_parameters = response['AutomationExecution']['Parameters']
+            response_parameters['IsRollback'] = ['true']
+            response_parameters['PreviousExecutionId'] = [events['ExecutionId']]
+        
+            rollback_execution_response = ssm.start_automation_execution(
+                DocumentName=response['AutomationExecution']['DocumentName'],
+                DocumentVersion=response['AutomationExecution']['DocumentVersion'],
+                Parameters=response_parameters
+            )
+            output['RollbackExecutionId'] = rollback_execution_response['AutomationExecutionId']
+            return output
+        
+        
+
+    isEnd: true

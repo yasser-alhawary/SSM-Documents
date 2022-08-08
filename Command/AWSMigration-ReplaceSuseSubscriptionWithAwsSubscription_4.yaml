@@ -1,0 +1,138 @@
+schemaVersion: '2.2'
+description: This action will convert a SUSE Linux subscription to an AWS provided SUSE subscription.
+mainSteps:
+- precondition:
+    StringEquals:
+      - platformType
+      - Linux
+  action: aws:runShellScript
+  name: InvokeLinuxScript
+  inputs:
+    timeoutSeconds: '3600'
+    runCommand:
+      - |
+        #!/bin/bash
+        set -e
+        
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release
+            OS_RELEASE="$ID${VERSION_ID:+.${VERSION_ID}}"
+        elif [ -f /etc/centos-release ]; then
+            OS_RELEASE="centos.$(awk '{print $3}' /etc/centos-release)"
+        elif [ -f /etc/redhat-release ]; then
+            OS_RELEASE="rhel.$(lsb_release -r | awk '{print $2}')"
+        fi
+        
+        case "$OS_RELEASE" in
+            amzn.2|centos.7*|centos.8*|fedora.*|rhel.7*|rhel.8*|sles*)
+                command_path='/usr/bin/'
+                ;;
+            amzn.2018.03|centos.6*|debian.*|rhel.6*|ubuntu.16*|ubuntu.18*|ubuntu.20*)
+                command_path='/bin/'
+                ;;
+            *)
+                # Catch all without the full path for untested platforms
+                command_path=''
+        esac
+        
+        ExitWithFailureMessage() {
+            MESSAGE="$1"
+            JSON="$2"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{"error":"$MESSAGE"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit 1
+        }
+        
+        # exit codes. 0-100 are reserved exit codes. 101-150 codes are for linux, 151-200 are for macos and 200 onwards codes are for windows.
+        ExitWithFailureMessageAndExitCode() {
+            MESSAGE="$1"
+            EXITCODE="$2"
+            JSON="$3"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{"error":"$MESSAGE","exitCode":"$EXITCODE"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit "$EXITCODE"
+        }
+        
+        ExitWithSuccessMessage() {
+            "${command_path}echo" "$1"
+            exit 0
+        }
+        
+        WriteStandardError() {
+            MESSAGE="$1"
+            (>&2 "${command_path}echo" "$MESSAGE")
+        }
+
+        TestPerformAction() {
+            if [[ "$1" != "Yes" ]]; then
+                ExitWithFailureMessage "No action was taken because the PerformAction parameter is set to $1. To make the desired change, set this parameter to Yes."
+            fi
+        }
+
+        SUPPORTED_ID="sles"
+        
+        os-release () (
+            . /etc/os-release
+            if ! [[ ${!1} ]]; then
+                return 1
+            fi
+            printf '%s
+' "${!1}"
+        )
+        
+        if [[ $(os-release ID) != "$SUPPORTED_ID" ]]; then
+            printf 'This script must be run on a SLES distribution. Other distributions are not supported.' >&2
+            exit 1
+        fi
+        
+        echo "Starting migration of SUSE subscription to AWS."
+        
+        SUSEConnect --cleanup
+        sed -i '/^# Added by SMT reg/,+1d' /etc/hosts
+        
+        if [ -d "/var/lib/aws-replication-agent-zypper-cache/" ]; then
+            sudo zypper addrepo /var/lib/aws-replication-agent-zypper-cache/ mgn-repo
+            ZYPPER_INSTALL_CMD="sudo zypper --no-refresh -n install --repo mgn-repo"
+        elif [ -d "/var/lib/aws-replication-agent/" ]; then
+            sudo zypper addrepo /var/lib/aws-replication-agent/ mgn-repo
+            ZYPPER_INSTALL_CMD="sudo zypper --no-refresh -n install --repo mgn-repo"
+        else
+            ZYPPER_INSTALL_CMD="sudo zypper --no-refresh -n install"
+        fi
+        
+        $ZYPPER_INSTALL_CMD cloud-regionsrv-client
+        $ZYPPER_INSTALL_CMD cloud-regionsrv-client-plugin-ec2
+        $ZYPPER_INSTALL_CMD --force-resolution regionServiceClientConfigEC2
+        
+        sudo zypper removerepo mgn-repo || true
+        
+        systemctl disable guestregister.service
+        registercloudguest --clean
+        
+        SUSEConnect --cleanup
+        
+        # Files contain registration information
+        rm -f /etc/SUSEConnect
+        rm -rf /etc/zypp/credentials.d/*
+        rm -rf /etc/zypp/repos.d/*
+        rm -f /etc/zypp/services.d/*
+        
+        # Register the instance with the update infrastructure
+        systemctl enable guestregister.service
+        systemctl start guestregister.service
+        registercloudguest --force-new
+        echo "registercloudguest exit code: $?"
+        
+        # Check status of registration
+        SUSEConnect --status
+        
+        # Update the 3 guest registration packages to latest:
+        zypper -n install cloud-regionsrv-client
+        zypper -n install cloud-regionsrv-client-plugin-ec2
+        zypper -n install --force-resolution regionServiceClientConfigEC2
+        
+        echo "Finished migration of SUSE subscription to AWS."

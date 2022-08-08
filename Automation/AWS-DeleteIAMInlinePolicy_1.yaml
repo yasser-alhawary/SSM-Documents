@@ -1,0 +1,119 @@
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+  ### Document Name - AWS-DeleteIAMInlinePolicy
+
+  ## What does this document do?
+  This document deletes all inline policies attached to IAM identities (users, groups, or roles).
+
+  ## Input Parameters
+  * IamArns: (Required) A comma separated list of the IAM identity ARNs to delete inline policies from. This list can include IAM users, groups, or roles.
+  * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  This document has no outputs.
+
+  ## Minimum Permissions Required
+  * `iam:ListUserPolicies` on the targeted IAM users.
+  * `iam:DeleteUserPolicy` on the inline policies attached to the IAM users.
+  * `iam:ListGroupPolicies` on the targeted IAM groups.
+  * `iam:DeleteGroupPolicy` on the inline policies attached to the IAM groups.
+  * `iam:ListRolePolicies` on the targeted IAM roles.
+  * `iam:DeleteRolePolicy` on the inline policies attached to the IAM roles.
+
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  IamArns:
+    type: StringList
+    description: (Required) A comma separated list of the IAM identity ARNs to remove inline policies from.
+    allowedPattern: ^(.*S.*)|^$
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: ''
+    allowedPattern: ^(.*S.*)|^$
+mainSteps:
+  - name: DeleteIamInlinePolicies
+    action: 'aws:executeScript'
+    onFailure: Abort
+    isCritical: true
+    timeoutSeconds: 600
+    isEnd: true
+    description: |
+      ## DeleteIamInlinePolicies
+      Deletes the IAM inline policies attached to the targeted IAM identities.
+      ## Inputs
+      * IamArns: The list of IAM identites to deleted inline policies from.
+      ## Outputs
+      This step has no outputs.
+    inputs:
+      Runtime: python3.7
+      Handler: deleteiaminlinepolicies_handler
+      InputPayload:
+        IamArns: '{{IamArns}}'
+      Script: |
+        import boto3
+        import time
+
+        def deleteiaminlinepolicies_handler(event, context):
+          client = boto3.client('iam')
+          iamarns = event['IamArns']
+          for iamarn in iamarns:
+            identity_type = iamarn.split(":")[5][0]
+            if identity_type == 'u':
+              username = iamarn.split(":")[5][5:]
+              policies = (client.list_user_policies(UserName = username))['PolicyNames']
+              if not policies:
+                print(f'No Inline policy is associated with the IAM user: {username}')
+              else:
+                for policy in policies:
+                  try:
+                    client.delete_user_policy(UserName = username, PolicyName = policy)
+                    print(f'The inline policy: {policy} was deleted for the IAM user: {username}')
+                    continue
+                  except Exception as e:
+                    errorMsg = str(e)
+                    raise Exception("Unable to perform the required action on inline policy: '{}'. error: '{}'".format(policy, errorMsg))
+            elif identity_type == 'g':
+              groupname = iamarn.split(":")[5][6:]
+              policies = (client.list_group_policies(GroupName = groupname))['PolicyNames']
+              if not policies:
+                print(f'No Inline policy is associated with the IAM group: {groupname}')
+              else:
+                for policy in policies:
+                  try:
+                    client.delete_group_policy(GroupName = groupname, PolicyName = policy)
+                    print(f'The inline policy: {policy} was deleted for the IAM group: {groupname}')
+                    continue
+                  except Exception as e:
+                    errorMsg = str(e)
+                    raise Exception("Unable to perform the required action on inline policy: '{}'. error: '{}'".format(policy, errorMsg))
+            else:
+              rolename = iamarn.split(":")[5][5:]
+              policies = (client.list_role_policies(RoleName = rolename))['PolicyNames']
+              if not policies:
+                print(f'No Inline policy is associated with the IAM role: {rolename}')
+              else:
+                for policy in policies:
+                  try:
+                    client.delete_role_policy(RoleName = rolename, PolicyName = policy)
+                    print(f'The inline policy: {policy} was deleted for the IAM role: {rolename}')
+                    continue
+                  except Exception as e:
+                    errorMsg = str(e)
+                    raise Exception("Unable to perform the required action on inline policy: '{}'. error: '{}'".format(policy, errorMsg))

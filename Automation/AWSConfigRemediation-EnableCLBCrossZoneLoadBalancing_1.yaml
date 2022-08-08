@@ -1,0 +1,61 @@
+description: |
+   ### Document name - AWSConfigRemediation-EnableCLBCrossZoneLoadBalancing
+
+   ## What does this document do?
+   This document enables `Cross Zone Load Balancing` on an AWS Classic load balancer using the [ModifyLoadBalancerAttributes](https://docs.aws.amazon.com/elasticloadbalancing/2012-06-01/APIReference/API_ModifyLoadBalancerAttributes.html) API.
+
+   ## Input Parameters
+   * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+   * LoadBalancerName: (Required) The name of the AWS Classic load balancer.
+
+   ## Output Parameters
+   * ModifyLoadBalancer.Response: The standard HTTP response from the ModifyLoadBalancerAttributes API.
+
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:iam::d{12}:role/[w+=,.@/-]+$
+  LoadBalancerName:
+    type: String
+    description: (Required) The name of the AWS Classic load balancer, for which `Cross Zone Load Balancing` is to be enabled.
+    allowedPattern: ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,30}[a-zA-Z0-9])?$
+outputs:
+  - ModifyLoadBalancer.Response
+mainSteps:
+  -
+    name: ModifyLoadBalancer
+    action: "aws:executeAwsApi"
+    description: |
+      ## ModifyLoadBalancer
+      Makes ModifyLoadBalancerAttributes API call to enable 'CrossZoneLoadBalancing' AWS Classic load balancer.
+      ## Outputs
+      * Response: The standard HTTP response from the ModifyLoadBalancerAttributes API.
+    timeoutSeconds: 600
+    isEnd: false
+    inputs:
+      Service: elb
+      Api: ModifyLoadBalancerAttributes
+      LoadBalancerName: "{{ LoadBalancerName }}"
+      LoadBalancerAttributes:
+        CrossZoneLoadBalancing:
+          Enabled: True
+    outputs:
+      - Name: Response
+        Selector: $
+        Type: StringMap
+  -
+    name: VerifyLoadBalancerState
+    action: "aws:assertAwsResourceProperty"
+    timeoutSeconds: 600
+    isEnd: true
+    description: |
+      ## VerifyLoadBalancerState
+      Verifies that 'CrossZoneLoadBalancing' is enabled for the given AWS Classic load balancer.
+    inputs:
+      Service: elb
+      Api: DescribeLoadBalancerAttributes
+      LoadBalancerName: "{{ LoadBalancerName }}"
+      PropertySelector: LoadBalancerAttributes.CrossZoneLoadBalancing.Enabled
+      DesiredValues:

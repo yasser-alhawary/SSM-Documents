@@ -1,0 +1,114 @@
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+  ### Document Name - AWS-EnableCloudTrailKmsEncryption
+
+  ## What does this document do?
+  This document updates the configuration of one or more CloudTrail trails to enable KMS Encryption.
+
+  ## Input Parameters
+  * TrailNames: (Required) A comma separated list of CloudTrail trail names.
+  * KmsKeyId: (Required) The KMS key ID to use to encrypt the logs delivered by CloudTrail. The value can be an alias name prefixed by "alias/", a fully specified ARN to an alias, or a fully specified ARN to a key.
+  * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  This document has no outputs.
+
+  ## Minimum Permissions Required
+  * `cloudtrail:UpdateTrail`
+  * `kms:ListKeys`
+  * `kms:DescribeKey`
+
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  TrailNames:
+    type: StringList
+    description: (Required) A comma separated list of CloudTrail trail names.
+    allowedPattern: '^[w][w.,-_/]+[w]$'
+  KmsKeyId:
+    type: String
+    description: (Required) The KMS key ID to use to encrypt the logs delivered by CloudTrail.
+    allowedPattern: '^([w:/-]*)$'
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::d{12}:role/[w+=,.@_/-]+|^$'
+mainSteps:
+  - name: EnableCloudTrailKmsEncryption
+    action: 'aws:executeScript'
+    timeoutSeconds: 200
+    onFailure: Abort
+    isCritical: true
+    isEnd: true
+    description: |
+      ## EnableCloudTrailKmsEncryption
+      Enables KMS encryption on the target trails.
+      ## Inputs
+      * trailNames: The list of trail names.
+      * kmsKeyId: The KMS key identifier.
+      ## Outputs
+      This step has no outputs.
+    inputs:
+      Runtime: python3.7
+      Handler: enable_ct_kms_encryption_handler
+      InputPayload:
+        trailNames: '{{TrailNames}}'
+        kmsKeyId: '{{KmsKeyId}}'
+      Script: |
+        import boto3
+        import time
+        import re
+
+        def enable_ct_kms_encryption_handler(event, bucket):
+          ct_client = boto3.client('cloudtrail')
+          kms_client = boto3.client('kms')
+
+          trail_names = event["trailNames"]
+          kms_id = event["kmsKeyId"]
+          keyslist = []
+          kms_valid_ids = kms_client.list_keys()['Keys']
+          pattern1 = re.compile("^[wd]{8}-[wd]{4}-[wd]{4}-[wd]{4}-[wd]{12}")
+          pattern2 = re.compile("^arn:aws(-cn|-us-gov)?:kms:[a-z]{2}-[a-z]*-[0-9]{1}:d{12}:alias")
+          pattern3 = re.compile("^arn:aws(-cn|-us-gov)?:kms:[a-z]{2}-[a-z]*-[0-9]{1}:d{12}:key")
+
+          if pattern1.match(kms_id):
+            pass
+          elif pattern2.match(kms_id):
+            key_alias = kms_id.split(":")[5]
+            kms_id = kms_client.describe_key(KeyId=key_alias)['KeyMetadata']['KeyId']
+          elif pattern3.match(kms_id):
+            key_id = kms_id.split(":")[5][4:]
+          else:
+            kms_id = kms_client.describe_key(KeyId="alias/" + kms_id)['KeyMetadata']['KeyId']
+          for id in kms_valid_ids:
+            key = id['KeyId']
+            arn = id['KeyArn']
+            keyslist.append(key)
+            keyslist.append(arn)
+          if kms_id in keyslist:
+            for trail_name in trail_names:
+              try:
+                ct_client.update_trail(Name=trail_name, KmsKeyId=kms_id)
+                print(f'SSE-KMS Encryption is now enabled for the trail: {trail_name} with the KMS encryption key: {kms_id}.')
+                continue
+              except Exception as e:
+                errorMsg = str(e)
+                raise Exception("Unable to perform the required action on trail '{}'. error = '{}'.".format(trail_name, errorMsg))
+          else:
+            raise Exception("'{}' is not a valid key".format(kms_id))

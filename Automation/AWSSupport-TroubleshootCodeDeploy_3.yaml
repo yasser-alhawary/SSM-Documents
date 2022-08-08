@@ -1,0 +1,1518 @@
+description: "# AWSSupport-TroubleshootCodeDeploy
+---
+This automation document checks
+   the reasons why a specific EC2 deployment failed by verifying the required IAM
+   permissions on the instance, which lifecycle hook failed and the error reported.
+
+  Then it prints out troubleshooting steps to help resolving the failed deployment.
+
+  
+### **Parameters**
+1.  **InstanceId**:
+
+Type: StringList
+
+Description: **(Required)**
+   Provide the Instance Id where the deployment failed. (e.g. i-05fa91429c6cdcb49)
+
+  
+2.  **DeploymentId**:
+
+Type: StringList
+
+Description: **(Required)** Provide
+   the deployment Id which failed. (e.g. d-CPLJA860O)
+
+ 3.  **AutomationAssumeRole**:
+
+  
+Type: String
+
+Description: **(Optional)** The ARN of the role that allows Automation
+   to perform the actions on your behalf. If no role is specified, this document
+   will use the permissions of the user that executes this document.
+
+"
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    default: ""
+    type: "String"
+    description: "(Optional) IAM role which AWS Systems Manager will assume to execute
+       this automation. For more information, visit - https://docs.aws.amazon.com/systems-manager/latest/userguide/automation-setup.html"
+    allowedPattern: "^$|^arn:aws:iam::[0-9]*:role/[/w+=,.@-]+$"
+  DeploymentId:
+    type: "String"
+    description: "Deployment Id which failed."
+    allowedPattern: "^d-[A-Z0-9]{9}$"
+  InstanceId:
+    type: "String"
+    description: "The instance ID where the deployment failed."
+    allowedPattern: "^i-[a-z0-9]{8,17}$"
+mainSteps:
+- name: "VerifyDeployment"
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "Codedeploy"
+    Api: "GetDeploymentTarget"
+    deploymentId: "{{ DeploymentId }}"
+    targetId: "{{ InstanceId }}"
+  description: "Verify if the deployment Id exists and if the instance belongs to
+     this deployment."
+- name: "CheckInstanceDetails"
+  description: "Collects information about the instance."
+  action: "aws:executeScript"
+  onFailure: "Abort"
+  onCancel: "Abort"
+  isCritical: true
+  inputs:
+    Runtime: "python3.7"
+    Handler: "script_handler"
+    InputPayload:
+      InstanceId: "{{ InstanceId }}"
+    Script: "import boto3
+
+def script_handler(events, context):
+  instance_id =
+       events["InstanceId"]
+  
+  info = check_instance_info(instance_id)
+  Instanceprofile
+       = info[1]
+  InstanceSubnet = info[2]
+  InstanceState = info[0]
+  StateReason
+       = info[3]
+
+  return {'Instanceprofile': Instanceprofile,'InstanceSubnet':
+       InstanceSubnet, 'InstanceState': InstanceState , 'StateReason': StateReason
+       }
+
+def check_instance_info(instance_id):
+    ec = boto3.client('ec2')
+
+          Instanceprofile= ""
+    InstanceSubnet = ""
+    StateReason = ""
+      
+
+    try:
+      InstanceInfo = ec.describe_instances(InstanceIds=[instance_id])
+
+          ##### WHEN THE INSTANCE TERMINATED SINCE MORE THAN 1 HOUR, IT DOESN'T RETURN
+       STATUS ####
+      if not InstanceInfo['Reservations']:
+         InstanceState
+       = "terminated"
+         return [ InstanceState , Instanceprofile , InstanceSubnet,
+       StateReason ]
+      else:
+        for Reservation in InstanceInfo['Reservations']:
+
+                for inst in Reservation['Instances']:
+            InstanceState
+       = inst["State"]["Name"]
+            if InstanceState == "running":
+
+                     try:
+                 Instanceprofile = inst["IamInstanceProfile"
+      ]["Arn"]
+               except:
+                 Instanceprofile = ""
+
+                     InstanceSubnet = inst["SubnetId"]
+            elif InstanceState
+       == "terminated":
+              StateReason = inst["StateReason"]["Message"
+      ]
+        return [ InstanceState , Instanceprofile , InstanceSubnet, StateReason
+       ]
+    except:
+      InstanceState = "terminated"
+      return [ InstanceState
+       , Instanceprofile , InstanceSubnet, StateReason ]
+
+"
+  outputs:
+  - Name: "Instanceprofile"
+    Selector: "$.Payload.Instanceprofile"
+    Type: "String"
+  - Name: "InstanceSubnet"
+    Selector: "$.Payload.InstanceSubnet"
+    Type: "String"
+  - Name: "InstanceState"
+    Selector: "$.Payload.InstanceState"
+    Type: "String"
+  - Name: "StateReason"
+    Selector: "$.Payload.StateReason"
+    Type: "String"
+- name: "TroubleshootCodedeploy"
+  description: "Detects issues related to deployment."
+  action: "aws:executeScript"
+  onFailure: "Abort"
+  onCancel: "Abort"
+  isCritical: true
+  inputs:
+    Runtime: "python3.7"
+    Handler: "script_handler"
+    InputPayload:
+      InstanceId: "{{ InstanceId }}"
+      DeploymentId: "{{ DeploymentId }}"
+      Instanceprofile: "{{CheckInstanceDetails.Instanceprofile }}"
+      InstanceSubnet: "{{ CheckInstanceDetails.InstanceSubnet }}"
+      InstanceState: "{{CheckInstanceDetails.InstanceState }}"
+      StateReason: "{{CheckInstanceDetails.StateReason}}"
+    Script: "import boto3
+import datetime
+import json
+
+def script_handler(events,
+       context):
+  deployment_id = events["DeploymentId"]
+  instance_id = events["
+      InstanceId"]
+  InstanceState = events["InstanceState"]
+  Instanceprofile
+       = events["Instanceprofile"]
+  InstanceSubnet = events["InstanceSubnet"
+      ]
+  StateReason = events["StateReason"]
+  FailureReason = ""
+
+
+  codedeploy
+       = boto3.client('codedeploy')
+   #### COLLECTING REVISION INFO ########
+
+        try:
+     deploymentResponse = codedeploy.get_deployment_target(deploymentId
+       = deployment_id,targetId = instance_id)
+     deploymentStatus= deploymentResponse['deploymentTarget']['instanceTarget']['status']
+
+           if deploymentStatus == 'Succeeded':
+          FailureReason = ("
+The
+       Deployment Succeeded. There is no issue with the deployment on the instance
+       "+instance_id )
+          return {'FinalResult': FailureReason }
+     
+           exit
+     if deploymentStatus == 'Skipped':
+          FailureReason
+       = ("
+The Deployment is Skipped. Please try to use a failed deployment"
+       )
+          return {'FinalResult': FailureReason }
+          exit
+
+  
+         elif (deploymentStatus == 'InProgress') or (deploymentStatus == 'Queued')
+       or (deploymentStatus == 'Created'):
+          FailureReason = ("
+The deployment
+       is in progress, please wait until the deployment finishes.")
+          return
+       {'FinalResult': FailureReason }
+          exit
+     elif (deploymentStatus
+       == 'Failed') or (deploymentStatus == 'Stopped') :
+   ###### COLLECTING revision
+       INFO #####
+      getdep = codedeploy.get_deployment(deploymentId = deployment_id)
+
+            revisionType = getdep["deploymentInfo"]["revision"]["revisionType"
+      ]
+      if revisionType == "S3":
+         bucket = getdep["deploymentInfo"
+      ]["revision"]["s3Location"]["bucket"]
+         key = getdep["deploymentInfo"
+      ]["revision"]["s3Location"]["key"]
+      if revisionType == "GitHub"
+      :
+         key = getdep["deploymentInfo"]["revision"]["gitHubLocation"
+      ]["repository"]
+      creator = getdep["deploymentInfo"]["creator"] 
+
+         ###### COLLECTING DEPLOYMENT STATUS #####
+      deploymentStyle = getdep["
+      deploymentInfo"]["deploymentStyle"]["deploymentType"]
+
+      ###### COLLECTING
+       INSTANCE INFO #####
+   #### COLLECTING DEPLOYMENT ERROR CODES #####
+   
+         for hook in deploymentResponse['deploymentTarget']['instanceTarget']['lifecycleEvents']:
+
+              if hook["status"] == "Failed":
+           if 'diagnostics' in
+       hook:
+             script_name = hook['diagnostics']['scriptName']
+    
+               errorCode = hook['diagnostics']['errorCode']
+             errorMessage
+       = hook['diagnostics']['message']
+           else:
+             script_name
+       = ""
+             errorCode = ""
+             errorMessage = ""
+
+                 lifecycleEventName = hook['lifecycleEventName']
+           StartTime
+       = hook["startTime"]
+           EndTime = hook["endTime"]
+
+      elapsed
+       = EndTime - StartTime
+
+     
+      Header = ("Result:
+"
+      "-----------
+      n "
+    "
+[*] The deployment "+ deployment_id+ " is " +deploymentStyle+"
+       deployment, failed in "+lifecycleEventName + " lifecycle hook"
+    "
+      n[*] Instance " + instance_id +" is in " + InstanceState + " state
+"
+
+           "
+")
+
+      if deploymentStyle == "IN_PLACE": 
+      #### ALL
+       IN PLACE CHECKS
+         if (lifecycleEventName == "BeforeBlockTraffic"
+      ) or (lifecycleEventName == "ApplicationStop"):
+            if ( "CodeDeploy
+       agent was not able to receive the lifecycle event" in errorMessage ) and
+       (errorCode == "UnknownError"):
+                     if creator == "autoscaling"
+      :
+                         FailureReason1 = (" This deployment initiated due
+       to a scale up event in your autoscaling group, Codedeploy agent must be installed
+       and running on the instance to proceed with the deployment."
+          
+                     "
+ To troubleshoot this issue, scale up a new instance, which
+       will trigger a new deployment. "
+                         "
+ During the
+       deployment is running, perform the following troubleshooting steps:
+")
+
+                               FailureReason2 = check_agent()
+                 
+              FailureReason3 = ("
+ For best practices: Install Codedeploy agent
+       in the userdata/ launch template to make sure any instance starts, will install
+       the latest version of your Codedeploy agent"
+                          
+           "
+ https://docs.aws.amazon.com/codedeploy/latest/userguide/codedeploy-agent-operations-install-cli.html"
+      )
+                         FailureReason = FailureReason1 + FailureReason2
+       + FailureReason3
+                         
+                         
+ 
+                          elif InstanceState == "running":
+                  
+            if Instanceprofile == "":
+                            FailureReason
+       = ("The instance does not have an IAM instance profile associated with it"
+      
+                            "
+An IAM instance profile grants the CodeDeploy
+       agent permission to communicate with CodeDeploy and to download your revision
+       from Amazon S3."
+                            "
+See https://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-iam-instance-profile.html"
+      
+                            "
+Restart Codedeploy agent after attaching
+       the instance profile to the instance => service codedeploy-agent restart"
+      )
+                      
+                        else: 
+                
+                  
+                            FailureReason =  ("To Troubleshoot,
+       SSH into the instance: "+ instance_id + ""
+                          
+        "
+ [1] Check Codedeploy agent status => service codedeploy-agent status"
+      
+                            "
+  * If the agent is stopped, try to restart
+       the agent and verify if it is in a running state, if the agent is not able
+       to start, please check codedeploy agent logs:"
+                        
+          "
+    - For Linux OS : less /var/log/aws/codedeploy-agent/codedeploy-agent.log"
+      
+                            "
+    - For windows OS: notepad C:ProgramData
+      AmazonCodeDeploylogcodedeploy-agent-log.txt"
+                      
+            "
+ [2] Verify if the agent is able to communicate with Codedeploy
+       service endpoints:"
+                            "
+  *  Use nc command
+       => yum install nc"
+                            "
+     nc -v codedeploy.$REGION.amazonaws.com
+       443"
+                            "
+     nc -v codedeploy-commands-secure.$REGION.amazonaws.com
+       443"
+                            "
+ [3] If the instance is located in
+       a private subnet that does not have Nat Gateway, an interface VPC endpoint
+       for CodeDeploy is needed. "
+                            "
+  *  To Use
+       CodeDeploy with Amazon Virtual Private Cloud : https://docs.aws.amazon.com/codedeploy/latest/userguide/vpc-endpoints.html"
+      )
+
+                     else: ## instance terminated , could be scale down
+       autoscaling event or manual.
+                        FailureReason1 = ("
+      The instance is terminated, the IAM role information cannot be retrieved for
+       debugging"
+                        "
+Whenever you face the same issue,
+       please perform the following:")
+                        FailureReason2 =
+       check_agent()
+                        FailureReason3 = ("[4] Make sure the
+       instance has the correct IAM role attached, for more details check here :https://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-iam-instance-profile.html"
+      
+                        "
+ * For best practices: Try to install Codedeploy
+       agent in the userdata/ launch template to make sure any instance starts will
+       install the latest version of your Codedeploy agent")
+                 
+             FailureReason = FailureReason1 + FailureReason2 + FailureReason3
+ 
+                             
+
+            else:
+               FailureReason
+       = PreviousRevision_script(script_name,errorCode,errorMessage)
+          
+         
+         if lifecycleEventName == "DownloadBundle":
+          # here
+       I check if the instance terminated during the deployment which caused the
+       failure.
+            FailureReason = Verify_DownloadBundle(errorMessage,Instanceprofile,revisionType,key,bucket)
+
+               if lifecycleEventName == "BeforeInstall":
+             scale =
+       Check_scale_down(errorMessage,errorCode, script_name,InstanceState,instance_id,creator
+       )
+             if scale[0] == "false":
+                FailureReason=
+       Verify_BeforeInstall(elapsed,script_name,errorMessage,errorCode,InstanceState)
+
+                   else:
+                FailureReason = scale[1]
+
+         if
+       lifecycleEventName == "Install":
+             scale = Check_scale_down(errorMessage,errorCode,
+       script_name,InstanceState,instance_id,creator )
+             if scale[0]
+       == "false":
+                FailureReason = Verify_Install(errorMessage,errorCode)
+          
+             else:
+                FailureReason = scale[1]    
+  
+             if lifecycleEventName == "AllowTraffic":
+             FailureReason
+       = Verify_AllowTraffic(errorMessage)
+         if (lifecycleEventName == "
+      AfterInstall") or (lifecycleEventName == "ValidateService") or (lifecycleEventName
+       == "ApplicationStart") or (lifecycleEventName == "BeforeAllowTraffic"
+      ) or (lifecycleEventName == "AfterAllowTraffic"):
+             scale = Check_scale_down(errorMessage,errorCode,
+       script_name,InstanceState,instance_id,creator )
+             if scale[0]
+       == "false":
+                FailureReason = Custom_Script(elapsed,script_name,errorCode,errorMessage,InstanceState)
+
+                   else:
+                FailureReason = scale[1]
+
+         if
+       lifecycleEventName == "AfterBlockTraffic":
+             scale = Check_scale_down(errorMessage,errorCode,
+       script_name,InstanceState,instance_id ,creator)
+             if scale[0]
+       == "false":
+                FailureReason = PreviousRevision_script(script_name,errorCode,errorMessage)
+
+                   else:
+                FailureReason = scale[1]
+         if lifecycleEventName
+       == "BlockTraffic":
+             scale = Check_scale_down(errorMessage,errorCode,
+       script_name,InstanceState,instance_id,creator )
+             if scale[0]
+       == "false":
+                 ### PORT known issue ###
+               
+       FailureReason = ("During BlockTraffic, Codedeploy service invoke the Loadbalancer
+       to de-register the instance from the target group before start installing
+       the application revision"
+                "
+DeregisterTargets API call
+       can be noticed in cloudtrail logs during BlockTraffic lifecycle hook"
+ 
+                     "
+Currently Codedeploy does not support the case when the
+       target group have a different port than the port used to register the instance."
+      
+                "
+** DeregisterTargets API will not be able to deregister
+       the instance if the port configured in the Target group is different"
+ 
+                     "
+You need to make sure that both the target group and the
+       instance are configured to use the same port."
+                "
+BlockTraffic
+       depends mainly on the de-registration delay on the target group or connection
+       draining on Classic LB. To speed up this step, the de-registration delay /connection
+       draining value can be reduced to a reasonable value. ")
+             else:
+
+                     FailureReason = scale[1]
+
+#### END OF IN PLACE CHECKS #####
+              
+      elif deploymentStyle == "BLUE_GREEN": 
+           if lifecycleEventName
+       == "ApplicationStop":
+              if ("CodeDeploy agent was not able
+       to receive the lifecycle event" in errorMessage) and (errorCode == "UnknownError"
+      ):
+                  FailureReason1 = ("* You are running a Blue/Green deployment,
+       where the deployment failed in the green instances due to Codedeploy agent
+       issue
+")
+                  if InstanceState == "running":
+        
+                      if Instanceprofile == "":
+                            
+
+                                  FailureReason2 = ("The green instances does not
+       have IAM role attached to it. This cause Codedeploy agent to fail with MissingCredentials
+       error"
+                            "
+ Refer to our documentation here
+       https://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-iam-instance-profile.html"
+      )
+                        else:
+                            FailureReason2
+       = ("To troubleshoot, SSH into the instance:"
+                         
+         "
+ * Check Codedeploy agent status => service codedeploy-agent status"
+      
+                            "
+ * If you are installing Codedeploy agent
+       in the userdata script, Please make sure that your userdata execution time
+       doesn't exceed 5 minutes, other wise the deployment will fail after 5 minutes
+       as it didn't receive any response from Codedeploy agent and this is because
+       the agent was not yet installed."
+                            "
+ * In
+       case you have a long userdata script, try to bake some packages/files with
+       the AMI to reduce the time needed")
+
+                  else:
+        
+                       FailureReason2 = ("The instance is not in running state to
+       troubleshoot the agent logs"
+                         "
+ You can initiate
+       another blue/green deployment, then SSH into the instance which failed and
+       verify if Codedeploy agent is running"
+                         "
+ If
+       you are installing Codedeploy agent in the userdata script, Please make sure
+       that your userdata execution time doesn't exceed 5 minutes, otherwise the
+       deployment will fail after 5 minutes as it didn't receive any response from
+       Codedeploy agent and this is because the agent was not yet installed."
+
+                               "
+ If you have long userdata script, Baking the
+       Codedeploy agent with the AMI would be a good option for your use case."
+
+                               "
+ In case you have a long userdata script, try
+       to bake some packages/files with the AMI to reduce the time needed")
+  
+                      FailureReason = FailureReason1 + FailureReason2 
+        
+        
+              else:
+                FailureReason =  PreviousRevision_script(script_name,errorCode,errorMessage)
+
+        
+           if lifecycleEventName == "DownloadBundle":
+             
+        FailureReason = Verify_DownloadBundle(errorMessage,Instanceprofile,revisionType,key,bucket)
+
+                 if lifecycleEventName == "BeforeInstall":
+               FailureReason
+       = Verify_BeforeInstall(elapsed,script_name,errorMessage,errorCode,InstanceState)
+
+                 if lifecycleEventName == "Install":
+               FailureReason
+       = Verify_Install(errorMessage,errorCode)        
+           if lifecycleEventName
+       == "AllowTraffic":
+               FailureReason = Verify_AllowTraffic(errorMessage)
+
+                 if (lifecycleEventName == "AfterInstall") or (lifecycleEventName
+       == "ValidateService") or (lifecycleEventName == "ApplicationStart") or
+       (lifecycleEventName == "BeforeAllowTraffic") or (lifecycleEventName == "
+      AfterAllowTraffic"):
+               FailureReason = Custom_Script(elapsed,script_name,errorCode,errorMessage,InstanceState)
+
+                 if lifecycleEventName == "BeforeBlockTraffic":  
+           
+        scale = Check_scale_down(errorMessage,errorCode, script_name,InstanceState,instance_id,creator
+       )
+             if scale[0] == "false":
+                if (errorMessage
+       == "") and (errorCode == ""):
+                   FailureReason1 = ("
+      The deployment failed on the blue instance" + instance_id + " Because codedeply
+       agent is either not installed or not running
+")
+                   FailureReason2
+       = check_agent()
+                   FailureReason = FailureReason1 + FailureReason2
+       
+                else:
+                  FailureReason = PreviousRevision_script(script_name,errorCode,errorMessage)
+
+                   else:
+               FailureReason = scale[1]
+           if
+       lifecycleEventName == "AfterBlockTraffic":
+             scale = Check_scale_down(errorMessage,errorCode,
+       script_name,InstanceState,instance_id,creator )
+             if scale[0]
+       == "false":
+                FailureReason = PreviousRevision_script(script_name,errorCode,errorMessage)
+
+                   else:
+                FailureReason = scale[1]
+           if
+       (lifecycleEventName == "BlockTraffic"):
+               scale = Check_scale_down(errorMessage,errorCode,
+       script_name,InstanceState,instance_id,creator )
+               if scale[0]
+       == "false":
+                 ### PORT known issue ###
+               
+         FailureReason = ("During BlockTraffic, Codedeploy service invoke the Loadbalancer
+       to de-register the instance from the target group"
+                  "
+      nYou must be able to see 'DeregisterTargets' API call in your cloudtrail logs
+       during BlockTraffic lifecycle hook"
+                  "
+However we have
+       a known issue, that when your target group port is different than the port
+       which your instance registered with, then DeregisterTargets API will not be
+       able to deregister the target"
+                  "
+** Please check the
+       target group configuration and which port is configured with, and check which
+       port the instances are registered with, make sure you are using the same port"
+      
+                  "
+Also note that BlockTraffic depends mainly on the de-registration
+       delay on the target group or connection draining on Classic LB, if you would
+       like to speed up this step, you can reduce de-registration delay /connection
+       draining value to a reasonable value. ")
+               else:
+        
+                FailureReason = scale[1]
+      FinalResult = Header + FailureReason
+       
+      return {'FinalResult': FinalResult }
+    
+  except Exception as
+       exceptionMessage:
+     print (exceptionMessage)
+
+def issue_not_found():
+
+           FailureReason2 = ("To troubleshoot the issue:"
+     "
+---------------------------"
+      
+     "
+ [1] Enable Codedeploy agent debug logs on the instance:"
+   
+        "
+     - For Linux OS: You need to edit the configuration file /etc/codedeploy-agent/conf/codedeployagent.yml
+       ==> Set verbose: true , and then restart Codedeploy agent"
+     "
+  
+         - For Windows OS: the debug mode is already enabled "
+     "
+ [2] Retry
+       the deployment, SSH into the instance to collect codedeploy agent log : "
+      
+     "
+     - For Linux OS : less /var/log/aws/codedeploy-agent/codedeploy-agent.log"
+      
+     "
+     - For windows OS: notepad C:ProgramDataAmazonCodeDeploy
+      logcodedeploy-agent-log.txt")
+     return FailureReason2
+def PreviousRevision_script(script_name,errorCode,errorMessage):
+
+      
+            if "did not find an AppSpec" in errorMessage:
+          #######
+       ISSUE HERE RELATED TO APPSPEC ###
+               FailureReason = (" [Error]
+       ==> : "+ errorMessage  +"
+"
+               "
+The easiest way to solve
+       this issue is as below: "
+               "
+-------------------------------------------------"
+      
+               "
+* You can always ignore failure due to scripts in ApplicationStop
+       or BeforeBlockTraffic or AfterBlockTraffic" 
+               "
+* Use the
+       CodeDeploy console to create a deployment. On the Create deployment page,
+       under ApplicationStop lifecycle event failure, choose Don't fail the deployment
+       to an instance if this lifecycle event on the instance fails."
+        
+             "
+You can also use the AWS CLI to call the create-deployment command
+       and include the --ignore-application-stop-failures option."
+           
+          "
+ 
+To troubleshoot the issue itself:"
+               "
+-------------------------------------"
+      
+               "
+Codedeploy agent fetches _last_successful_install file
+       located in deployment-instructions directly inside the deployment-root to
+       execute scripts in ApplicationStop or BeforeBlockTraffic or AfterBlockTraffic
+       "
+               "
+These lifecycle hooks are executed before DownloadBundle
+       and before the revision installed, so they are executed from the previous
+       installed revision"
+               "
+The <deployment groupID>_last_successful_install
+       file contains the location of the last successful installed revision which
+       will locate the appspec file there, to execute scripts in ApplicationStop
+       and BeforeBlockTraffic"
+               "
+SSH into the instance and try
+       to locate the appspec manually from the previous revision by checking _last_successful_install
+       file first"
+               "
+For more details: https://docs.aws.amazon.com/codedeploy/latest/userguide/codedeploy-agent.html#codedeploy-agent-install-files"
+      )
+               return FailureReason
+            else:
+        ###### HERE
+       ISSUE RELATED TO THE CUSTOMER SCRIPT ####
+               FailureReason =
+       ("The script "+ script_name + " Failed to run " + " with error " + errorCode
+       + " ==> : "+ errorMessage  +""
+               "
+
+The easiest way
+       to solve this issue is as below: "
+               "
+-------------------------------------------------"
+      
+               "
+* You can always ignore failure due to scripts in ApplicationStop
+       or BeforeBlockTraffic or AfterBlockTraffic" 
+               "
+* Use the
+       CodeDeploy console to create a deployment => On the 'Create deployment' page
+       -> under ApplicationStop lifecycle event failure -> choose Don't fail the
+       deployment to an instance if this lifecycle event on the instance fails."
+      
+               "
+* You can also use the AWS CLI to call the create-deployment
+       command and include the --ignore-application-stop-failures option."
+   
+                  "
+
+To troubleshoot the script itself:"
+               "
+      
+-------------------------------------"
+               "
+This script
+       is executed from the last successful installed revision, and not from the
+       current revision"
+               "
+Codedeploy agent fetches _last_successful_install
+       file located in deployment-instructions directly inside the deployment-root."
+      
+               "
+The <deployment groupID>_last_successful_install file
+       contains the location of the last successful installed revision which will
+       locate the appspec file there, to execute scripts in ApplicationStop and BeforeBlockTraffic"
+      
+               "
+SSH into the instance and try the run the script manually
+       from the previous revision, and check why the script is failing"
+      
+               "
+For more details: https://docs.aws.amazon.com/codedeploy/latest/userguide/troubleshooting-deployments.html#troubleshooting-deployments-lifecycle-event-failures"
+      )
+               return FailureReason
+
+def   Verify_DownloadBundle(errorMessage,Instanceprofile,revisionType,key,bucket):
+
+                 if errorMessage == "Access Denied":
+               
+       
+              FailureReason = ("Codedeploy agent did not have permission to download
+       the file: " + key + " from S3 bucket: " 
+               "
+Make sure
+       the IAM role for the instance profile " + Instanceprofile  + " has the correct
+       permissions"
+               "
+To resolve the issue:"
+             
+        "
+------------------------"
+               "
+[1] Attach the correct
+       S3 permissions to the IAM role :"
+               "
+ Follow the instructions
+       here: https://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-iam-instance-profile.html"
+      
+               "
+ Make sure the IAM Policy allow S3:Get* and S3:List* Actions
+       on the Resource: [arn:aws:s3:::"+ bucket +"/*]"
+               "
+[2]
+       Check the S3 bucket Policy:"
+               "
+ Check the S3 bucket policy
+       to make sure it is not denying IAM role to access the bucket, check https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html"
+      
+               "
+[3] The bucket in another account ?"
+              
+       "
+ If the bucket : " + bucket + " is located another account, make sure
+       to follow cross account permissions here https://docs.aws.amazon.com/codedeploy/latest/userguide/deployments-cross-account.html#deployments-cross-account-2-grant-bucket-permissions"
+      )
+               return FailureReason
+           elif "The specified bucket
+       does not exist" in errorMessage:
+               FailureReason = ("[Error]:"
+       + errorMessage + ""
+               "
+S3 revision used in the deployment
+       is the file: " + key + " from S3 bucket " + bucket +""
+            
+         "
+[1] Make sure the bucket: " + bucket + " is exist and located in
+       the same region of your Codedeploy application "
+               "
+[2]
+       The key must be exist in your bucket. To verify, Go to S3 bucket directly
+       from the console and make sure that the bucket with name " + bucket + "
+       is exist. ")
+               return FailureReason
+           elif "The
+       specified key does not exist" in errorMessage:
+               FailureReason
+       = ("[Error]:" + errorMessage + ""
+               "
+S3 revision used
+       in the deployment is the file: " + key + " from S3 bucket " + bucket +"
+      "
+               "
+[1] Make sure the key: " + key + " is exist and located
+       in the bucket "
+               "
+[2] To verify, Go to S3 bucket directly
+       from the console and make sure that the key with name " + key + " is exist.
+       ")
+               return FailureReason
+           elif "The bucket you
+       are attempting to access must be addressed using the specified endpoint"
+       in errorMessage:
+               FailureReason = ("
+The bucket " + bucket
+       + " you are trying to use is located in another region"
+              
+       "
+
+Cross region support:"
+               "
+----------------------"
+      
+               "
+ Codedeploy does not support cross region use of S3 buckets,
+       the S3 bucket must be exist in the same region where codedeploy application
+       exist"
+               "
+ 
+Cross account support:"
+              
+       "
+----------------------"
+               "
+ Codedeploy support using
+       S3 buckets from different accounts, however the buckets must be located in
+       same region of the application. "
+               "
+ For cross account
+       permissions, please check here : https://docs.aws.amazon.com/codedeploy/latest/userguide/deployments-cross-account.html#deployments-cross-account-2-grant-bucket-permissions"
+      
+               "
+ Looking for cross account/cross region deployment ? please
+       check here : https://aws.amazon.com/blogs/devops/building-a-cross-regioncross-account-code-deployment-solution-on-aws/"
+      )
+               return FailureReason
+           elif "Server returned codes:
+       404" in errorMessage:
+               if revisionType == "GitHub":
+  
+                      FailureReason = ("Add the correct Github repository ["+ key
+       +"] and commit Id, Codedeploy got 404 -Not found - error from Github => "
+       + errorMessage  )
+                  return FailureReason
+           elif
+       errorMessage == "":
+                   FailureReason1= ("* The deployment
+       failed because Codedeploy agent is not running.
+")                    
+                
+                   FailureReason2 = check_agent()
+           
+              FailureReason = FailureReason1 + FailureReason2
+                 
+        return FailureReason
+
+           else: ## any other issue ##
+        
+             FailureReason = issue_not_found()
+               return FailureReason
+
+                 
+def Verify_BeforeInstall(elapsed,script_name,errorMessage,errorCode,InstanceState):
+
+              if (script_name == ""):
+             if "did not find an AppSpec"
+       in errorMessage:
+          ####### ISSUE HERE RELATED TO APPSPEC ###
+  
+                   FailureReason = ("Your appspec file is not found ==> " + errorMessage
+       + ""
+               "
+You can resolve the issue as below:"
+      
+               "
+-----------------------------------"
+               "
+[1]
+       Make sure your appspec file is located in the top root directory of your revision"
+      
+               "
+[2] SSH into the instance and check the appspec file location,
+       it must be the same as expected "
+               "
+[3] Download the revision
+       from S3 directly, extract it, the appspec file must be in the top root directory
+       and not inside any other directory.")
+               return FailureReason
+
+                   else:
+               FailureReason = ("You have an issue with
+       your Appspec file"
+               "
+-----------------------------------------"
+      
+               "
+[1] Check the format of your AppSpec file"
+        
+             "
+[2] Visit our documentation https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-appspec-file-example.html#appspec-file-example-server
+       Make sure your appspec file syntax is correct")
+               return FailureReason
+
+              else:
+              FailureReason =Custom_Script(elapsed,script_name,errorCode,errorMessage,InstanceState)
+
+                    return FailureReason
+
+def Verify_Install(errorMessage,errorCode):
+
+      
+         if "rb_sysopen -" in  errorMessage:
+             FailureReason
+       = ("[Error]: "+ errorMessage + ""
+              "
+This error might
+       happen due to:"
+              "
+[1] If the file format has non UTF8 characters"
+      
+              "
+[2] If the Filename + Path is greater than 260 character.
+       This is Windows limitation that can be fixed as below"
+              "
+      n   (1) run regedit.exe as administrator"
+              "
+   (2) locate
+       [HKEY_LOCAL_MACHINESYSTEMCurrentControlSetControlFileSystem]"
+ 
+                   "
+   (3) change data value [LongPathsEnabled] (DWORD) to 1"
+      
+              "
+   (4) close regedit and restart Windows"
+          
+          "
+[3] If you are trying to copy files in your appspec that are not exists
+       in the revision, please try to locate the file manually on the instance"
+
+                    "
+[4] If the file is dll file, then make sure to stop the
+       application in BeforeInstall lifecycle hook before copying the files to avoid
+       any lock for the dll files"
+              "
+ 
+*** Please make sure
+       to use the recent codedeploy agent version on your instance and try the deployment
+       again.")
+             return FailureReason
+
+         elif "specified
+       file already exists at this location" in  errorMessage:
+             FailureReason
+       = ("While Codedeploy agent was copying the files to the destination folder,
+       some file/s were exist in the location ==> " + errorMessage +"
+"
+  
+                 "
+You can resolve the issue as below:"
+             "
+--------------------------------------
+      n"
+             "
+[1] You can either remove these file from your AMI, and
+       keep the AMI clean, Codedeploy will manage to install these files"
+    
+               "
+[2] Or choose Overwrite option:  the easiest way to avoid this
+       error is to specify overwrite option when you create the deployment. For each
+       deployment, you can choose whether to fail the deployment, to overwrite the
+       files, or to retain the files already on the instance"
+             "
+      n    ** When you create a deployment from console, You can choose Create Deployment
+       => Additional deployment behavior settings =>Overwrite , it will overwrite
+       the files on the instance "
+             "
+For more information check
+       : https://docs.aws.amazon.com/codedeploy/latest/userguide/troubleshooting-deployments.html#troubleshooting-same-files-different-app-name"
+      )
+             return FailureReason
+     #### ADD HERE CASE WHEN DESTINATION
+       FOLDER IS NOT EXIST ####
+         elif "No such file or directory" in 
+       errorMessage:
+             FailureReason = ("Your appspec define some file/s
+       to copy the instance, however these file/s are not exist in the revision"
+      
+             "
+[Error]: "+ errorMessage + ""
+             "
+To troubleshoot
+       the issue, download the revision manually from S3 and try to locate the file
+       mentioned in the error message above"
+             "
+Or SSH into the
+       instance and try to locate the specified file manually")
+             return
+       FailureReason
+     #### other issue ###
+         elif "malformed utf-8"
+       in  errorMessage:
+             FailureReason = ("[Error]: "+ errorMessage
+       + ""
+              "
+ 
+* This error happened when you have file/s
+       with a name that contains non UTF8 format."
+              "
+To detect
+       these files => Collect codedeploy agent logs from C:ProgramDataAmazon
+      CodeDeploylogcodedeploy-agent-log.txt and perform the below command to list
+       which files has non UTF8 format:"
+              "
+-----------------------------------"
+      
+              "
+grep  -axv ‘.*’ codedeploy-agent-log"
+              "
+      
+-----------------------------------"
+              "
+Rename the files
+       to match the UTF8 format and retry the deployment")
+             return
+       FailureReason
+
+
+         else:
+             FailureReason1 = ("Error:"
+       + errorMessage + "
+")
+             FailureReason2 = issue_not_found()
+
+                   FailureReason = FailureReason1 + FailureReason2
+            
+       return FailureReason
+
+
+def Verify_AllowTraffic(errorMessage):
+
+   if
+       "The instance is not currently running" in  errorMessage:
+          FailureReason
+       = ("
+Your deployment failed in AllowTraffic lifecycle hook because the
+       Instance cannot be registered with the configured LoadBalancer.
+"
+   
+             "
+The LoadBalancer is configured in a different VPC than the instance,
+       Check Cloudtrail logs for event name: RegisterTargets"
+          "
+Make
+       sure that the instance and the Loadbalancer are configured on the same VPC
+      n")
+          return FailureReason
+   else:
+           FailureReason = ("
+      
+Your deployment stuck in AllowTraffic lifecycle hook, and failed after 1
+       hour timeout. This is because the instance did not pass the health check of
+       the LoadBalancer.
+"
+           "
+What could cause AllowTraffic to fail
+       ? and how to resolve it "
+           "
+---------------------------------------------------------------"
+      
+           "
+During AllowTraffic, the instance will be registered to the
+       Loadbalancer, it must pass the health check to pass AllowTraffic lifecycle
+       hook"
+           "
+Sometime the application may return HTTP response
+       that is not the same as what configured for the health check, such as 404,
+       502, 503, 400. You need to check the target group or your Classic LB health
+       check to see what is the value that is considered as a success
+"
+    
+             "
+To troubleshoot the issue:"
+           "
+---------------------------"
+      
+           "
+[1] SSH into the instance during the deployment is stuck in
+       AllowTraffic "
+           "
+[2] Perform curl command from inside the
+       instance to check the HTTP returned code => curl -I localhost"
+        
+         "
+[3] If health check on Loadbalancer/ Target group shows timeout, make
+       sure the Loadbalancer is able to reach the instance on that port. Check the
+       security group on the instance"
+           "
+ 
+*** We recommend to
+       validate the application at ValidateService or beforeAllowTraffic, by adding
+       a custom script that perform curl command on specific path."
+          
+       "
+The example below is an example how would you validate your application
+       in BeforeAllowTraffic lifecycle hook"
+           "
+ 
+Appspec Example:"
+      
+           "
+----------------"
+           "
+[....]"
+           "
+      
+  BeforeAllowTraffic: "
+           "
+    - location: Test-Traffic-response.sh"
+      
+           "
+[....]"
+           "
+ 
+Test-Traffic-response.sh example"
+      
+           "
+--------------------------------"
+           "
+[....]"
+      
+           "
+status=`curl -I http://localhost/index.php  | grep 200`"
+
+                 "
+if [ ! -z $status ]"
+           "
+ then"
+          
+       "
+  exit 0;"
+           "
+else"
+           "
+  exit 1;"
+  
+               "
+fi"
+           "
+[....]")
+           return FailureReason
+
+                     
+def Custom_Script(elapsed,script_name,errorCode,errorMessage,InstanceState):
+
+          if errorCode == "ScriptTimedOut":
+        FailureReason1  = ("The script
+       didn't finish executing within the specified time, no returned result received
+       from your script ")
+        if elapsed >= datetime.timedelta(hours=1):
+
+                FailureReason2 = ("
+Codedeploy has 1 hour timeout for running
+       each lifecycle hook, if your script needs more than 1 hour to be executed,
+       then you may divide the script into smaller scripts"
+          "
+If you
+       are running windows OS, make sure that Powershell handles exceptions correctly,
+       and the script must return 0 if succeeded"
+          "
+For windows scripts,
+       please check here : http://blogs.msdn.com/b/powershell/archive/2006/10/14/windows-powershell-exit-codes.aspx"
+      )
+        else:
+          FailureReason2 = ("
+You can increase the timeout
+       defined in your appspec file, to make sure the script will finish executing
+       during the deployment."
+          "
+You can ssh into the instance and
+       try to run the script manually and see how much time it takes")
+       
+       FailureReason = FailureReason1 + FailureReason2
+        return FailureReason
+
+          
+    elif (errorMessage == "") and (errorCode == "") and (script_name
+       == ""):
+        FailureReason = ("This lifecycle hook failed without error
+       returned from codedeploy agent"
+        "
+To troubleshoot the issue:"
+      
+        "
+-----------------------------"
+        "
+[1] SSH into your
+       instance and check codedeploy agent status => service codedeploy-agent status"
+      
+        "
+    ==> If Codedeploy agent is in stopped status, restart the
+       agent, make sure the agent is running and retry the deployment."
+      
+        "
+    ==> If Codedeploy agent is running, proceed to step [2]"
+    
+          "
+
+[2] Check if the instance has lack of memory issue. Check /var/log/messages
+       for 'Out of memory / OOM' notifications."
+        "
+
+[3] Check Codedeploy
+       agent logs at the time of the deployment to see if codedeploy agent was running
+       properly."
+        "
+    For Linux OS: less /var/log/aws/codedeploy-agent/codedeploy-agent.log"
+      
+        "
+    For Windows OS: notepad C:ProgramDataAmazonCodeDeploy
+      logcodedeploy-agent-log.txt"
+        "
+    ==> For more visibility, you
+       can enable codedeploy agent verbose logs, please check here: https://docs.aws.amazon.com/codedeploy/latest/userguide/reference-agent-configuration.html"
+      
+        "
+
+[4] Check the deployment script logs to see what happened
+       during this lifecycle hook"
+        "
+   [-] Script logs location for
+       Linux will be similar to : /opt/codedeploy-agent/deployment-root/<deployment-group-ID>/<deployment-ID>/logs/scripts.log"
+      
+        "
+   [-] https://docs.aws.amazon.com/codedeploy/latest/userguide/deployments-view-logs.html#deployments-view-logs-instance-unix"
+      
+        "
+
+[5] If you have a custom script in this lifecycle, try to
+       execute the script manually inside the instance and see the output
+")
+
+      
+        return FailureReason
+    elif (errorCode == "ScriptFailed") and
+       ("failed with exit code 1" in  errorMessage):
+        FailureReason = ("
+      You have issue with the script " + script_name +" that "+ errorCode + "
+       ==> "+ errorMessage + ""
+        "
+To troubleshoot the issue:"
+ 
+             "
+-----------------------------"
+        "
+[1] SSH into your
+       instance and try to run the script "+ script_name + " manually, See what
+       is the output"
+        "
+[2] You can also view the deployment script
+       log inside the instance to see where the script failed:"
+        "
+ 
+        [-] Script logs location for Linux will be similar to : /opt/codedeploy-agent/deployment-root/<deployment-group-ID>/<deployment-ID>/logs/scripts.log"
+      
+        "
+   [-] https://docs.aws.amazon.com/codedeploy/latest/userguide/deployments-view-logs.html#deployments-view-logs-instance-unix"
+      
+        "
+
+For windows OS: "
+        "
+-----------------"
+   
+           "
+Logs can be found at: C:ProgramDataAmazonCodeDeploydeployment-group-ID
+      deployment-IDlogsscripts.log"
+        "
+ 
+If a Windows PowerShell
+       script running as part of a deployment relies on 64-bit functionality,the
+       script might crash or not run as expected."
+        "
+This is because,
+       by default, CodeDeploy uses the 32-bit version of Windows PowerShell to run
+       Windows PowerShell scripts that are part of an application revision"
+  
+            "
+To resolve this: Add a code at the beginning of your script as the
+       example here :https://docs.aws.amazon.com/codedeploy/latest/userguide/troubleshooting-deployments.html#troubleshooting-deployments-powershell
+       ")
+        return FailureReason
+
+
+
+    else:
+        FailureReason
+       = ("You have issue with the script " + script_name +" that "+ errorCode
+       + " ==> "+ errorMessage + ""
+        "
+To troubleshoot the issue:"
+      
+        "
+-----------------------------"
+        "
+[1] Check if the
+       instance was terminated during the deployment, this could happen due to scale
+       down event in the autoscaling group"
+        "
+   => If this is your
+       case, then make sure to suspend the autoscaling group below actions before
+       you start the deployment"
+        "
+      Actions are [ AZRebalance ,
+       ReplaceUnhealthy , ScheduledActions , AlarmNotification ]" 
+        "
+      n      Make sure to resume the process after the deployment finish"
+     
+         "
+      For more details how to suspend Autoscaling group actions, please
+       refer to: https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-suspend-resume-processes.html#as-suspend-resume"
+      
+        "
+
+[2] Try to launch new instance and SSH into the instance and
+       run the failed script manually" 
+        "
+[3] You can view the deployment
+       script log inside the launched instance to see where the script failed:"
+
+              "
+   [-] Script logs location for Linux will be similar to : /opt/codedeploy-agent/deployment-root/<deployment-group-ID>/<deployment-ID>/logs/scripts.log"
+      
+        "
+   [-] https://docs.aws.amazon.com/codedeploy/latest/userguide/deployments-view-logs.html#deployments-view-logs-instance-unix"
+      
+        "
+
+For windows OS: "
+        "
+-----------------"
+   
+           "
+Logs can be found at: C:ProgramDataAmazonCodeDeploydeployment-group-ID
+      deployment-IDlogsscripts.log"
+        "
+ 
+If a Windows PowerShell
+       script running as part of a deployment relies on 64-bit functionality,the
+       script might crash or not run as expected."
+        "
+This is because,
+       by default, CodeDeploy uses the 32-bit version of Windows PowerShell to run
+       Windows PowerShell scripts that are part of an application revision"
+  
+            "
+To resolve this: Add a code at the beginning of your script as the
+       example here :https://docs.aws.amazon.com/codedeploy/latest/userguide/troubleshooting-deployments.html#troubleshooting-deployments-powershell
+       ")
+        return FailureReason
+
+    
+
+def Check_scale_down(errorMessage,errorCode,
+       script_name,InstanceState,instance_id,creator ):
+       FailureReason = "
+      "
+       if (errorMessage == "") and (errorCode == "") and (script_name
+       == "") and ( creator == "user") and (InstanceState == "terminated"):
+
+                  scaledown = "true"
+            FailureReason =("The instance
+       "+ instance_id+" has been terminated during the deployment, This might happen
+       due to scale down event from the autoscaling group "
+            "
+When
+       an instance is terminated during the deployment, Codedeploy service will not
+       get the expected response from Codedeploy agent which running on the instance,
+       and this cause the deployment to fail"
+            "
+In order to get
+       more information about the reason why the instance was terminated, please
+       go to your autoscaling group from the console, check Activity history of the
+       autoscaling group"
+            "
+You should be able to see the reason.
+       For example : this could happen due to scale down event during the deployment"
+      
+            "
+ 
+How to avoid the same situation:"
+            "
+      n---------------------------------"
+            "
+Make sure to suspend
+       the autoscaling group below actions before you start the deployment"
+  
+                "
+Actions are [ AZRebalance , ReplaceUnhealthy , ScheduledActions
+       , AlarmNotification ]" 
+            "
+Make sure to resume the process
+       after the deployment finish"
+            "
+For more details how to suspend
+       Autoscaling group actions, please refer to: https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-suspend-resume-processes.html#as-suspend-resume"
+      )
+            return [ scaledown, FailureReason ]
+       else:
+         
+         scaledown = "false"
+            return [ scaledown , FailureReason ]
+
+      
+def check_agent():
+      FailureReason2 = ( "
+To troubleshoot, SSH into
+       the instance: "
+                       "
+---------------------------------------"
+      
+                       "
+ [1] Check Codedeploy agent status => service
+       codedeploy-agent status "
+                       "
+ [2] Restart codedeploy
+       agent  => service codedeploy-agent restart , and verify the status again "
+      
+                       "
+ [3] If the agent is not running, verify the reason
+       by checking Codedeploy agent log as below: "
+                       "
+      n     - For linux OS : less /var/log/aws/codedeploy-agent/codedeploy-agent.log
+       "
+                       "
+     - For windows OS: notepad C:ProgramData
+      AmazonCodeDeploylogcodedeploy-agent-log.txt 
+")
+          
+     
+       return FailureReason2
+          
+
+"
+  outputs:
+  - Name: "output"
+    Selector: "$.Payload.FinalResult"
+    Type: "String"
+  isEnd: true
+outputs:
+- "TroubleshootCodedeploy.output"

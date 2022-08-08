@@ -1,0 +1,214 @@
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+    ### Document Name - AWS-StartStopAuroraCluster
+
+    ## What does this document do?
+    This document starts or stops an Amazon Aurora DB cluster.
+
+    ## Notes:
+    Aurora DB clusters can't be started or stopped under certain conditions:
+    * To start a cluster it must be in 'stopped' status.
+    * To stop a cluster it must be in 'available' status.
+    * You can't start or stop a cluster that's part of an [Aurora global database](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-global-database.html).
+    * You can't start or stop a cluster that uses the [Aurora parallel query](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-mysql-parallel-query.html).
+    * You can't start or stop an [Aurora Serverless cluster](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-serverless.html).
+    * You can't start or stop an [Aurora multi-master cluster](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-multi-master.html).
+
+    If an existing cluster can't be stopped and started, the automation will fail and will return a message describing the failure cause.
+
+    For more information, see [Stopping and Starting an Aurora Cluster](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-cluster-stop-start.html) in the Amazon Aurora User Guide.
+
+    ## Input Parameters
+    * ClusterName: (Required) The name of the Aurora DB cluster.
+    * Action: (Required) The action to take on the cluster. The cluster can be started or stopped.
+      * Allowed Values: Start | Stop
+      * Default: Start
+    * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+    ## Output Parameters
+    * StartStopAuroraCluster.ClusterName: The name of the Aurora DB cluster.
+    * StartStopAuroraCluster.CurrentStatus: The current state of this DB cluster.
+    * StartStopAuroraCluster.Message: Details of the execution result.
+
+    ## Minimum Permissions Required
+    * `rds:StartDBCluster` on the targeted cluster.
+    * `rds:StopDBCluster` on the targeted cluster.
+    * `rds:DescribeDBClusters` on all clusters.
+
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  ClusterName:
+    type: String
+    description: (Required) The name of the Aurora DB cluster.
+    allowedPattern: '^[A-Za-z0-9_-]*$'
+  Action:
+    type: String
+    description: (Required) The action to take on the cluster.
+    default: Start
+    allowedValues:
+      - Start
+      - Stop
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::d{12}:role/[w+=,.@_/-]+|^$'
+outputs:
+  - StartStopAuroraCluster.ClusterName
+  - StartStopAuroraCluster.Message
+  - StartStopAuroraCluster.CurrentStatus
+mainSteps:
+- name: StartStopAuroraCluster
+  action: aws:executeScript
+  onFailure: Abort
+  isCritical: true
+  isEnd: true
+  timeoutSeconds: 600
+  description: |
+    ## StartStopAuroraCluster
+    Starts or stops the targeted Aurora DB Cluster.
+    ## Inputs
+    * ClusterName: The name of the Aurora DB cluster.
+    * Action: The action to take on the cluster.
+    ## Outputs
+    * ClusterName: Aurora cluster name.
+    * CurrentStatus: Specifies the current state of this DB cluster.
+    * Message: Details of the execution result.
+  inputs:
+    Runtime: python3.7
+    Handler: start_stop_aurora_cluster_handler
+    InputPayload:
+        ClusterName: '{{ClusterName}}'
+        Action: '{{Action}}'
+    Script: |
+        import time
+        import boto3
+
+        rds_client = boto3.client('rds')
+
+        START= "Start"
+        STOP= "Stop"
+        DB_AVAILABLE= "available"
+        DB_STARTING= "starting"
+        DB_STOPPED= "stopped"
+        DB_STOPPING= "stopping"
+
+        def get_rejection_msg(engine_mode):
+
+            if engine_mode.lower() == "global":
+                return "You can't start or stop a cluster that's part of an Aurora global database."
+
+            if engine_mode.lower() == "parallelquery":
+                return "You can't start or stop a cluster that uses the Aurora parallel query."
+
+            if  engine_mode.lower() == "serverless":
+                return "You can't start or stop an Aurora Serverless cluster."
+
+            if engine_mode.lower() == "multimaster":
+                return "You can't start or stop an Aurora multi-master cluster."
+
+            return "Unknown Engine Mode '{}'.".format(engine_mode)
+
+        def start_cluster(cluster_name):
+            response = rds_client.start_db_cluster(
+                DBClusterIdentifier = cluster_name
+            )
+            time.sleep(1)
+            response = rds_client.describe_db_clusters(DBClusterIdentifier = cluster_name)
+            return response.get("DBClusters")[0].get('Status')
+
+        def stop_cluster(cluster_name):
+            response = rds_client.stop_db_cluster(
+                DBClusterIdentifier = cluster_name
+            )
+            time.sleep(1)
+            response = rds_client.describe_db_clusters(DBClusterIdentifier = cluster_name)
+            return response.get("DBClusters")[0].get('Status')
+
+        def start_stop_aurora_cluster_handler(event, context):
+            cluster_name = event.get("ClusterName")
+            action = event.get("Action")
+
+            out = {
+                "ClusterName": cluster_name,
+                "Message": "None",
+                "CurrentStatus": "Not defined"
+            }
+
+            try:
+                res = rds_client.describe_db_clusters(DBClusterIdentifier = cluster_name)
+                engine_mode = res.get("DBClusters")[0].get('EngineMode')
+                db_cluster_status = res.get("DBClusters")[0].get('Status')
+
+                if not engine_mode:
+                    raise Exception("Aurora cluster '{}' not found.".format(cluster_name))
+
+                if engine_mode.lower() != 'provisioned':
+                    raise Exception(get_rejection_msg(engine_mode))
+
+                if action.lower() == START.lower():
+
+                    if db_cluster_status in [DB_STARTING, DB_AVAILABLE]:
+                        userMsg = "Aurora cluster '{}' is in '{}' state.".format(cluster_name, db_cluster_status)
+
+                        out["Message"] = userMsg
+                        out["CurrentStatus"] = db_cluster_status
+                        return out
+
+                    if db_cluster_status.lower() != DB_STOPPED:
+                        raise Exception("Aurora cluster '{}' is not in valid state to be started, cluster status = '{}'.".format(cluster_name, db_cluster_status))
+
+                    db_cluster_status = start_cluster(cluster_name)
+                    userMsg = "Action 'Start' initiated on cluster '{}'.".format(cluster_name)
+
+                elif action == STOP:
+                    if db_cluster_status in  [DB_STOPPED, DB_STOPPING]:
+                        userMsg = "Aurora cluster '{}' is in '{}' state.".format(cluster_name, db_cluster_status)
+                        out["Message"] = userMsg
+                        out["CurrentStatus"] = db_cluster_status
+                        return out
+
+                    if db_cluster_status.lower() != DB_AVAILABLE:
+                        raise Exception("Aurora cluster '{}' is not in valid state to be stopped, cluster status = '{}'.".format(cluster_name, db_cluster_status))
+
+                    db_cluster_status = stop_cluster(cluster_name)
+
+                    userMsg = "Action 'Stop' initiated on Aurora cluster '{}'.".format(cluster_name)
+
+                else:
+                    raise Exception("Unknown Action '{}'.".format(action))
+
+                out["Message"] = userMsg
+                out["CurrentStatus"] = db_cluster_status
+
+            except Exception as e:
+                errorMsg = str(e)
+                raise Exception("Unable to perform the required action '{}' on cluster '{}', error = '{}'.".format(action, cluster_name, errorMsg))
+
+            return out
+  outputs:
+    - Name: ClusterName
+      Selector: $.Payload.ClusterName
+      Type: String
+    - Name: Message
+      Selector: $.Payload.Message
+      Type: String
+    - Name: CurrentStatus
+      Selector: $.Payload.CurrentStatus
+      Type: String

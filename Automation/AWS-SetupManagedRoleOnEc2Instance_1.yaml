@@ -1,0 +1,476 @@
+schemaVersion: "0.3"
+description: "Setup Managed Role on EC2 Instance"
+assumeRole: "{{AutomationAssumeRole}}"
+parameters:
+  InstanceId:
+    type: "String"
+    description: "(Required) InstanceId of the EC2 to configure"
+  RoleName:
+    type: "String"
+    description: "(Optional) The name of the IAM Role for the EC2 Instance. If this
+       Role does not exist, it will be created. When specifying this value, the caller
+       should ensure the Role contains the AWS Managed Policy "AmazonSSMManagedInstanceCore"
+      ."
+    default: "SSMRoleForManagedInstance"
+  AutomationAssumeRole:
+    type: "String"
+    description: "(Optional) The ARN of the role that allows Automation to perform
+       the actions on your behalf."
+    default: ""
+  LambdaAssumeRole:
+    type: "String"
+    description: "(Optional) The ARN of the role that allows Lambda created by Automation
+       to perform the actions on your behalf. If not specified a transient role will
+       be created to execute the Lambda function."
+    default: ""
+mainSteps:
+- name: "createDocumentStack"
+  action: "aws:createStack"
+  inputs:
+    Capabilities:
+    - "CAPABILITY_IAM"
+    StackName: "SetupManagedRoleOnInstanceStack{{automation:EXECUTION_ID}}"
+    Parameters:
+    - ParameterKey: "LambdaRoleArn"
+      ParameterValue: "{{LambdaAssumeRole}}"
+    - ParameterKey: "InitInstanceProfileLambdaName"
+      ParameterValue: "InitInstanceProfileLambda-{{automation:EXECUTION_ID}}"
+    - ParameterKey: "InitRoleLambdaName"
+      ParameterValue: "InitRoleLambda-{{automation:EXECUTION_ID}}"
+    - ParameterKey: "InitPolicyLambdaName"
+      ParameterValue: "InitPolicyLambda-{{automation:EXECUTION_ID}}"
+    TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'
+Conditions:
+  LambdaAssumeRoleNotSpecified:
+
+          Fn::Or:
+    - Fn::Equals:
+      - {Ref: LambdaRoleArn}
+      - ''
+
+          - Fn::Equals:
+      - {Ref: LambdaRoleArn}
+      - undefined
+Description:
+       Automation Stack for Setup Managed Role on Instance
+Parameters:
+  InitInstanceProfileLambdaName:
+       {Description: 'Name assigned to Lambda which initializes
+      the InstanceProfile
+       when necessary
+
+      ', Type: String}
+  InitPolicyLambdaName: {Description:
+       'Name assigned to Lambda which initializes the
+      Policy when necessary
+
+      
+      ', Type: String}
+  InitRoleLambdaName: {Description: 'Name assigned
+       to Lambda which initializes the
+      Role when necessary
+
+      ', Type:
+       String}
+  LambdaRoleArn: {Default: '', Description: 'The ARN of the role
+       that allows Lambda
+      created by Automation to perform the action on your
+       behalf
+
+      ', Type: String}
+Resources:
+  InitInstanceProfileLambda:
+
+          Properties:
+      Code: {ZipFile: "import boto3
+import time
+
+ec2
+       = boto3.client("ec2")
+
+          iam = boto3.client("iam"
+      )
+sts = boto3.client("sts")
+Ec2Instance =
+           boto3.resource(
+      "ec2").Instance
+
+
+
+def get_ec2_instance(instance_id):
+      
+           return Ec2Instance(instance_id)
+
+
+def create_instance_profile(profile_name):
+      n
+          tiam.create_instance_profile(InstanceProfileName=profile_name)
+      ntprofile_waiter
+           = iam.get_waiter('instance_profile_exists')
+      ntprofile_waiter.wait(InstanceProfileName=profile_name)
+
+          
+      ttime.sleep(8)
+treturn iam.get_instance_profile(InstanceProfileName=profile_name)[
+      "
+          InstanceProfile"]
+
+
+def acquire_instance_profile(profile_name):
+      nt
+          try:
+ttprofile = iam.get_instance_profile(InstanceProfileName=profile_name)[
+      "
+          InstanceProfile"]
+texcept iam.exceptions.NoSuchEntityException:
+      ntt
+          profile = create_instance_profile(profile_name)
+treturn
+       profile
+
+
+
+          def role_based_profile_name(role_name):
+
+      treturn role_name
+
+
+def profile_name_only(instance_profile_arn):
+
+
+                ttkn = instance_profile_arn.split(':')
+treturn tkn[len(tkn)
+       - 1].split('/')[1]
+
+          
+
+def handler(event, context):
+
+      tinstance = get_ec2_instance(event['InstanceId'])
+
+          
+tif instance.iam_instance_profile
+       is None:
+
+ttprofile_name = role_based_profile_name(event['RoleName'])
+      n
+          
+ttprofile = acquire_instance_profile(profile_name)
+
+      nttec2.associate_iam_instance_profile(
+
+          tttIamInstanceProfile={
+      ntttt'Arn': profile['Arn'],
+tttt'Name':
+           profile_name
+      nttt},
+tttInstanceId=event['InstanceId']
+tt)
+t
+ 
+               treturn {
+ttt"InstanceProfileName": profile_name,
+       # No need for lexical-xform,
+           the profile took the name we
+       specified
+ttt"InstanceProfileArn":
+           profile[
+      "Arn"],
+ttt"ActionTaken": "Assigned InstanceProfile 
+      
+          "{}" to the Instance (it lacked a profile).".format(profile_name)
+      n
+          tt}
+telse:
+ttprofile_name = profile_name_only(instance.iam_instance_profile[
+      "
+          Arn"])
+
+ttreturn {
+ttt"InstanceProfileName
+      ": profile_name,
+t
+          tt"InstanceProfileArn": instance.iam_instance_profile[
+      "Arn"],
+tt
+          t"ActionTaken": "None; EC2 Instance
+       already has IAM InstanceProfile
+           named "{}".
+      ".format(profile_name)
+tt}
+"}
+      FunctionName: {Ref: InitInstanceProfileLambdaName}
+
+            Handler: index.handler
+      MemorySize: 128
+      Role:
+        Fn::If:
+
+              - LambdaAssumeRoleNotSpecified
+        - Fn::GetAtt: [LambdaRole,
+       Arn]
+        - {Ref: LambdaRoleArn}
+      Runtime: python3.7
+      Timeout:
+       60
+    Type: AWS::Lambda::Function
+  InitPolicyLambda:
+    Properties:
+
+            Code: {ZipFile: "import boto3
+
+iam_client = boto3.client("iam
+      ")
+POLICY_NAME
+           = "AmazonSSMManagedInstanceCore"
+
+      ndef get_regional_policy_arn(partition):
+
+          treturn 'arn:{}:iam::aws:policy/{}'.format(partition,
+       POLICY_NAME)
+
+
+
+          def is_policy_attached_to_role(role_name,
+       policy_arn):
+tattached_policies
+           = iam_client.list_attached_role_policies(RoleName=role_name)[
+      "AttachedPolicies"
+          ]
+tif len(attached_policies) > 0:
+      nttfor policy in attached_policies:
+
+          tttif policy[
+      "PolicyArn"] == policy_arn:
+ttttreturn True
+treturn
+  
+               False
+
+
+def handler(event, context):
+tsts = boto3.client('sts')
+      n
+          tcaller_identity = sts.get_caller_identity()
+tpartition
+       = caller_identity['Arn'].split(':')[1]
+
+          tpolicy_arn = get_regional_policy_arn(partition)
+      ntrole_name = event['Role']['RoleName']
+
+          
+tif is_policy_attached_to_role(role_name,
+       policy_arn) is False:
+tt
+          raise ValueError(
+ttt
+      "Specified Role "{}" does not contain the
+           correct
+       attached Policy "{}"".format(role_name, POLICY_NAME)
+
+      t
+          t)
+telse:
+ttreturn {
+ttt"ActionTaken
+      ": "No action taken; step
+           operand Role {} already had the
+       required Policy".format(role_name)
+t
+          t}
+"}
+    
+        FunctionName: {Ref: InitPolicyLambdaName}
+      Handler: index.handler
+
+            MemorySize: 128
+      Role:
+        Fn::If:
+        - LambdaAssumeRoleNotSpecified
+
+              - Fn::GetAtt: [LambdaRole, Arn]
+        - {Ref: LambdaRoleArn}
+ 
+           Runtime: python3.7
+      Timeout: 60
+    Type: AWS::Lambda::Function
+
+        InitRoleLambda:
+    Properties:
+      Code: {ZipFile: "import boto3
+      nimport json
+
+iam = boto3.client("iam")
+
+
+          POLICY_ARN
+       = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+
+
+ 
+               
+def get_instance_profile(instance_profile_name): return boto3.resource('iam').InstanceProfile(instance_profile_name)
+      n
+          
+
+def setup_role(role_name):
+tiam.create_role(
+t
+      tPath="/",
+tt
+          RoleName=role_name,
+ttAssumeRolePolicyDocument=json.dumps({
+      nttt"
+          Version": "2012-10-17",
+ttt"
+      Statement": [
+tttt{
+ttttt
+          "Effect
+      ": "Allow",
+ttttt"Principal": {
+ttttt
+      t"Service"
+          : [
+ttttttt"ec2.amazonaws.com
+      "
+tttttt]
+ttttt},
+t
+          ttt
+      t"Action": "sts:AssumeRole"
+tttt}
+ttt]
+t
+      t}),
+tt
+          Description="IAM Role for Managed EC2 Instance
+      "
+t)
+tiam.attach_role_policy(RoleName=role_name,
+           PolicyArn=POLICY_ARN)
+      n
+
+
+def handler(event, context):
+tinstance_profile_name
+      
+           = event["InstanceProfile"]["InstanceProfileName"]
+tinstance_profile
+      
+           = get_instance_profile(instance_profile_name)
+
+tif len(instance_profile.roles)
+      
+           == 0:
+ttrole_name = event['RoleName']
+ttis_attachment_needed
+       = True
+
+          telse:
+ttrole_name = instance_profile.roles[0].name
+      nttis_attachment_needed
+           = False
+
+ttry:
+ttiam.get_role(RoleName=role_name)
+      nttaction_description
+           = "IAM Role named {} located,
+      ".format(role_name)
+texcept iam.exceptions.NoSuchEntityException:
+
+
+                ttsetup_role(role_name)
+ttaction_description = "IAM
+       Role named {}
+           created,".format(role_name)
+
+tif is_attachment_needed:
+      nttinstance_profile.add_role(RoleName=role_name)
+
+          ttaction_description
+       += " and added to InstanceProfile {}".format(instance_profile_name)
+      n
+          telse:
+ttaction_description += " and verified its
+       presence in InstanceProfile
+           {}".format(instance_profile_name)
+      n
+treturn {
+tt"ActionTaken"
+          : action_description,
+      ntt"RoleName": role_name
+t}
+"}
+      FunctionName: {Ref: InitRoleLambdaName}
+
+            Handler: index.handler
+      MemorySize: 128
+      Role:
+        Fn::If:
+
+              - LambdaAssumeRoleNotSpecified
+        - Fn::GetAtt: [LambdaRole,
+       Arn]
+        - {Ref: LambdaRoleArn}
+      Runtime: python3.7
+      Timeout:
+       60
+    Type: AWS::Lambda::Function
+  LambdaRole:
+    Condition: LambdaAssumeRoleNotSpecified
+
+          Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+    
+          - Action: ['sts:AssumeRole']
+          Effect: Allow
+          Principal:
+
+                  Service: [lambda.amazonaws.com]
+        Version: '2012-10-17'
+
+            Path: /
+      Policies:
+      - PolicyDocument:
+          Statement:
+
+                  Action: ['aws:UpdateManagedInstanceRole', 'ec2:AssociateIamInstanceProfile',
+
+                    'ec2:DescribeIamInstanceProfileAssociations', 'ec2:DescribeInstances',
+
+                    'iam:AddRoleToInstanceProfile', 'iam:AttachRolePolicy', 'iam:CreateInstanceProfile',
+
+                    'iam:CreateRole', 'iam:GetInstanceProfile', 'iam:GetPolicy',
+       'iam:GetRole',
+              'iam:ListAttachedRolePolicies', 'iam:PassRole',
+       'sts:GetCallerIdentity']
+            Effect: Allow
+            Resource:
+       '*'
+          Version: '2012-10-17'
+        PolicyName: SetupManagedRoleOnInstancePolicy
+
+          Type: AWS::IAM::Role
+"
+- name: "InitInstanceProfile"
+  action: "aws:invokeLambdaFunction"
+  inputs:
+    FunctionName: "InitInstanceProfileLambda-{{automation:EXECUTION_ID}}"
+    Payload: "{"InstanceId": "{{InstanceId}}", "RoleName":"{{RoleName}}"}"
+- name: "InitRole"
+  action: "aws:invokeLambdaFunction"
+  inputs:
+    FunctionName: "InitRoleLambda-{{automation:EXECUTION_ID}}"
+    Payload: "{"RoleName":"{{RoleName}}", "InstanceProfile": {{InitInstanceProfile.Payload}}
+       }"
+- name: "InitPolicy"
+  action: "aws:invokeLambdaFunction"
+  inputs:
+    FunctionName: "InitPolicyLambda-{{automation:EXECUTION_ID}}"
+    Payload: "{"Role": {{InitRole.Payload}} }"
+- name: "deleteCloudFormationTemplate"
+  action: "aws:deleteStack"
+  inputs:
+    StackName: "SetupManagedRoleOnInstanceStack{{automation:EXECUTION_ID}}"

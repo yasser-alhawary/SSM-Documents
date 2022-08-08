@@ -1,0 +1,170 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: SOP By AWS ResilienceHub. Manually force an ASG to scale out, increase the number of instances
+schemaVersion: '0.3'
+assumeRole: '{{ AutomationAssumeRole }}'
+parameters:
+  Dryrun:
+    type: Boolean
+    default: true
+    description: (Optional) Dryrun indicates a testing run, changes will be rolled back.
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+  AutoScalingGroupName:
+    type: String
+    description: (Required) The Name of the ASG to scaleOut
+outputs:
+  - OutputRecoveryTime.RecoveryTime
+mainSteps:
+  - name: RecordStartTime
+    action: 'aws:executeScript'
+    inputs:
+      Runtime: python3.8
+      Handler: script_handler
+      Script: |-
+        def script_handler(events, context):
+          from datetime import datetime, timezone
+          return datetime.now(timezone.utc).isoformat()
+    outputs:
+      - Name: StartTime
+        Selector: $.Payload
+        Type: String
+  - name: FetchExistingCapacity
+    action: 'aws:executeAwsApi'
+    inputs:
+      Service: autoscaling
+      Api: DescribeAutoScalingGroups
+      AutoScalingGroupNames:
+        - '{{AutoScalingGroupName}}'
+    outputs:
+      - Name: CurrentDesiredCapacity
+        Selector: '$.AutoScalingGroups[0].DesiredCapacity'
+        Type: Integer
+      - Name: CurrentMaxSize
+        Selector: '$.AutoScalingGroups[0].MaxSize'
+        Type: Integer
+  - name: CalculateNewCapacity
+    action: 'aws:executeScript'
+    inputs:
+      Runtime: python3.8
+      Handler: script_handler
+      InputPayload:
+        CurrentDesiredCapacity: '{{FetchExistingCapacity.CurrentDesiredCapacity}}'
+        CurrentMaxSize: '{{FetchExistingCapacity.CurrentMaxSize}}'
+      Script: |-
+        import math
+        def script_handler(events, context):
+          return {
+              'NewDesiredCapacity': math.ceil(events['CurrentDesiredCapacity'] * 1.5),
+              'NewMaxSize': max(math.ceil(events['CurrentDesiredCapacity'] * 1.5), events['CurrentMaxSize'])
+          }
+
+    outputs:
+      - Name: NewDesiredCapacity
+        Selector: $.Payload.NewDesiredCapacity
+        Type: Integer
+      - Name: NewMaxSize
+        Selector: $.Payload.NewMaxSize
+        Type: Integer
+  - name: UpdateCapacity
+    action: 'aws:executeAwsApi'
+    description: Update Capacity on an Asg
+    inputs:
+      Service: autoscaling
+      Api: UpdateAutoScalingGroup
+      AutoScalingGroupName: '{{AutoScalingGroupName}}'
+      DesiredCapacity: '{{CalculateNewCapacity.NewDesiredCapacity}}'
+      MaxSize: '{{CalculateNewCapacity.NewMaxSize}}'
+  - name: WaitForScaleOut
+    action: 'aws:executeScript'
+    inputs:
+      Runtime: python3.8
+      Handler: wait_for_in_service
+      InputPayload:
+        AutoScalingGroupName: '{{AutoScalingGroupName}}'
+        NewDesiredCapacity: '{{CalculateNewCapacity.NewDesiredCapacity}}'
+      Script: |-
+        import logging
+        import random
+        import time
+        from math import ceil
+        
+        import boto3
+        from botocore.config import Config
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def wait_for_in_service(events, context):
+            client = boto3.client('autoscaling')
+            while (True):
+                res = client.describe_auto_scaling_groups(AutoScalingGroupNames=[events['AutoScalingGroupName']])
+                instances = res['AutoScalingGroups'][0]['Instances']
+                num_in_service = sum(instance['LifecycleState'] == 'InService' for instance in instances)
+                if (num_in_service >= events['NewDesiredCapacity']):
+                    return True
+                time.sleep(15)
+        
+        
+
+    description: Wait for Asg to update capacity
+    timeoutSeconds: 1200
+    maxAttempts: 4
+  - name: OutputRecoveryTime
+    action: 'aws:executeScript'
+    inputs:
+      Runtime: python3.8
+      Handler: script_handler
+      Script: |-
+        def script_handler(events, context):
+          from datetime import datetime, timezone
+          from dateutil import parser
+          return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds
+      InputPayload:
+        StartTime: '{{RecordStartTime.StartTime}}'
+    outputs:
+      - Name: RecoveryTime
+        Selector: $.Payload
+        Type: Integer
+  - name: DryrunBranch
+    action: 'aws:branch'
+    inputs:
+      Choices:
+        - NextStep: EmptyStepForEnd
+          Variable: '{{Dryrun}}'
+          BooleanEquals: false
+        - NextStep: RollBackCapacityChange
+          Variable: '{{Dryrun}}'
+          BooleanEquals: true
+  - name: RollBackCapacityChange
+    action: 'aws:executeAwsApi'
+    maxAttempts: 3
+    description: Rollback Capacity on an Asg
+    inputs:
+      Service: autoscaling
+      Api: UpdateAutoScalingGroup
+      AutoScalingGroupName: '{{AutoScalingGroupName}}'
+      DesiredCapacity: '{{FetchExistingCapacity.CurrentDesiredCapacity}}'
+      MaxSize: '{{FetchExistingCapacity.CurrentMaxSize}}'
+  - name: EmptyStepForEnd
+    action: "aws:sleep"
+    isEnd: true
+    inputs:
+      Duration: "PT1S"

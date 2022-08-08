@@ -1,0 +1,139 @@
+description: |
+  ### Document name - AWSConfigRemediation-ModifyRedshiftClusterMaintenanceSettings
+
+  ## What does this document do?
+  This document modifies the maintenance settings on a given Amazon Redshift cluster using the [ModifyCluster](https://docs.aws.amazon.com/redshift/latest/APIReference/API_ModifyCluster.html) API.
+
+  ## Input Parameters
+  * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+  * ClusterIdentifier: (Required) The unique identifier of the Amazon Redshift cluster to be modified.
+  * PreferredMaintenanceWindow: (Required) The weekly time range (in UTC) during which system maintenance can occur.
+  * AllowVersionUpgrade: (Required) The boolean flag indicating if major version upgrade can be applied automatically to the cluster during the maintenance window.
+    * Default: "false"
+  * AutomatedSnapshotRetentionPeriod: (Required) The number of days that automated snapshots are retained. Valid values are 1 to 35.
+
+  ## Output Parameters
+  * ModifyRedshiftClusterMaintenanceSettings.Response: The standard HTTP response from the ModifyCluster API.
+
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:iam::d{12}:role/[w+=,.@/-]+$
+  ClusterIdentifier:
+    type: String
+    description: (Required) The unique identifier of the Amazon Redshift cluster to be modified.
+    allowedPattern: "[a-z]{1}[a-z0-9_.-]{0,62}"
+  PreferredMaintenanceWindow:
+    type: String
+    description: (Required) The weekly time range (in UTC) during which system maintenance can occur.
+    allowedPattern: '^([mM]on|[tT]ue|[wW]ed|[tT]hu|[fF]ri|[sS]at|[sS]un):(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]-([mM]on|[tT]ue|[wW]ed|[tT]hu|[fF]ri|[sS]at|[sS]un):(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$'
+  AllowVersionUpgrade:
+    type: Boolean
+    description: (Required) The boolean flag indicating if major version upgrades can be applied automatically to the cluster during the maintenance window.
+    default: false
+  AutomatedSnapshotRetentionPeriod:
+    type: Integer
+    description: (Required) The number of days that automated snapshots are retained. Valid values are 1 to 35.
+    allowedPattern: ^[0]?[1-9]$|^[1-2][0-9]?$|^3[0-5]$
+
+outputs:
+  - ModifyRedshiftClusterMaintenanceSettings.Response
+mainSteps:
+  -
+    name: ModifyRedshiftClusterMaintenanceSettings
+    action: aws:executeAwsApi
+    description: |
+      ## ModifyRedshiftClusterMaintenanceSettings
+      Makes ModifyCluster API call using Amazon Redshift Cluster identifier and modifies the maintenance settings on a given Amazon Redshift cluster.
+      ## Outputs
+      * Response: The standard HTTP response from the ModifyCluster API.
+    timeoutSeconds: 600
+    isEnd: false
+    inputs:
+      Service: redshift
+      Api: ModifyCluster
+      ClusterIdentifier: "{{ ClusterIdentifier }}"
+      PreferredMaintenanceWindow: "{{ PreferredMaintenanceWindow }}"
+      AllowVersionUpgrade: "{{ AllowVersionUpgrade }}"
+      AutomatedSnapshotRetentionPeriod: "{{ AutomatedSnapshotRetentionPeriod }}"
+    outputs:
+      - Name: Response
+        Selector: $
+        Type: StringMap
+  - name: VerifyClusterConfiguration
+    action: "aws:executeScript"
+    description: |
+      ## VerifyClusterConfiguration
+      Verifies that the Amazon Redshift cluster has the specified maintenance settings.
+      ## Outputs
+      * Output: The standard HTTP response from the DescribeClusters API.
+    isEnd: true
+    timeoutSeconds: 600
+    inputs:
+      Runtime: python3.7
+      Handler: handler
+      InputPayload:
+        ClusterIdentifier: "{{ ClusterIdentifier }}"
+        PreferredMaintenanceWindow: "{{ PreferredMaintenanceWindow }}"
+        AllowVersionUpgrade: "{{ AllowVersionUpgrade }}"
+        AutomatedSnapshotRetentionPeriod: "{{ AutomatedSnapshotRetentionPeriod }}"
+      Script: |-
+        import boto3
+
+        def verify_maintenance_settings(
+            redshift_client,
+            cluster_identifier,
+            input_preferred_maintenance_window,
+            input_allow_version_upgrade,
+            input_automated_snapshot_retention_period
+        ):
+            describe_clusters_response = redshift_client.describe_clusters(
+                ClusterIdentifier=cluster_identifier
+            )
+            preferred_maintenance_window = describe_clusters_response["Clusters"][0][
+                "PreferredMaintenanceWindow"
+            ]
+            allow_version_upgrade = describe_clusters_response["Clusters"][0][
+                "AllowVersionUpgrade"
+            ]
+            automated_snapshot_retention = describe_clusters_response["Clusters"][0][
+                "AutomatedSnapshotRetentionPeriod"
+            ]
+            if (
+                preferred_maintenance_window == input_preferred_maintenance_window.lower()
+                and allow_version_upgrade == input_allow_version_upgrade
+                and automated_snapshot_retention == input_automated_snapshot_retention_period
+            ):
+                return {
+                    "output": {
+                        "Message": "Verification of maintenance settings for Amazon Redshift cluster is successful."
+                    }
+                }
+            raise Exception(
+                "VERIFICATION FAILED. AMAZON REDSHIFT MAINTENANCE SETTINGS VALUES "
+                "DO NOT MATCH WITH PARAMETERS PROVIDED VALUES "
+                "PreferredMaintenanceWindow: {}, AllowVersionUpgrade: {}, AutomatedSnapshotRetentionPeriod: {}".format(
+                    preferred_maintenance_window,
+                    allow_version_upgrade,
+                    automated_snapshot_retention,
+                )
+            )
+
+        def handler(event, context):
+            redshift_client = boto3.client("redshift")
+            redshift_cluster_identifier = event["ClusterIdentifier"]
+            input_preferred_maintenance_window = event["PreferredMaintenanceWindow"]
+            input_allow_version_upgrade = event["AllowVersionUpgrade"]
+            input_automated_snapshot_retention_period = event["AutomatedSnapshotRetentionPeriod"]
+            return verify_maintenance_settings(
+                redshift_client,
+                redshift_cluster_identifier,
+                input_preferred_maintenance_window,
+                input_allow_version_upgrade,
+                input_automated_snapshot_retention_period,
+            )
+    outputs:
+      - Name: Output
+        Selector: $.Payload.output

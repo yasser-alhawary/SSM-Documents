@@ -1,0 +1,51 @@
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+description: |-
+  Document name -  AWS-DisableEventBridgeRule
+
+  ## What does this document do?
+  The  AWS-DisableEventBridgeRule Automation document disables the rule in EventBridge
+
+  ## Input Parameters
+  * RuleName: (Required) Name of the EventBridge rule.
+  * EventBusName: (Optional) Name of the event bus. If not specified, uses `default` event bus.
+  * AutomationAssumeRole: (Optional) The Amazon Resource Name (ARN) of the role that allows SSM Automation to perform the actions on your behalf.
+
+  ## Output parameters
+  None
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  RuleName:
+    type: String
+    description: '(Required) Name of the EventBridge rule'
+  EventBusName:
+    type: String
+    description: '(Optional) Name of the event bus. If not specified, uses `default` event bus. '
+    default: 'default'
+  AutomationAssumeRole:
+    type: String
+    description: '(Optional) The Amazon Resource Name (ARN) of the role that allows SSM Automation to perform the actions on your behalf.'
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::d{12}:role/[w+=,.@_/-]+|^$'
+mainSteps:
+  - name: DisableEventBridgeRule
+    action: 'aws:executeAwsApi'
+    inputs:
+      Service: events
+      Api: disable_rule
+      Name: '{{RuleName}}'
+      EventBusName: '{{EventBusName}}'

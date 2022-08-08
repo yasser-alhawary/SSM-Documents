@@ -1,0 +1,113 @@
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+  ### Document name - AWS-ExportOpsDataToS3
+
+  ## What does this document do?
+  This document retrieves a list of OpsData summaries in AWS Systems Manager Explorer and exports them to an object in a specified Amazon S3 bucket.
+
+  ## Input Parameters
+  * assumeRole: The ARN of the role that allows Automation to perform the actions on your behalf.
+  * filters: Filters for the getOpsSummary request. By default, filters are empty if not provided.
+  * syncName: The name of the resource data sync. By default, syncName is empty if not provided.
+  * resultAttribute: The result attribute for getOpsSummary request.
+      * [AWS:OpsItem]: (Default) By default, the result attribute is "AWS:OpsItem" if this field is not provided.
+      * [AWS:EC2InstanceInformation]: If you want to check EC2 data, "AWS:EC2InstanceInformation" is needed.
+      * [AWS:ComplianceSummary]: If you want to check compliant/non-compliant instances, "AWS:ComplianceSummary" is needed.
+  * columnFields: Column fields to write to the output file.
+  * s3BucketName: Amazon S3 bucket where you want to download the output file.
+  * snsTopicArn: Amazon Simple Notification Service (SNS) topic ARN to notify when the download completes.
+  * snsSuccessMessage: Message to send when document finishes. By default, the snsSuccessMessage is empty if not provided.
+  * columnFieldsWithType: Fully qualified column fields to write to the output file. For example, "AWS:EC2InstanceInformation.InstanceId".
+  * resultAttributeList: The multiple result attributes for getOpsSummary request.
+
+  ## Output parameters
+  * OpsData object: If the document is executed successfully, you will find the exported OpsData object in your target S3 bucket.
+schemaVersion: "0.3"
+assumeRole: "{{assumeRole}}"
+parameters:
+  assumeRole:
+    type: String
+    description: (Required) The role ARN to assume during automation execution.
+  filters:
+    type: String
+    description: (Optional) Filters for the getOpsSummary request.
+    default: ""
+  syncName:
+    type: String
+    description: (Optional) The name of the resource data sync.
+    default: ""
+  resultAttribute:
+    type: String
+    description: (Optional) The result attribute for getOpsSummary request.
+    default: ""
+  columnFields:
+    type: StringList
+    description: (Optional) Column fields to write to the output file.
+    default: [""]
+  s3BucketName:
+    type: String
+    description: (Required) Amazon S3 bucket where you want to download the output file.
+  snsTopicArn:
+    type: String
+    description: (Required) Amazon Simple Notification Service (SNS) topic ARN to notify when the download completes.
+  snsSuccessMessage:
+    type: String
+    description: (Optional) Message to send when document finishes.
+    default: ""
+  columnFieldsWithType:
+    type: StringList
+    description: (Optional) Fully qualified column fields to write to the output file.
+    default: [""]
+  resultAttributeList:
+    type: StringList
+    description: (Optional) The multiple result attributes for getOpsSummary request.
+    default: [""]
+mainSteps:
+- name: getOpsSummaryStep
+  action: aws:executeScript
+  description: |
+    ### What does the step do?
+    This step retrieves up to 5,000 ops summaries to export in a CSV file now.
+
+    ### What is the output of the step?
+    The list of ops summaries is stored as an object in an Amazon S3 bucket. Publish an SNS message and inform success or failure.
+    The output file name along with the s3 bucket name will be included in the message when script finishes successfully.
+  timeoutSeconds: 300
+  outputs:
+  - Name: Succeeded
+    Selector: $.Payload
+    Type: Boolean
+  inputs:
+    Runtime: python3.8
+    Handler: script.start_export_to_csv
+    Attachment: aws-ExportOpsDataToS3.zip
+    InputPayload:
+      Filters: "{{filters}}"
+      ResultAttribute: "{{resultAttribute}}"
+      ColumnFields: "{{columnFields}}"
+      S3BucketName: "{{s3BucketName}}"
+      SyncName: "{{syncName}}"
+      SnsTopicArn: "{{snsTopicArn}}"
+      SnsSuccessMessage: "{{snsSuccessMessage}}"
+      ColumnFieldsWithType: "{{columnFieldsWithType}}"
+      ResultAttributeList: "{{resultAttributeList}}"
+files:
+  aws-ExportOpsDataToS3.zip:
+    checksums:
+      SHA256: 90aa0f4f4bca8fc2c60573a9068a156447f75406aa88fd3194812e717b3268b2
+    size: 12673501

@@ -1,0 +1,131 @@
+  ### Document name - AWSConfigRemediation-EnableCloudFrontOriginFailover
+
+  ## What does this document do?
+  This document configures the origin group to support origin failover for the given Amazon CloudFront distribution using the [UpdateDistribution](https://docs.aws.amazon.com/cloudfront/latest/APIReference/API_UpdateDistribution.html) API.
+
+  ## Input Parameters
+  * CloudFrontDistributionId: (Required) The Amazon CloudFront distribution's identifier.
+  * StatusCodes: (Required) The status codes that, when returned from the primary origin, will trigger Amazon CloudFront to failover to the second origin.
+  * OriginGroupId: (Required) The origin group's ID.
+  * PrimaryOriginId: (Required) The ID for the primary origin in an origin group.
+  * SecondaryOriginId: (Required) The ID for the secondary origin in an origin group.
+  * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  * UpdateDistributionConfig.Output: The standard HTTP response from the UpdateDistribution API.
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+outputs:
+  - UpdateDistributionAndVerify.Output
+parameters:
+  CloudFrontDistributionId:
+    type: String
+    description: (Required) The Amazon CloudFront distribution's identifier.
+    allowedPattern: ^[A-Z0-9]+$
+  StatusCodes:
+    type: StringList
+    description: (Required) The status codes that, when returned from the primary origin, will trigger Amazon CloudFront to failover to the second origin.
+    allowedValues:
+      - 403
+      - 404
+      - 500
+      - 502
+      - 503
+      - 504
+  OriginGroupId:
+    type: String
+    description: (Required) The origin group's ID.
+    allowedPattern: ^[S]{1,128}$
+  PrimaryOriginId:
+    type: String
+    description: (Required) The ID for the primary origin in an origin group.
+    allowedPattern: ^[S]{1,128}$
+  SecondaryOriginId:
+    type: String
+    description: (Required) The ID for the secondary origin in an origin group.
+    allowedPattern: ^[S]{1,128}$
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:iam::d{12}:role/[w+=,.@-]+
+mainSteps:
+  - name: UpdateDistributionAndVerify
+    action: "aws:executeScript"
+    description: |
+      ## UpdateDistributionAndVerify
+      Updates the Amazon CloudFront distribution to configure an origin group to support origin failover in the given Amazon CloudFront and verify its successful creation.
+      ## outputs
+      * Output: The standard HTTP response from the UpdateDistribution API.
+    isEnd: false
+    timeoutSeconds: 600
+    inputs:
+      Runtime: python3.7
+      Handler: handler
+      InputPayload:
+        cloudfront_distribution: "{{ CloudFrontDistributionId }}"
+        status_codes: "{{ StatusCodes }}"
+        origin_group_id: "{{ OriginGroupId }}"
+        primary_origin: "{{ PrimaryOriginId }}"
+        secondary_origin: "{{ SecondaryOriginId }}"
+      Script: |-
+        import boto3
+        import json
+        import datetime
+        def default(obj):
+            if isinstance(obj, (datetime.date, datetime.datetime)):
+                return obj.isoformat()
+        def verify_enable_cloudfront_origin_failover(cloudfront_client,cloudfront_distribution,origin_group_id):
+            response = cloudfront_client.get_distribution_config(Id=cloudfront_distribution)
+            counter = response["DistributionConfig"]["OriginGroups"]["Quantity"] - 1 
+            if (response["DistributionConfig"]["OriginGroups"]["Items"][counter]["Id"] == origin_group_id):
+                return "Verification of 'EnableCloudFrontOriginFailover' is successful."
+            error = f"VERIFICATION FAILED. ORIGIN FAILOVER FOR AMAZON CLOUDFRONT DISTRIBUTION {cloudfront_distribution} IS NOT SET."
+            raise Exception(error)    
+        def handler(event, context):
+            cloudfront_client = boto3.client("cloudfront")
+            response = cloudfront_client.get_distribution_config(Id=event["cloudfront_distribution"])
+            status_codes = list(map(int, event["status_codes"]))
+            for counter in range(response["DistributionConfig"]["OriginGroups"]["Quantity"]):
+                if (response["DistributionConfig"]["OriginGroups"]["Items"][counter]["Id"] == event["origin_group_id"]):
+                    error = f"THE ORIGIN ID ALREADY EXISTS FOR GIVEN AMAZON CLOUDFRONT DISTRIBUTION {event['cloudfront_distribution']}"
+                    raise Exception(error)
+            response["DistributionConfig"]["OriginGroups"]["Quantity"] =+ 1
+            origin_groups = [{
+                    "Id": event["origin_group_id"],
+                    "FailoverCriteria": {
+                        "StatusCodes": {
+                            "Quantity": len(event["status_codes"]),
+                            "Items": status_codes
+                        }
+                    },
+                    "Members": {
+                        "Quantity": 2,
+                        "Items": [
+                            {
+                                "OriginId": event["primary_origin"]
+                            },
+                            {
+                                "OriginId": event["secondary_origin"]
+                            }
+                        ]
+                    }
+                }]
+            if (response["DistributionConfig"]["OriginGroups"]["Quantity"] != 1):
+                response["DistributionConfig"]["OriginGroups"]["Items"].append(origin_groups)
+            response["DistributionConfig"]["OriginGroups"]["Items"] = origin_groups
+            update_response = cloudfront_client.update_distribution(
+                DistributionConfig=response["DistributionConfig"],
+                Id=event["cloudfront_distribution"],
+                IfMatch=response["ETag"]
+              )
+            output = verify_enable_cloudfront_origin_failover(cloudfront_client,event["cloudfront_distribution"],event["origin_group_id"])
+            return {
+                "output": {
+                    "message": output, 
+                    "HTTPResponse":  json.dumps(update_response,default=default)
+                }
+            }
+    outputs:
+      - Name: Output
+        Type: StringMap
+        Selector: $.Payload.output

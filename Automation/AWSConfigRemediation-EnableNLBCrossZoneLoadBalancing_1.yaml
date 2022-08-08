@@ -1,0 +1,89 @@
+description: |
+   ### Document name - AWSConfigRemediation-EnableNLBCrossZoneLoadBalancing
+
+   ## What does this document do?
+   This document enables `Cross Zone Load Balancing` on a given AWS Network load balancer using the [ModifyLoadBalancerAttributes](https://docs.aws.amazon.com/elasticloadbalancing/latest/APIReference/API_ModifyLoadBalancerAttributes.html) API.
+
+   ## Input Parameters
+   * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+   * LoadBalancerArn: (Required) The Amazon Resource Name (ARN) of the AWS Network load balancer.
+
+   ## Output Parameters
+   * ModifyLoadBalancer.Response: The standard HTTP response from the ModifyLoadBalancerAttributes API.
+
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:iam::d{12}:role/[w+=,.@-]+
+  LoadBalancerArn:
+    type: String
+    description: (Required) The name of the AWS Network load balancer, for which `Cross Zone Load Balancing` is to be enabled.
+    allowedPattern: ^arn:aws[a-z-]*?:elasticloadbalancing:.*:d{12}:loadbalancer/net/.*$
+outputs:
+  - ModifyLoadBalancer.Response
+mainSteps:
+  -
+    name: ModifyLoadBalancer
+    action: "aws:executeAwsApi"
+    description: |
+      ## ModifyLoadBalancer
+      Makes ModifyLoadBalancerAttributes API call to enable 'Cross Zone Load Balancing' on a given AWS Network load balancer.
+      ## Outputs
+      * Response: The standard HTTP response from the ModifyLoadBalancerAttributes API.
+    timeoutSeconds: 600
+    isEnd: false
+    inputs:
+      Service: elbv2
+      Api: ModifyLoadBalancerAttributes
+      LoadBalancerArn: "{{ LoadBalancerArn }}"
+      Attributes:
+      - "Key": "load_balancing.cross_zone.enabled"
+        "Value": "true"
+    outputs:
+      - Name: Response
+        Selector: $
+        Type: StringMap
+  -
+    name: VerifyLoadBalancerState
+    action: "aws:executeScript"
+    isEnd: true
+    timeoutSeconds: 600
+    description: |
+      ## VerifyLoadBalancerState
+      Verifies that 'Cross Zone Load Balancing' is enabled on a given AWS Network load balancer.
+    inputs:
+      Runtime: python3.7
+      Handler: handler
+      InputPayload:
+        LoadBalancerArn: "{{ LoadBalancerArn }}"
+      Script: |-
+        import boto3
+
+        def verify_cross_zone_status(nlb_client, arn):
+            load_balancer_attributes = nlb_client.describe_load_balancer_attributes(
+                LoadBalancerArn=arn
+            ).get("Attributes", [{}])
+            for attribute in load_balancer_attributes:
+                if (
+                    attribute["Key"] == "load_balancing.cross_zone.enabled"
+                    and attribute["Value"] == "true"
+                ):
+                    return True
+            return False
+
+        def handler(event, context):
+            elbv2_client = boto3.client("elbv2")
+            load_balancer_arn = event["LoadBalancerArn"]
+            cross_zone_status = verify_cross_zone_status(elbv2_client, load_balancer_arn)
+            if cross_zone_status:
+                return {
+                    "output": "Verification of 'Cross Zone Load Balancing' on AWS Network load balancer is successful."
+                }
+            raise Exception(
+                "VERIFICATION OF CROSS ZONE LOAD BALANCING ON AWS NETWORK LOAD BALANCER FAILED."
+            )
+    outputs:
+      - Name: Output
+        Selector: $.Payload.output

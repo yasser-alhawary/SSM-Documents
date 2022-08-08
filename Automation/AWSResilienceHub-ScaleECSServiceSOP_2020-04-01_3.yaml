@@ -1,0 +1,412 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-ScaleECSServiceSOP_2020-04-01
+
+            ## Intent
+            Scales services horizontally and vertically, up and down (compatible on EC2 and Fargate)
+
+            ## Type
+            SOP
+
+            ## Risk
+            Mеdium
+
+            ## Requirements:
+              * Launch Amazon ECS cluster [Get setup for Amazon ECS](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/get-set-up-for-amazon-ecs.html)
+
+            ## Permissions required for AutomationAssumeRole:
+              * ecs:DescribeTaskDefinition
+              * ecs:DescribeServices
+              * ecs:UpdateService
+              * ecs:RegisterTaskDefinition
+
+            ## Cancellation behavior
+            Fail
+
+            ## Inputs:
+            ### (Required) ServiceName
+            * type: String
+            * description: The name of ECS Service
+
+            ### (Required) ClusterName
+              * type: String
+              * description: The name of the ECS Cluster
+
+            ### (Optional) TaskDefinitionCPU
+                 * type: Integer
+                 * description: The CPU(units) of the task definition. If not set, copied from the current version.
+
+            ### (Optional) TaskDefinitionRAM
+            * type: Integer
+            * description: The RAM(MiB) of the task definition.
+                           If not set, copied from the current version. Can take values from 0.5GB to 30 GB
+
+            ### (Optional) NewTaskDefinitionArn
+              * type: String
+              * description: The ARN of the new task definition.
+                             All other CPU/RAM parameters are ignored if this parameter is set
+
+            ### (Optional) NumberOfTasks
+            * type: Integer
+            * description: The desired number of tasks in the service
+
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: The ARN of the role that allows Automation to perform the actions on your behalf.
+
+            ## Details
+            The document creates a new task definition and applies it to service.
+
+            Please, use the following AWS documentation guidelines if something was left in a bad state.
+              * [Runtime Troubleshooting](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/troubleshooting.html)
+
+            ## Steps executed in normal flow:
+              * RecordStartTime
+              * GetNewTaskDefinition
+              * ChangeTaskDefinition
+              * OutputRecoveryTime
+
+            ## Outputs:
+            ### OutputRecoveryTime.RecoveryTime
+              * type: String
+              * description: overall recovery time for ECS application to recover.
+
+            ### GetNewTaskDefinition.NewTaskDefinitionArn
+            * type: String
+            * description: The ARN of the new task definition.
+
+
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+outputs:
+  - OutputRecoveryTime.RecoveryTime
+  - GetNewTaskDefinition.NewTaskDefinitionArn
+parameters:
+  ServiceName:
+    type: String
+    description: (Required) The name of the service
+  ClusterName:
+    type: String
+    description: (Required) The name of the cluster
+  TaskDefinitionCPU:
+    type: Integer
+    description: (Optional) The CPU(units) of the task definition. If not set, copied from the current version.
+    default: -1
+  TaskDefinitionRAM:
+    type: Integer
+    description: (Optional) The RAM(MiB) of the task definition . If not set, copied from the current version. Can take values from 0.5GB to 30 GB
+    default: -1
+  NewTaskDefinitionArn:
+    type: String
+    description: (Optional) The ARN of the new task definition. All other CPU/RAM parameters are ignored if this parameter is set
+    default: ""
+  NumberOfTasks:
+    type: Integer
+    description: (Optional) The desired number of tasks in the service
+    default: -1
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+mainSteps:
+  - name: RecordStartTime
+    action: 'aws:executeScript'
+    description: Start recording execution time.
+    outputs:
+      - Name: StartTime
+        Selector: $.Payload
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: start_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def start_time(events, context):
+            return datetime.now(timezone.utc).isoformat()
+        
+        
+
+
+  - name: GetNewTaskDefinition
+    action: 'aws:executeScript'
+    description: Execute script that creates a new task definition if TaskDefinitionCPU or TaskDefinitionRAM aren't
+                 None or get new task definition from parameter.
+    outputs:
+      - Name: NewTaskDefinitionArn
+        Selector: $.Payload.TaskDefinitionArn
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: create_new_task_definition
+      Script: |-
+        import boto3
+        from botocore.config import Config
+        import logging
+        
+        from botocore.exceptions import ClientError
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def check_required_params(required_params, events):
+            for key in required_params:
+                if key not in events:
+                    raise KeyError(f'Requires {key} in events')
+        
+        
+
+        def create_new_task_definition(events, context):
+            """
+            Returns a new task definition. If  `NewTaskDefinitionArn` is provided, it simply returns it.
+            If no `NewTaskDefinitionArn` provided, creates a new task definition, from a one in specified servicecluster
+            with new cpu and memory, if specified
+            :param events: The object which contains passed parameters from SSM document
+             * `NewTaskDefinitionArn` - Optional. The predefined task definition arn
+             * `ServiceName` - Optional. Must be specified if `NewTaskDefinitionArn` not set. Name of ECS Service
+             * `ClusterName` - Optional. Must be specified if `NewTaskDefinitionArn` not set. Name of ECS Cluster
+             * `TaskDefinitionCPU` - Optional. New CPU for TaskDefinition
+             * `TaskDefinitionRAM` - Optional. New RAM for TaskDefinition
+            :param context: context
+            :return: The arn of newly created task definition, or the NewTaskDefinitionArn if specified
+            """
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ecs_client = boto3.client('ecs', config=config)
+        
+            if 'NewTaskDefinitionArn' in events and events['NewTaskDefinitionArn']:
+                # describe_task_definition will raise ClientError if not such task definition exists
+                ecs_client.describe_task_definition(
+                    taskDefinition=events['NewTaskDefinitionArn']
+                )
+                return {"TaskDefinitionArn": events['NewTaskDefinitionArn']}
+            else:
+                required_params = [
+                    'ServiceName',
+                    'ClusterName'
+                ]
+                check_required_params(required_params, events)
+            services = ecs_client.describe_services(
+                services=[events['ServiceName']],
+                cluster=events['ClusterName']
+            )
+            if not services['services']:
+                raise ClientError(error_response={
+                    "Error":
+                        {
+                            "Code": "ServiceNotFound",
+                            "Message": f"Could not find service: {events['ServiceName']}"
+                        }
+                },
+                    operation_name='DescribeServices'
+                )
+            task_definition_arn = services['services'][0]['taskDefinition']
+            task_definition = ecs_client.describe_task_definition(
+                taskDefinition=task_definition_arn
+            )['taskDefinition']
+            for key in [
+                'taskDefinitionArn',
+                'revision',
+                'status',
+                'registeredAt',
+                'registeredBy',
+                'compatibilities',
+                'requiresAttributes'
+            ]:
+                task_definition.pop(key)
+            if 'TaskDefinitionCPU' in events and events['TaskDefinitionCPU'] > 0:
+                task_definition['cpu'] = str(events['TaskDefinitionCPU'])
+            if 'TaskDefinitionRAM' in events and events['TaskDefinitionRAM'] > 0:
+                task_definition['memory'] = str(events['TaskDefinitionRAM'])
+            response = ecs_client.register_task_definition(**task_definition)
+        
+            return {"TaskDefinitionArn": response['taskDefinition']['taskDefinitionArn']}
+        
+        
+
+      InputPayload:
+        ServiceName: '{{ServiceName}}'
+        ClusterName: '{{ClusterName}}'
+        NewTaskDefinitionArn: '{{NewTaskDefinitionArn}}'
+        TaskDefinitionCPU: '{{TaskDefinitionCPU}}'
+        TaskDefinitionRAM: '{{TaskDefinitionRAM}}'
+
+  - name: ChangeTaskDefinition
+    action: 'aws:executeScript'
+    description: Change task definition from parameter.
+    inputs:
+      Runtime: python3.8
+      Handler: update_service
+      Script: |-
+        import boto3
+        from botocore.config import Config
+        import logging
+        
+        from botocore.exceptions import ClientError
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def update_service(events, context):
+            """
+            Update service with `NewTaskDefinitionArn`.
+            :param events: The object which contains passed parameters from SSM document
+             * `ServiceName` - Required. Name of ECS Service
+             * `ClusterName` - Required. Name of ECS Cluster
+             * `TaskDefinitionArn` - Optional. Name of TaskDefinition
+             * `NumberOfTasks` - Optional. Number of task. If NumberOfTasks < 1 or not set, used old
+             value in the service
+            :param context: context
+            :return: True or error
+            """
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ecs_client = boto3.client('ecs', config=config)
+        
+            service_definition = {
+                "service": events['ServiceName'],
+                "cluster": events['ClusterName'],
+                "taskDefinition": events['TaskDefinitionArn']
+            }
+        
+            number_of_task = events.get('NumberOfTasks', None)
+            if number_of_task and number_of_task > 0:
+                service_definition.update({
+                    "desiredCount": number_of_task
+                })
+        
+            ecs_client.update_service(**service_definition)
+        
+        
+
+      InputPayload:
+        ServiceName: '{{ServiceName}}'
+        ClusterName: '{{ClusterName}}'
+        NumberOfTasks: '{{NumberOfTasks}}'
+        TaskDefinitionArn: '{{GetNewTaskDefinition.NewTaskDefinitionArn}}'
+
+  - name: WaitForScaleUpToComplete
+    action: aws:executeScript
+    description: Wait for all status tasks in ECS application to be in "RUNNING" state
+    inputs:
+      Runtime: python3.8
+      Handler: wait_services_stable
+      Script: |-
+        import boto3
+        from botocore.config import Config
+        import logging
+        
+        from botocore.exceptions import ClientError
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def check_required_params(required_params, events):
+            for key in required_params:
+                if key not in events:
+                    raise KeyError(f'Requires {key} in events')
+        
+        
+
+        def wait_services_stable(events, context):
+            """
+            Wait while service will be stable.
+            :param events: The object which contains passed parameters from SSM document
+             * `ServiceName` - Required. Name of ECS Service
+             * `ClusterName` - Required. Name of ECS Cluster
+            :param context: context
+            :return: True or error
+            """
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ecs_client = boto3.client('ecs', config=config)
+        
+            cluster_name = events['ClusterName']
+            service = events.get('ServiceName')
+        
+            if service:
+                services = [service]
+            else:
+                services = []
+                paginator = ecs_client.get_paginator('list_services')
+                pages = paginator.paginate(cluster=cluster_name)
+        
+                for page in pages:
+                    service_arns = page.get('serviceArns')
+                    services.extend(service_arns)
+        
+            waiter = ecs_client.get_waiter('services_stable')
+            waiter.wait(
+                cluster=cluster_name,
+                services=services,
+                WaiterConfig={
+                    'Delay': 15,
+                    'MaxAttempts': 20
+                }
+            )
+            return True
+
+      InputPayload:
+        ServiceName: '{{ServiceName}}'
+        ClusterName: '{{ClusterName}}'
+
+  - name: OutputRecoveryTime
+    action: 'aws:executeScript'
+    description: Calculate execution time.
+    outputs:
+      - Name: RecoveryTime
+        Selector: $.Payload
+        Type: Integer
+    inputs:
+      Runtime: python3.8
+      Handler: recovery_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def recovery_time(events, context):
+            return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds
+        
+        
+
+      InputPayload:
+        StartTime: '{{ RecordStartTime.StartTime }}'

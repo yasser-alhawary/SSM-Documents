@@ -1,0 +1,491 @@
+schemaVersion: '2.2'
+description: 'Sets a Windows Registry value.'
+parameters:
+  Path:
+    type: String
+    description: The registry path where the new value should be created. The format for this parameter is "HIVE:Path", for example "HKLM:SOFTWARE".
+    allowedPattern: ^((HKEY_LOCAL_MACHINE|HKLM|HKEY_CURRENT_CONFIG|HKCC|HKEY_CURRENT_USER|HKCU|HKEY_USERS|HKU|HKEY_CLASSES_ROOT|HKCR)+:)(()|([a-zA-Z0-9s_@-^!#.:/$%&+={}[]*]))+$
+  Name:
+    type: String
+    description: The name of registry value to create.
+    allowedPattern: ^[^|r
+]*$
+  Kind:
+    type: String
+    description: (Optional) The kind of registry value to create.
+    default: 'String'
+    allowedValues:
+      - 'Binary'
+      - 'DWord'
+      - 'ExpandString'
+      - 'MultiString'
+      - 'QWord'
+      - 'String'
+  Value:
+    type: String
+    description: The value of the new registry entry. To create a MultiString value, separate entries using a comma.
+    allowedPattern: ^[^|r
+]*$
+  PerformAction:
+    type: String
+    description: (Optional) Set this to 'Yes' to perform the action.
+    default: 'No'
+    allowedValues:
+      - 'No'
+      - 'Yes'
+mainSteps:
+- precondition:
+    StringEquals:
+      - platformType
+      - Windows
+  action: aws:runPowerShellScript
+  name: InvokeWindowsScript
+  inputs:
+    runCommand:
+      - |
+        $ErrorActionPreference = 'Stop'
+        
+        Function ParseInputParameter {
+            param (
+                [string]$Name,
+                [string]$Value,
+                [string]$Regex
+            )
+        
+            $ValidParameterRegex = '^--%[ +{|{].*}( +)?$'
+            if ($Value -notmatch $ValidParameterRegex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            }
+            $parameterValue = $Value.Substring(3)
+        
+            $trimmedParameterValue = $parameterValue.TrimStart().TrimEnd()
+            $trimmedParameterValue = $trimmedParameterValue.Substring(1)
+            $trimmedParameterValue = $trimmedParameterValue.Substring(0, $trimmedParameterValue.Length - 1)
+        
+            if ($Regex -and $trimmedParameterValue -notmatch $Regex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            } else {
+                $trimmedParameterValue
+            }
+        }
+        
+        function ExitWithFailureMessage {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PrintJson) {ConvertTo-Json -InputObject @{error = $errorMessage} -Compress}
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit(1)
+        }
+        
+        function ExitWithFailureMessageAndExitCode {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [int]$ExitCode,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PSBoundParameters.ContainsKey('ExitCode') -eq $true) {
+                $exitCode = $ExitCode
+            } else {
+                $exitCode = 1
+            }
+            if ($PrintJson) {
+                $ErrorObject = @{
+                    error = $errorMessage
+                    exitCode = $exitCode
+                }
+                ConvertTo-Json -InputObject $ErrorObject -Compress
+            }
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit($exitCode)
+        }
+        
+        function ExitWithSuccessMessage {
+            param (
+                [string]$Message
+            )
+            Write-Host $Message
+            [System.Environment]::Exit(0)
+        }
+        
+        function WriteStandardError {
+            param (
+                [string]$Message
+            )
+            $Host.UI.WriteErrorLine($Message)
+        }
+
+        function TestPerformAction {
+            param ( [string]$PerformAction )
+            if ($PerformAction -ne 'Yes') {
+                ExitWithFailureMessage -Message "No action was taken because the PerformAction parameter is set to $PerformAction. To make the desired change, set this parameter to Yes."
+            }
+        }
+
+        $script:ResultProperty = 'results'
+        $script:DataProperty = 'data'
+        $script:NextTokenProperty = 'nextToken'
+        
+        function ConvertBase64ToString {
+            param (
+                [string]$Base64
+            )
+            $bytes = [System.Convert]::FromBase64String($Base64)
+            [System.Text.Encoding]::UTF8.GetString($bytes)
+        }
+        
+        function ConvertStringToBase64 {
+            param (
+                [string]$String
+            )
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($String)
+            [System.Convert]::ToBase64String($bytes)
+        }
+        
+        function GetCompressionBoolean {
+            param (
+                [ValidateSet('No','Yes')]
+                [string]$CompressOutput
+            )
+            if ($CompressOutput -eq 'Yes') {
+                $true
+            } else {
+                $false
+            }
+        }
+        
+        function GetJson {
+            param ($InputObject)
+            ConvertTo-Json -InputObject $InputObject -Compress -Depth 5
+        }
+        
+        function GetBase64EncodedGzipString {
+            param ($InputString)
+        
+            $inputBytes = [System.Text.Encoding]::UTF8.GetBytes($InputString)
+        
+            try {
+                $memoryStream = New-Object -TypeName 'System.IO.MemoryStream'
+                $compressionMode = [System.IO.Compression.CompressionMode]::Compress
+                $gzipStream = New-Object -TypeName 'System.IO.Compression.GzipStream' -ArgumentList @($memoryStream, $compressionMode)
+        
+                $gzipStream.Write($inputBytes, 0, $inputBytes.Length)
+                $gzipStream.Close()
+                $memoryStream.Close()
+        
+                [System.Convert]::ToBase64String($memoryStream.ToArray())
+            } finally {
+                $gzipStream.Dispose()
+                $memoryStream.Dispose()
+            }
+        }
+        
+        function GetResultAsString {
+            param (
+                [PSObject]$Object,
+                [bool]$Completed,
+                [switch]$ConvertNextTokenToBase64,
+                [bool]$EnableCompression,
+                [bool]$ForceEmptyNextToken,
+                [string]$NextToken,
+                [string]$PaginationProperty,
+                [array]$StringReplacementRegex
+            )
+        
+            if ([string]::IsNullOrWhiteSpace($NextToken)) {
+                if ($Completed -eq $false -and $Object.Count -ge 1 -and $ForceEmptyNextToken -ne $true) {
+                    if ($PaginationProperty -eq '.') {
+                        $NextToken = $Object[-1]
+                    } else {
+                        $NextToken = $Object[-1].$PaginationProperty
+                    }
+                }
+            }
+        
+            if ($ForceEmptyNextToken) {
+                $NextToken = [string]::Empty
+            } elseif ($ConvertNextTokenToBase64) {
+                $NextToken = ConvertStringToBase64 -String $NextToken
+            }
+        
+            $data = @{
+                $script:ResultProperty    = $Object
+                $script:NextTokenProperty = $NextToken
+            }
+        
+            if ($EnableCompression -eq $true) {
+                $string = GetJson -InputObject $data
+        
+                if ($StringReplacementRegex.Count -eq 2) {
+                    $string = $string -replace $StringReplacementRegex
+                }
+        
+                $data = GetBase64EncodedGzipString -InputString $string
+            }
+        
+            $output = GetJson -InputObject @{
+                $script:DataProperty = $data
+            }
+            if ($StringReplacementRegex.Count -eq 2) {
+                $output -replace $StringReplacementRegex
+            } else {
+                $output
+            }
+        }
+        
+        function GetMaximumOutputBytes {
+            param (
+                $AllowTruncatedOutput,
+                [int]$MaximumOutputSize = 2500
+            )
+            if ($AllowTruncatedOutput -eq 'Yes') {
+                0
+            } else {
+                $padding = (GetResultAsString -Object @() -Completed $false -EnableCompression $false).length
+                $MaximumOutputSize - $padding
+            }
+        }
+        
+        function ProcessItems {
+            param (
+                [scriptblock]$ScriptBlock,
+                [switch]$ConvertNextTokenToBase64,
+                [int]$ChunksPerLoop = 1,
+                [bool]$EnableCompression,
+                [int]$MaximumOutputBytes,
+                [string]$PaginationProperty,
+                [string]$PropertyToRemove,
+                [string]$NextToken,
+                [switch]$SetNextTokenBeforeAdding,
+                [array]$StringReplacementRegex
+            )
+        
+            $chunkedOutputArray = New-Object -TypeName 'System.Collections.ArrayList'
+        
+            $outputResult = [string]::Empty
+        
+            $outputTooBig = $false
+            $counter = 0
+        
+            $getResultString = @{
+                EnableCompression = $EnableCompression
+                PaginationProperty = $PaginationProperty
+                StringReplacementRegex = $StringReplacementRegex
+            }
+        
+            foreach ($item in (& $ScriptBlock)) {
+                if ($outputTooBig -eq $true) { break }
+        
+                if ($NextToken -ne '*') {
+                    if ($PaginationProperty -eq '.' -and $item -le $NextToken) {
+                        continue
+                    } elseif ($PaginationProperty -ne '.' -and $item.$PaginationProperty -le $NextToken) {
+                        continue
+                    }
+                }
+        
+                if ($SetNextTokenBeforeAdding) {
+                    if ($PaginationProperty -eq '.') {
+                        $newNextToken = $item
+                    } else {
+                        $newNextToken = $item.$PaginationProperty
+                    }
+                }
+        
+                if ($PropertyToRemove) {
+                    $item.PSObject.properties.remove($PropertyToRemove)
+                }
+        
+                $null = $chunkedOutputArray.Add($item)
+        
+                if ($counter -lt $ChunksPerLoop) {
+                    $counter++
+                    continue
+                }
+        
+                $counter = 0
+        
+                $properties = @{
+                    Object = $chunkedOutputArray
+                    Completed = $outputTooBig
+                }
+                if ($ConvertNextTokenToBase64) {
+                    $properties.Add('ConvertNextTokenToBase64', $ConvertNextTokenToBase64)
+                }
+                if ($SetNextTokenBeforeAdding) {
+                    $properties.Add('NextToken', $newNextToken)
+                }
+                $tempResult = GetResultAsString @properties @getResultString
+        
+                if ($MaximumOutputBytes -eq 0 -or $tempResult.Length -le $MaximumOutputBytes) {
+                    $outputResult = $tempResult
+                } else {
+                    $outputTooBig = $true
+                    break
+                }
+            }
+        
+            # Processing remaining items if the output isn't too big yet
+            if ($outputTooBig -eq $false) {
+                $properties = @{
+                    Object = $chunkedOutputArray
+                    Completed = $outputTooBig
+                    ForceEmptyNextToken = $true
+                }
+                if ($ConvertNextTokenToBase64) {
+                    $properties.Add('ConvertNextTokenToBase64', $ConvertNextTokenToBase64)
+                }
+                if ($SetNextTokenBeforeAdding) {
+                    $properties.Add('NextToken', $newNextToken)
+                }
+                $tempResult = GetResultAsString @getResultString @properties
+                if ($MaximumOutputBytes -eq 0 -or $tempResult.Length -le $MaximumOutputBytes) {
+                    $outputResult = $tempResult
+                }
+            }
+        
+            $outputResult
+        }
+
+        $Path = Write-Output --%{{{ Path }}}
+        $Path = ParseInputParameter -Name 'Path' -Value $Path
+        
+        $Name = Write-Output --%{{{ Name }}}
+        $Name = ParseInputParameter -Name 'Name' -Value $Name
+        
+        $Kind = Write-Output --%{{{ Kind }}}
+        [Microsoft.Win32.RegistryValueKind]$Kind = ParseInputParameter -Name 'Kind' -Value $Kind
+        
+        $Value = Write-Output --%{{{ Value }}}
+        $Value = ParseInputParameter -Name 'Value' -Value $Value
+        
+        $PerformAction = Write-Output --%{{{ PerformAction }}}
+        $PerformAction = ParseInputParameter -Name 'PerformAction' -Value $PerformAction -Regex '(Yes|No)'
+        TestPerformAction -PerformAction $PerformAction
+        
+        function TestRegistryKeyExists {
+            param (
+                $Query,
+                $SubKey,
+                $Name
+            )
+        
+            if ($Path -eq '') {
+                # Root/browsing the hive case
+                $keys = $Query.GetSubKeyNames()
+            } else {
+                # Browse a path within the hive
+                $registryKey = $Query.OpenSubKey($SubKey, $false)
+                if ($null -eq $registryKey) {return $false}
+                $keys = $registryKey.GetSubKeyNames()
+            }
+        
+            if ($Name -in $keys) {
+                return $true
+            } else {
+                return $false
+            }
+        }
+        
+        function CreateKey {
+            param (
+                $Query,
+                $Key,
+                $Name
+            )
+            if (TestRegistryKeyExists -Query $Query -SubKey $Key -Name $Name) {return}
+        
+            $regKey = $query.OpenSubKey($Key, $true)
+            if ($null -eq $regKey) {
+                ExitWithFailureMessage -Message 'The specified registry key is invalid.' -PrintJson
+            }
+        
+            try {
+                $null = $regKey.CreateSubKey($Name)
+            } catch {
+                ExitWithFailureMessage -Message 'Failed to create the specified registry key.' -PrintJson
+            }
+        }
+        
+        function CreateRecursiveKey {
+            param (
+                $Query,
+                [string[]]$KeysToCreate
+            )
+            for ($i = 0; $i -lt $KeysToCreate.Count - 1; $i++) {
+                if ($i -eq 0) {
+                    $parentKey = $KeysToCreate[$i]
+                } else {
+                    $parentKey = '{0}{1}' -f $parentKey, $KeysToCreate[$i]
+                }
+                CreateKey -Query $Query -Key $parentKey -Name $KeysToCreate[$i + 1]
+            }
+        }
+        
+        $hive = ($Path.Split('')).GetValue(0)
+        $registrySubKey = $Path.Replace($hive, [string]::Empty).TrimStart('')
+        
+        if ([string]::IsNullOrWhiteSpace($registrySubKey)) {
+            ExitWithFailureMessage -Message 'Registry values at the hive level cannot be created.' -PrintJson
+        }
+        
+        [hashtable]$hivePrefixToName = @{
+            'HKLM:'                = [Microsoft.Win32.RegistryHive]::LocalMachine;
+            'HKEY_LOCAL_MACHINE:'  = [Microsoft.Win32.RegistryHive]::LocalMachine;
+            'HKCU:'                = [Microsoft.Win32.RegistryHive]::CurrentUser;
+            'HKEY_CURRENT_USER:'   = [Microsoft.Win32.RegistryHive]::CurrentUser;
+            'HKCC:'                = [Microsoft.Win32.RegistryHive]::CurrentConfig;
+            'HKEY_CURRENT_CONFIG:' = [Microsoft.Win32.RegistryHive]::CurrentConfig;
+            'HKEY_USERS:'          = [Microsoft.Win32.RegistryHive]::Users;
+            'HU:'                  = [Microsoft.Win32.RegistryHive]::Users;
+            'HKEY_CLASSES_ROOT:'   = [Microsoft.Win32.RegistryHive]::ClassesRoot;
+            'HKCR:'                = [Microsoft.Win32.RegistryHive]::ClassesRoot
+        }
+        $query = [Microsoft.Win32.RegistryKey]::OpenBaseKey($hivePrefixToName[$hive], [Microsoft.Win32.RegistryView]'Default')
+        
+        CreateRecursiveKey -Query $query -KeysToCreate $registrySubKey.Split('')
+        $regKey = $query.OpenSubKey($registrySubKey, $true)
+        if ($null -eq $regKey) {
+            ExitWithFailureMessage -Message 'The specified registry key is invalid.' -PrintJson
+        }
+        
+        try {
+            if ($Kind -eq [Microsoft.Win32.RegistryValueKind]::MultiString) {
+                $null = $regKey.SetValue($Name, $Value.Split(','), $Kind)
+            } elseif ($Kind -eq [Microsoft.Win32.RegistryValueKind]::DWord -or $Kind -eq [Microsoft.Win32.RegistryValueKind]::QWord) {
+                $null = $regKey.SetValue($Name, [long]$Value, $Kind)
+            } elseif ($Kind -eq [Microsoft.Win32.RegistryValueKind]::String -or $Kind -eq [Microsoft.Win32.RegistryValueKind]::ExpandString) {
+                $null = $regKey.SetValue($Name, [string]$Value, $Kind)
+            } elseif ($Kind -eq [Microsoft.Win32.RegistryValueKind]::Binary) {
+        
+                # Convert comma separated byte string to byte array. E.g '10, 20, 00, 03, 255' to byte[](10, 20, 00, 03, 255)
+                $byte_array = New-Object -TypeName System.Collections.ArrayList
+                foreach ($byteAsString in $Value.Split(',')) {
+                    $temp = $byteAsString.TrimStart('0')
+                    if ([string]::IsNullOrEmpty($temp)) {
+                        $temp = '0'
+                    }
+                    [byte]$b = [Convert]::ToByte([Int32]::Parse($temp))
+                    $null = $byte_array.Add($b)
+                }
+        
+                $null = $regKey.SetValue($Name, [byte[]]$byte_array, $Kind)
+            }
+        
+            ExitWithSuccessMessage 'The specified registry value has been configured.'
+        } catch {
+            ExitWithFailureMessage -Message 'Failed to set the specified registry value.' -PrintJson
+        }

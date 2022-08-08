@@ -1,0 +1,1676 @@
+description: "# AWSSupport-CalculateEBSPerformanceMetrics
+
+---
+
+## Purpose:
+
+
+  AWSSupport-CalculateEBSPerformanceMetrics runbook helps diagnose Amazon EBS performance
+   issues by calculating metrics published to Amazon Cloudwatch and creating Amazon
+   Cloudwatch dashboards that display the average I/O size and total aggregate throughput
+   and IOPS of individual Amazon EBS volumes, or the total aggregate throughput and
+   IOPS across all Amazon EBS volumes attached to an Amazon EC2 instance by utilizing
+   Amazon Cloudwatch metric math. The runbook outputs the link to the newly created
+   Amazon Cloudwatch dashboard that displays the relevant calculated Amazon Cloudwatch
+   metrics.
+
+
+ **Disclaimer**: The creation of the aforementioned dashboard may
+   result in your account incurring extra charges. For more information please consult
+   the [Amazon CloudWatch pricing guide](https://aws.amazon.com/cloudwatch/pricing).
+
+  
+
+ ## Workflow Specifications:
+
+ This workflow uses AWS Systems Manager Automation
+   and takes in the following parameters:
+
+1. **ResourceId** - **(Required)** The
+   ID of the Amazon EBS volume or the Amazon EC2 instance for which the statistics
+   need to be visualized.
+2. **StartTime** - **(Required)** The start time to view
+   the data in Amazon CloudWatch. The time must be in the format yyyy-mm-ddThh:mm:ss
+   and in UTC. For example, 2021-06-09T13:30:10.
+3. **EndTime** - **(Required)**
+   The ending time to view the data in Amazon CloudWatch. The time must be in the
+   format yyyy-mm-ddThh:mm:ss and in UTC. For example, 2021-06-09T13:30:10.
+4. **Period**
+   - **(Required)** The period (in seconds) of the Amazon CloudWatch metrics.
+5.
+   **AutomationAssumeRole** - **(Optional)** The IAM role which AWS Systems Manager
+   will assume to execute this automation. This role must allow these IAM actions:
+
+          - ssm:StartAutomationExecution
+    - ec2:DescribeVolumes
+    - ec2:DescribeInstances
+
+      - ec2:DescribeInstanceTypes
+    - cloudwatch:PutDashboard
+    - cloudwatch:ListMetrics
+
+      - ssm:GetAutomationExecution
+
+
+Please visit the documentation on [Automation
+   Setup](https://docs.aws.amazon.com/systems-manager/latest/userguide/automation-setup.html)
+   for more information."
+schemaVersion: "0.3"
+assumeRole: "{{AutomationAssumeRole}}"
+parameters:
+  ResourceId:
+    type: "String"
+    description: "(Required) The ID of the EC2 Instance or EBS Volume you wish to
+       observe the metrics of."
+    allowedPattern: "^vol-[a-z0-9]{8}$|^vol-[a-z0-9]{17}$|^i-[a-z0-9]{8}$|^i-[a-z0-9]{17}$"
+  StartTime:
+    type: "String"
+    description: "(Required) The start time to view the data in CloudWatch. The time
+       must be in the format yyyy-mm-ddThh:mm:ss and in UTC."
+    allowedPattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$"
+  EndTime:
+    type: "String"
+    description: "(Required) The end time to view the data in CloudWatch. The time
+       must be in the format yyyy-mm-ddThh:mm:ss and in UTC."
+    allowedPattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$"
+  Period:
+    type: "String"
+    description: "(Required) The number of seconds by which observable metrics will
+       be grouped. Select the period in seconds from the drop down list."
+    allowedValues:
+    - "60"
+    - "300"
+    - "900"
+    - "3600"
+    - "21600"
+    - "86400"
+  AutomationAssumeRole:
+    default: ""
+    type: "String"
+    description: "(Optional) IAM role which AWS Systems Manager will assume to execute
+       this automation. For more information, visit - https://docs.aws.amazon.com/systems-manager/latest/userguide/automation-setup.html"
+    allowedPattern: "^$|^arn:aws:iam::[0-9]*:role/[/w+=,.@-]+$"
+mainSteps:
+- name: "checkTimestamps"
+  action: "aws:executeScript"
+  maxAttempts: 3
+  onCancel: "Abort"
+  onFailure: "Abort"
+  isEnd: "false"
+  isCritical: "true"
+  nextStep: "chooseVolumeOrInstance"
+  inputs:
+    Runtime: "python3.8"
+    Handler: "timestamp_handler"
+    Script: "from datetime import datetime
+
+def timestamp_handler(event, context):
+
+          start_time = event['start_time']
+    end_time = event['end_time']
+
+
+          try:
+    tt1 = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%S")
+
+          tt2 = datetime.strptime(end_time, "%Y-%m-%dT%H:%M:%S")
+    tif t1
+       > t2:
+    ttraise Exception("[ERROR] StartTime should not be greater than
+       EndTime")
+    telse:
+    ttreturn "Timestamps are in correct format."
+      
+    except Exception as error:
+    traise error
+"
+    InputPayload:
+      start_time: "{{StartTime}}"
+      end_time: "{{EndTime}}"
+- name: "chooseVolumeOrInstance"
+  action: "aws:branch"
+  maxAttempts: 3
+  onCancel: "Abort"
+  onFailure: "Abort"
+  isEnd: "false"
+  isCritical: "true"
+  inputs:
+    Choices:
+    - NextStep: "getVolumeStats"
+      Variable: "{{ResourceId}}"
+      StartsWith: "vol-"
+    - NextStep: "getInstanceStats"
+      Variable: "{{ResourceId}}"
+      StartsWith: "i-"
+- name: "getVolumeStats"
+  action: "aws:executeScript"
+  maxAttempts: 3
+  isCritical: "true"
+  isEnd: true
+  onCancel: "Abort"
+  onFailure: "Abort"
+  inputs:
+    Runtime: "python3.8"
+    Handler: "getVolumeStats"
+    Script: "import json
+import boto3
+import botocore
+import urllib
+import sys
+
+      from urllib.parse import quote
+
+def getSC1Limits(volume_size):
+    maximum_available_iops
+       = 250
+    if volume_size < 3200:
+        max_available_throughput = volume_size
+       * 80 / 1024
+        baseline_throughput = volume_size * 12 / 1024
+    else:
+
+              max_available_throughput = 250
+        baseline_throughput = volume_size
+       * 12 / 1024
+    return [max_available_throughput, baseline_throughput, maximum_available_iops,
+       maximum_available_iops]
+
+def getST1Limits(volume_size):
+    maximum_available_iops
+       = 500
+    if volume_size > 12800:
+        max_available_throughput = 500
+
+              baseline_throughput = max_available_throughput
+    else:
+       
+       if volume_size < 2048:
+            max_available_throughput = volume_size
+       * 250 / 1024
+            baseline_throughput= volume_size * 40 / 1024 
+
+              else:
+            max_available_throughput = 500
+            baseline_throughput
+       = volume_size * 40 / 1024
+    return [max_available_throughput, baseline_throughput,
+       maximum_available_iops, maximum_available_iops]
+
+def getIOLimits(volume_iops):
+
+          if volume_iops <= 32000:
+        max_available_throughput = 500
+    
+          calculated_throughput = volume_iops / 4
+        baseline_throughput =
+       min(max_available_throughput, calculated_throughput)
+    else:
+        max_available_throughput
+       = 1000
+        calculated_throughput = volume_iops / 64
+        baseline_throughput=
+       min(max_available_throughput, calculated_throughput)
+    return [max_available_throughput,
+       baseline_throughput, volume_iops, volume_iops]
+
+def getGP2Limits(volume_size):
+
+          calculated_iops = 3 * volume_size
+    ## calculation for volumes bigger
+       than 1000 gb, iops increasing linearly till they hit max (16000 iops); baseline/max
+       throughput=250 MiB/s
+    if volume_size > 1000:
+        max_available_throughput
+       = 250
+        maximum_available_iops = 16000
+        baseline_iops = min(maximum_available_iops,
+       calculated_iops)
+        maximum_available_iops = baseline_iops
+       
+       baseline_throughput = max_available_throughput
+    else:
+        maximum_available_iops
+       = 3000
+        ## calculation for volumes smaller than 170 gb, minimum iops
+       can be 100 and max can be 3000; baseline throughput depends on number of baseline
+       iops and can go up to a max of 128 MiB/s
+        if volume_size <= 170:
+
+                  max_available_throughput = 128
+            baseline_iops = max(calculated_iops,
+       100)
+            calculated_throughput = baseline_iops / 4
+            baseline_throughput
+       = min(max_available_throughput, calculated_throughput)
+        ## calculation
+       for volumes larger than 170 gb and smaller than or equal to 1000 gb, max iops
+       can be 3000 and scale with size; max throughput can go up to 250 MiB/s
+ 
+             else:
+            max_available_throughput = 250
+            baseline_iops
+       = calculated_iops
+            calculated_throughput = baseline_iops / 4
+
+                  baseline_throughput = min(max_available_throughput, calculated_throughput)
+
+          return [max_available_throughput, baseline_throughput, maximum_available_iops,
+       baseline_iops]
+
+#_Picks maximum and baseline limits for the specific EBS
+       volume based on the volume type
+# For example, if the volume type is io1
+       it will contact the get_IO_limits function to obtain these limits 
+# Each
+       volume type has hardcoded limits which can be found in the volume type specific
+       functions above this comment block (except for gp3) 
+
+def get_volume_limits(volume):
+
+          volume_type, volume_size = volume.volume_type, volume.size
+    if volume_type
+       == "gp2":
+        return getGP2Limits(volume_size)
+    elif volume_type
+       == "gp3":
+        return [volume.throughput, 125, volume.iops, volume.iops]
+
+          elif volume_type == "io1" or volume_type == "io2":
+        return
+       getIOLimits(volume.iops)
+    elif volume_type == "st1":
+        return
+       getST1Limits(volume_size)
+    elif volume_type == "sc1":
+        return
+       getSC1Limits(volume_size) 
+    elif volume_type == "standard":
+      
+        return [0, 0, 0, 0]
+
+def get_all_cloudwatch_metrics(volume_id):
+    client
+       = boto3.client('cloudwatch')
+    cloudwatch_response = client.list_metrics(
+
+              Namespace='AWS/EBS',
+        Dimensions=[
+            {
+       
+               'Name': 'VolumeId',
+                'Value': '{}'.format(volume_id)
+
+                  }
+        ]
+    )
+    return cloudwatch_response
+
+# This function
+       builds the respective bytes and ops arrays for all metrics in th cloudwatch
+       api call response
+
+def build_metric_arrays(cloudwatch_response, bytes_metrics_count,
+       BYTES_METRIC_NAME_ARRAY, ops_metrics_count, OPS_METRIC_NAME_ARRAY):
+    j
+       = 0
+    while j < len(cloudwatch_response['Metrics']):
+        ## If bytes
+       metrics exist, storing them in BYTES_METRIC_NAME_ARRAY[] and storing their
+       count in bytes_metrics_count
+        if (cloudwatch_response['Metrics'][j]['MetricName']
+       == "VolumeReadBytes") or (cloudwatch_response['Metrics'][j]['MetricName']
+       == "VolumeWriteBytes"):
+            bytes_metrics_count = bytes_metrics_count+1
+
+                  BYTES_METRIC_NAME_ARRAY.append(cloudwatch_response['Metrics'][j]['MetricName'])
+
+              ## If ops metrics exist, storing them in OPS_METRIC_NAME_ARRAY[] and
+       storing their count in ops_metrics_count
+        if (cloudwatch_response['Metrics'][j]['MetricName']
+       == "VolumeReadOps") or (cloudwatch_response['Metrics'][j]['MetricName']
+       == "VolumeWriteOps"):
+            ops_metrics_count = ops_metrics_count+1
+
+                  OPS_METRIC_NAME_ARRAY.append(cloudwatch_response['Metrics'][j]['MetricName'])
+
+              j = j + 1
+    return [bytes_metrics_count, BYTES_METRIC_NAME_ARRAY,
+       ops_metrics_count, OPS_METRIC_NAME_ARRAY]
+
+# Sets all potential label value
+       for either throughput or iops
+
+def set_labels(metric_type):
+    if metric_type
+       == "Throughput":
+        return "Maximum / Baseline Throughput Limit -
+       MiB/s", "Maximum Throughput Limit - MiB/s", "Baseline Throughput Limit
+       - MiB/s"
+    else:
+        return "Maximum / Baseline IOPS Limit", "
+      Maximum IOPS Limit", "Baseline IOPS Limit"
+
+# Returns JSON to be used in
+       the dashboard widgets for instances
+def fill_jsonstring(metric_type, EXPRESSIONS_ARRAY,
+       maximum_limit, baseline_limit, start_time, end_time, region, period, volume_type):
+
+          jsonstring = "{"metrics":[__EXPRESSIONS__],"view":"timeSeries
+      ","stacked":false,"region":"__REGION__","stat":"
+      Sum","period":__PERIOD__,"start":"__START_TIME__","
+      end":"__END_TIME__","legend":{"position":"bottom"
+      },"title":"EBS Volume " + metric_type + ""}"
+    # A comma delimited
+       string is created from EXPRESSIONS_ARRAY. The string contains all the expressions
+       we need
+    jsonstring = jsonstring.replace("__EXPRESSIONS__", ','.join(EXPRESSIONS_ARRAY))
+
+              
+    jsonstring = jsonstring.replace("__START_TIME__", start_time)
+
+          jsonstring = jsonstring.replace("__END_TIME__", end_time)
+    jsonstring
+       = jsonstring.replace("__REGION__", region)
+    jsonstring = jsonstring.replace("
+      __PERIOD__", period)
+    # If the metric type is IO size or of the standard/magnetic
+       type then no limits are plotted and the string is returned without annotations
+
+          if metric_type == "IOSize" or volume_type == "standard":
+        return
+       jsonstring
+    if metric_type == "Throughput":
+        equal_label = "
+      Maximum / Baseline Throughput Limit - MiB/s"
+        maximum_label = "Maximum
+       Throughput Limit - MiB/s"
+        baseline_label = "Baseline Throughput
+       Limit - MiB/s"
+    else:
+        equal_label, maximum_label, baseline_label
+       = set_labels(metric_type)
+
+    # If both the max and the baseline limits
+       are equal we set a single annotation
+    # Otherwise we add two annotations
+
+          if maximum_limit == baseline_limit:
+        jsonstring = jsonstring[:-1]
+       + ","annotations": {"horizontal": [{"label": "__FIRST_ANNOTATION_LABEL__
+      ","value": __FIRST_ANNOTATION_VALUE__}]}}"
+        jsonstring = jsonstring.replace("
+      __FIRST_ANNOTATION_LABEL__", equal_label)
+        jsonstring = jsonstring.replace("
+      __FIRST_ANNOTATION_VALUE__", str(maximum_limit))
+    else:
+        jsonstring
+       = jsonstring[:-1] + ","annotations": {"horizontal": [{"label
+      ": "__FIRST_ANNOTATION_LABEL__","value": __FIRST_ANNOTATION_VALUE__},{
+      "label": "__SECOND_ANNOTATION_LABEL__","value": __SECOND_ANNOTATION_VALUE__}]}}"
+      
+        jsonstring = jsonstring.replace("__FIRST_ANNOTATION_LABEL__", maximum_label)
+
+              jsonstring = jsonstring.replace("__FIRST_ANNOTATION_VALUE__", str(maximum_limit))
+
+              jsonstring = jsonstring.replace("__SECOND_ANNOTATION_LABEL__", baseline_label)
+
+              jsonstring = jsonstring.replace("__SECOND_ANNOTATION_VALUE__", str(baseline_limit))
+
+      
+    return jsonstring
+
+# This function is used to continuously build each
+       metric array while tracking the counts
+def get_metric_counts(volume, metrics_count,
+       metric_name_array, array, counter, expressions_array):
+    metric_expression
+       = "["AWS/EBS","__METRIC_NAME__","VolumeId","__VOLUME_ID__
+      ",{"id":"__METRIC_ID__","visible":false}]"
+    metric_expression
+       = metric_expression.replace("__VOLUME_ID__", volume)
+                
+
+          # If any of the bytes metrics exist, create expressions to select those
+       metrics and give them metrics IDs (like m1,m2)
+    i = metrics_count
+  
+        while i > 0:
+        i = i-1
+        temp_string = metric_expression.replace("
+      __METRIC_NAME__", metric_name_array[i])
+        temp_string = temp_string.replace("
+      __METRIC_ID__", "m{}".format(counter))
+        array.append("m{}".format(counter))
+
+              counter = counter+1
+        expressions_array.append(temp_string)
+
+          return array, counter
+
+def create_expression(expression, local_array,
+       volume, expression_counter, math_expressions_io_size, math_expressions_array):
+
+          temp_string = expression.replace("__METRIC_ID_LIST__", ','.join(local_array))
+
+          temp_string = temp_string.replace("__EXP_ID__", "e{}".format(expression_counter))
+
+          io_size_string = temp_string.replace(""visible":true", ""visible
+      ":false")
+    math_expressions_io_size.append(io_size_string)
+    math_expressions_array.append(temp_string)
+
+          expression_counter = expression_counter+1
+    return expression_counter
+
+      
+# This function creates a single widget according to specific parameters
+
+      def create_widget(widget_type, x, y, w, h, p):
+    return {
+        "type"
+      : widget_type,
+        "x":x,
+        "y":y,
+        "width":w,
+ 
+             "height":h,
+        "properties": json.loads(p)
+    }
+
+def create_dashboard(jsonstring_throughput,
+       jsonstring_iops, jsonstring_io_size, volume, start_time_arg, end_time_arg,
+       volume_type, region):
+    client = boto3.client('cloudwatch')
+    markdownstring
+       = "{"markdown":"### Metrics for EBS Volume __VOLUME_ID__
+- Volume
+       Type: __VOLUME_TYPE__
+
+[button:More details on EBS Volume Types](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-volume-types.html)
+      
+
+| Calculated Metric | Mathematical Expression | Unit |
+| --------
+       | ------------------------- | ------ |
+| Volume calculated throughput
+       | SUM(VolumeReadBytes) + SUM(VolumeWriteBytes) / 1024 / 1024 / period | MiB/s
+       |
+| Volume calculated IOPS | SUM(VolumeReadOps) + SUM(VolumeWriteOps)
+       / period | IOPS |
+| Volume calculated IO size | Volume calculated throughput
+       / Volume calculated IOPS | KiB |"}"
+    markdownstring = markdownstring.replace("
+      __VOLUME_ID__", volume)
+    markdownstring = markdownstring.replace("__VOLUME_TYPE__"
+      , volume_type)
+    footer_markdownstring = "{"markdown":"**In order
+       to delete the dashboard, run the CLI command** 
+
+ ```
+ $ aws cloudwatch
+       delete-dashboards --dashboard-names __VOLUME_ID__-EBS-Statistics --region
+       __REGION__ 
+ ``` 
+
+ NOTE: You will need **cloudwatch:DeleteDashboards**
+       IAM permission to delete the dashboard."}"
+    footer_markdownstring
+       = footer_markdownstring.replace("__VOLUME_ID__", volume)
+    footer_markdownstring
+       = footer_markdownstring.replace("__REGION__", region)
+    if jsonstring_io_size
+       == "none":
+        widget_list = [create_widget("text", 0, 0, 24, 6,
+       markdownstring),create_widget("metric", 0, 5, 8, 8, jsonstring_throughput),
+       create_widget("metric", 8, 5, 8, 8, jsonstring_iops), create_widget("text"
+      , 0, 13, 24, 3, footer_markdownstring)]
+    else:
+        widget_list = [create_widget("
+      text", 0, 0, 24, 6, markdownstring),create_widget("metric", 0, 5, 8, 8, jsonstring_throughput),
+       create_widget("metric", 8, 5, 8, 8, jsonstring_iops), create_widget("metric"
+      , 16, 5, 8, 8, jsonstring_io_size), create_widget("text", 0, 13, 24, 3, footer_markdownstring)]
+
+          dashboard = {
+        "start": start_time_arg,
+        "end": end_time_arg,
+
+              "periodOverride": "inherit",
+        "widgets": widget_list
+
+          }
+    response = client.put_dashboard(DashboardName="{}-EBS-Statistics"
+      .format(volume),DashboardBody=json.dumps(dashboard))
+    return response
+
+
+      def getVolumeStats(event, context):
+    region, volume_id, start_time, end_time,
+       period = event['region'], event['volume_id'], event['start_time'], event['end_time'],
+       event['period']
+    bytes_metrics_count, ops_metrics_count = 0, 0 # Used
+       to track respective throughput and IOPS metrics
+    global_metrics_counter
+       = 1 # Used to track total number of metrics
+    BYTES_METRIC_NAME_ARRAY,
+       OPS_METRIC_NAME_ARRAY = [], []  
+    expression_counter_tp, expression_counter_ops
+       = 1, 1 # Used to count the number of throughput and IOPS expressions on a
+       widget
+    EXPRESSIONS_ARRAY_THROUGHPUT, EXPRESSIONS_ARRAY_IOPS, EXPRESSIONS_ARRAY_IO_SIZE
+       = [], [], [] #
+    LIMIT_ARRAY, BYTES_ARRAY, OPS_ARRAY = [], [], [] 
+  
+        MATH_EXPRESSIONS_ARRAY_THROUGHPUT, MATH_EXPRESSIONS_ARRAY_OPS, MATH_EXPRESSIONS_ARRAY_IO_SIZE
+       = [], [], [] 
+
+    metric_expression = "["AWS/EBS","__METRIC_NAME__
+      ","VolumeId","__VOLUME_ID__",{"id":"__METRIC_ID__"
+      ,"visible":false}]"
+    
+    # Checking if volume exists
+    client
+       = boto3.client('ec2')
+    try:
+        volume_response = client.describe_volumes(
+
+                  VolumeIds=[
+                '{}'.format(volume_id),
+        
+          ]
+        )
+        # Get all metrics from CloudWatch for this volume
+
+              cloudwatch_response = get_all_cloudwatch_metrics(volume_id)
+     
+         client = boto3.resource("ec2") 
+        volume = client.Volume(volume_id)
+
+      
+        # Decide what volume type is associated with that volume and set maximum
+       and baseline throughput and IOPS limits
+        limits = get_volume_limits(volume)
+
+              maximum_throughput_limit, baseline_throughput_limit, maximum_iops_limit,
+       baseline_iops_limit = limits[0:4]
+
+        # Get bytes and ops metric arrays
+       and set associated counts (further explained in build_metric_arrays function)
+
+              arrays_and_counts = build_metric_arrays(cloudwatch_response, bytes_metrics_count,
+       BYTES_METRIC_NAME_ARRAY, ops_metrics_count, OPS_METRIC_NAME_ARRAY)
+     
+         bytes_metrics_count, BYTES_METRIC_NAME_ARRAY, ops_metrics_count, OPS_METRIC_NAME_ARRAY
+       = arrays_and_counts[0:4]
+            
+        if (bytes_metrics_count ==
+       0) and (ops_metrics_count == 0):
+            raise Exception("[ERROR] Metrics
+       don't exist for this volume!")
+        
+        BYTES_ARRAY, global_metrics_counter
+       = get_metric_counts(volume_id, bytes_metrics_count, BYTES_METRIC_NAME_ARRAY,
+       BYTES_ARRAY, global_metrics_counter, EXPRESSIONS_ARRAY_THROUGHPUT)
+     
+         OPS_ARRAY, global_metrics_counter = get_metric_counts(volume_id, ops_metrics_count,
+       OPS_METRIC_NAME_ARRAY, OPS_ARRAY, global_metrics_counter, EXPRESSIONS_ARRAY_IOPS)
+
+      
+        # At this point, EXPRESSIONS_ARRAY[] will have the available bytes
+       and ops metrics selected
+        # If bytes metrics exists, create throughput
+       expression and update counter
+        if bytes_metrics_count > 0:
+     
+             throughput_expression = "[{"expression":"SUM([__METRIC_ID_LIST__])/1024/1024/__PERIOD__
+      ","label":"Throughput - MiB/s","id":"__EXP_ID__",
+      "visible":true}]"
+            expression_counter_tp = create_expression(throughput_expression,
+       BYTES_ARRAY, volume_id, expression_counter_tp, MATH_EXPRESSIONS_ARRAY_IO_SIZE,
+       MATH_EXPRESSIONS_ARRAY_THROUGHPUT)
+    
+        # If ops metrics exists,
+       create ops expression and update counter
+        if ops_metrics_count > 0:
+
+                  ops_expression = "[{"expression":"SUM([__METRIC_ID_LIST__])/__PERIOD__
+      ","label":"Average IOPS","id":"__EXP_ID__","visible
+      ":true}]"
+            expression_counter_ops = create_expression(ops_expression,
+       OPS_ARRAY, volume_id, expression_counter_ops+1, MATH_EXPRESSIONS_ARRAY_IO_SIZE,
+       MATH_EXPRESSIONS_ARRAY_OPS)
+            expression_counter_ops -= 1
+
+ 
+             expression_counter_io_size = expression_counter_tp + expression_counter_ops
+       - 1
+        # If bytes and ops both exist, create iosize expression and add
+       to MATH_EXPRESSIONS_ARRAY_IO_SIZE[]
+        if (bytes_metrics_count > 0)
+       and (ops_metrics_count > 0):
+            iosize_expression = "[{"expression
+      ":"(__THRU_DIV_OPS__)*1024","label":"Estimated IO size - KiB
+      ","id":"__EXP_ID__","visible":true}]"
+            temp_string
+       = iosize_expression.replace("__THRU_DIV_OPS__", "e{}".format(expression_counter_io_size-2)
+       + "/" + "e{}".format(expression_counter_io_size-1))
+            temp_string
+       = temp_string.replace("__EXP_ID__", "e{}".format(expression_counter_io_size))
+
+                  MATH_EXPRESSIONS_ARRAY_IO_SIZE.append(temp_string)
+
+        #
+       We create the throughput and IOPS expression arrays by adding metric math
+       expressions to them
+        EXPRESSIONS_ARRAY_IO_SIZE = MATH_EXPRESSIONS_ARRAY_IO_SIZE
+       + EXPRESSIONS_ARRAY_THROUGHPUT + EXPRESSIONS_ARRAY_IOPS
+        EXPRESSIONS_ARRAY_THROUGHPUT
+       = MATH_EXPRESSIONS_ARRAY_THROUGHPUT + EXPRESSIONS_ARRAY_THROUGHPUT
+     
+         EXPRESSIONS_ARRAY_IOPS = MATH_EXPRESSIONS_ARRAY_OPS + EXPRESSIONS_ARRAY_IOPS
+
+      
+        jsonstring_throughput = fill_jsonstring("Throughput", EXPRESSIONS_ARRAY_THROUGHPUT,
+       maximum_throughput_limit, baseline_throughput_limit, start_time, end_time,
+       region, period, volume.volume_type)
+        jsonstring_iops = fill_jsonstring("
+      IOPS", EXPRESSIONS_ARRAY_IOPS, maximum_iops_limit, baseline_iops_limit, start_time,
+       end_time, region, period, volume.volume_type)
+
+        # If the IO size
+       list is not empty (so metrics exist for it), we create a new volume JSON string
+       for this to be added as a widget in the dashboard
+        # Otherwise, we
+       set the same string name to "none" and handle it later
+        if EXPRESSIONS_ARRAY_IO_SIZE
+       != []:
+            jsonstring_io_size = fill_jsonstring("IOSize", EXPRESSIONS_ARRAY_IO_SIZE,
+       maximum_iops_limit, baseline_iops_limit, start_time, end_time, region, period,
+       volume.volume_type)
+        else:
+            jsonstring_io_size = "none"
+      
+        
+        response = create_dashboard(jsonstring_throughput, jsonstring_iops,
+       jsonstring_io_size, volume_id, start_time, end_time, volume.volume_type, region)
+
+              if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+   
+               info_message = "
+
+You can copy the generated dashboard URL into
+       your browser and you can then observe the metrics for the selected resource
+       between the specified start and end times.
+If you wish to delete the CloudWatch
+       Dashboard generated from this document, please consult the DeleteDashboard
+       API documentation - https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_DeleteDashboards.html"
+      
+            return "https://{}.console.aws.amazon.com/cloudwatch/home?region={}#dashboards:name={}-EBS-Statistics"
+      .format(region, region, volume_id) + info_message
+
+    except botocore.exceptions.ClientError
+       as error:
+        raise error
+        
+    except Exception as error:
+
+              raise error
+"
+    InputPayload:
+      volume_id: "{{ResourceId}}"
+      start_time: "{{StartTime}}"
+      end_time: "{{EndTime}}"
+      period: "{{Period}}"
+      region: "{{global:REGION}}"
+  outputs:
+  - Name: "CloudWatchDashboardLink"
+    Selector: "$.Payload"
+    Type: "String"
+- name: "getInstanceStats"
+  action: "aws:executeScript"
+  maxAttempts: 3
+  isCritical: "true"
+  isEnd: true
+  onCancel: "Abort"
+  onFailure: "Abort"
+  inputs:
+    Runtime: "python3.8"
+    Handler: "getInstanceStats"
+    Script: "import boto3
+import botocore
+import json
+import re
+import urllib
+
+      from urllib.parse import quote
+
+def get_SC1_limits(volume_size):
+    maximum_available_iops
+       = 250
+    if volume_size < 3200:
+        max_available_throughput = volume_size
+       * 80 / 1024
+        baseline_throughput = volume_size * 12 / 1024
+    else:
+
+              max_available_throughput = 250
+        baseline_throughput = volume_size
+       * 12 / 1024
+    return [max_available_throughput, baseline_throughput, maximum_available_iops,
+       maximum_available_iops]
+
+def get_ST1_limits(volume_size):
+    maximum_available_iops
+       = 500
+    if volume_size > 12800:
+        max_available_throughput = 500
+
+              baseline_throughput = max_available_throughput
+    else:
+       
+       if volume_size < 2048:
+            max_available_throughput = volume_size
+       * 250 / 1024
+            baseline_throughput= volume_size * 40 / 1024 
+
+              else:
+            max_available_throughput = 500
+            baseline_throughput
+       = volume_size * 40 / 1024
+    return [max_available_throughput, baseline_throughput,
+       maximum_available_iops, maximum_available_iops]
+
+def get_IO_limits(volume_iops):
+
+          if volume_iops <= 32000:
+        max_available_throughput = 500
+    
+          calculated_throughput = volume_iops / 4
+        baseline_throughput =
+       min(max_available_throughput, calculated_throughput)
+    else:
+        max_available_throughput
+       = 1000
+        calculated_throughput = volume_iops / 64
+        baseline_throughput=
+       min(max_available_throughput, calculated_throughput)
+    return [max_available_throughput,
+       baseline_throughput, volume_iops, volume_iops]
+
+def get_GP2_limits(volume_size):
+
+          calculated_iops = 3 * volume_size
+    ## calculation for volumes bigger
+       than 1000 gb, iops increasing linearly till they hit max (16000 iops); baseline/max
+       throughput=250 MiB/s
+    if volume_size > 1000:
+        max_available_throughput
+       = 250
+        maximum_available_iops = 16000
+        baseline_iops = min(maximum_available_iops,
+       calculated_iops)
+        maximum_available_iops = baseline_iops
+       
+       baseline_throughput = max_available_throughput
+    else:
+        maximum_available_iops
+       = 3000
+        ## calculation for volumes smaller than 170 gb, minimum iops
+       can be 100 and max can be 3000; baseline throughput depends on number of baseline
+       iops and can go up to a max of 128 MiB/s
+        if volume_size <= 170:
+
+                  max_available_throughput = 128
+            baseline_iops = max(calculated_iops,
+       100)
+            calculated_throughput = baseline_iops / 4
+            baseline_throughput
+       = min(max_available_throughput, calculated_throughput)
+        ## calculation
+       for volumes larger than 170 gb and smaller than or equal to 1000 gb, max iops
+       can be 3000 and scale with size; max throughput can go up to 250 MiB/s
+ 
+             else:
+            max_available_throughput = 250
+            baseline_iops
+       = calculated_iops
+            calculated_throughput = baseline_iops / 4
+
+                  baseline_throughput = min(max_available_throughput, calculated_throughput)
+
+          return [max_available_throughput, baseline_throughput, maximum_available_iops,
+       baseline_iops]
+
+#_Picks maximum and baseline limits for the specific EBS
+       volume based on the volume type
+# For example, if the volume type is io1
+       it will contact the get_IO_limits function to obtain these limits 
+# Each
+       volume type has hardcoded limits which can be found in the volume type specific
+       functions above this comment block (except for gp3) 
+
+def get_volume_limits(volume_id):
+
+          client = boto3.resource("ec2") 
+    volume = client.Volume(volume_id)
+
+          volume_type, volume_size = volume.volume_type, volume.size
+    if volume_type
+       == "gp2":
+        return get_GP2_limits(volume_size)
+    elif volume_type
+       == "gp3":
+        return [volume.throughput, 125, volume.iops, volume.iops]
+
+          elif volume_type == "io1" or volume_type == "io2":
+        return
+       get_IO_limits(volume.iops)
+    elif volume_type == "st1":
+        return
+       get_ST1_limits(volume_size)
+    elif volume_type == "sc1":
+        return
+       get_SC1_limits(volume_size) 
+    elif volume_type == "standard":
+    
+          return [0, 0, 0, 0]
+
+# Returns 3 string values, the string used for if
+       the values for maximum and baseline are equal and then the maximum and baseline
+       values are return respectively
+def set_labels(metric_type):
+    if metric_type
+       == "Throughput":
+        return "Maximum / Baseline Throughput Limit -
+       MiB/s", "Maximum Throughput Limit - MiB/s", "Baseline Throughput Limit
+       - MiB/s"
+    else:
+        return "Maximum / Baseline IOPS Limit", "
+      Maximum IOPS Limit", "Baseline IOPS Limit"
+
+# Returns JSON to be used in
+       the dashboard widgets for individual volumes
+def fill_volume_jsonstring(metric_type,
+       EXPRESSIONS_ARRAY, maximum_limit, baseline_limit, start_time, end_time, region,
+       period, volume_id):
+    jsonstring = "{"metrics":[__EXPRESSIONS__],
+      "view":"timeSeries","stacked":false,"region":"__REGION__
+      ","stat":"Sum","period":__PERIOD__,"start":"__START_TIME__
+      ","end":"__END_TIME__","legend":{"position":"bottom
+      "},"title":"" + metric_type + ""}"
+    
+    # A comma delimited
+       string is created from EXPRESSIONS_ARRAY. The string contains all the expressions
+       we need
+    jsonstring = jsonstring.replace("__EXPRESSIONS__", ','.join(EXPRESSIONS_ARRAY))
+
+      
+    # Substituting values in the above expression
+    jsonstring = jsonstring.replace("
+      __START_TIME__", start_time)
+    jsonstring = jsonstring.replace("__END_TIME__"
+      , end_time)
+    jsonstring = jsonstring.replace("__REGION__", region)
+ 
+         jsonstring = jsonstring.replace("__PERIOD__", period)
+    client = boto3.resource("
+      ec2") 
+    volume = client.Volume(volume_id)
+
+
+    if metric_type == "
+      IOSize" or volume.volume_type == "standard":
+        return jsonstring
+
+          else:
+        equal_label, maximum_label, baseline_label = set_labels(metric_type)
+
+          
+    # In the event the maximum and baseline limit are equal, we add a
+       single annotation to display this
+    # Otherwise both annotations are created
+       for maximum and baseline limits
+
+    if maximum_limit == baseline_limit:
+
+              jsonstring = jsonstring[:-1] + ","annotations": {"horizontal
+      ": [{"label": "__FIRST_ANNOTATION_LABEL__","value": __FIRST_ANNOTATION_VALUE__}]}}"
+      
+        jsonstring = jsonstring.replace("__FIRST_ANNOTATION_LABEL__", equal_label)
+
+              jsonstring = jsonstring.replace("__FIRST_ANNOTATION_VALUE__", str(maximum_limit))
+
+          else:
+        jsonstring = jsonstring[:-1] + ","annotations": {
+      "horizontal": [{"label": "__FIRST_ANNOTATION_LABEL__","value
+      ": __FIRST_ANNOTATION_VALUE__},{"label": "__SECOND_ANNOTATION_LABEL__
+      ","value": __SECOND_ANNOTATION_VALUE__}]}}"
+        jsonstring = jsonstring.replace("
+      __FIRST_ANNOTATION_LABEL__", maximum_label)
+        jsonstring = jsonstring.replace("
+      __FIRST_ANNOTATION_VALUE__", str(maximum_limit))
+        jsonstring = jsonstring.replace("
+      __SECOND_ANNOTATION_LABEL__", baseline_label)
+        jsonstring = jsonstring.replace("
+      __SECOND_ANNOTATION_VALUE__", str(baseline_limit))
+
+    return jsonstring
+
+      
+# Returns JSON to be used in the dashboard widgets for instances
+def fill_jsonstring(metric_type,
+       EXPRESSIONS_ARRAY, start_time, end_time, region, period, ec2_info, client):
+
+          maximum_set, baseline_set = False, False
+    jsonstring = "{"metrics
+      ":[__EXPRESSIONS__],"view":"timeSeries","stacked":false,
+      "region":"__REGION__","stat":"Sum","period":__PERIOD__,
+      "start":"__START_TIME__","end":"__END_TIME__","legend
+      ":{"position":"bottom"},"title":"" + metric_type + "
+      "}"
+    # A comma delimited string is created from EXPRESSIONS_ARRAY. The
+       string contains all the expressions we need
+    jsonstring = jsonstring.replace("
+      __EXPRESSIONS__", ','.join(EXPRESSIONS_ARRAY))
+        
+    jsonstring =
+       jsonstring.replace("__START_TIME__", start_time)
+    jsonstring = jsonstring.replace("
+      __END_TIME__", end_time)
+    jsonstring = jsonstring.replace("__REGION__"
+      , region)
+    jsonstring = jsonstring.replace("__PERIOD__", period)
+
+ 
+         # If the metric type is IO size no limits are plotted and the string is
+       returned without annotations
+    if metric_type == "IOSize":
+        return
+       jsonstring
+
+
+    if ec2_info.ebs_optimized:
+        ebs_optimized_response
+       = client.describe_instance_types(
+            InstanceTypes=[
+         
+             ec2_info.instance_type
+            ],
+            Filters=[
+    
+                  {
+                    'Name': 'ebs-info.ebs-optimized-support',
+
+                          'Values': [
+                        'supported','default',
+
+                          ]
+                },
+            ]
+        )
+     
+         # Set labels for annotations
+        equal_label, maximum_label, baseline_label
+       = set_labels(metric_type)
+
+
+        if metric_type == "Throughput":
+
+                  if ebs_optimized_response["InstanceTypes"][0]["EbsInfo"]["
+      EbsOptimizedInfo"]["MaximumThroughputInMBps"]:
+                maximum_limit
+       = ebs_optimized_response["InstanceTypes"][0]["EbsInfo"]["EbsOptimizedInfo"
+      ]["MaximumThroughputInMBps"]
+                # MB/s to MiB/s -----> (1000*1000)/1024/1024
+       = 0.9536743164
+                maximum_limit = round(maximum_limit * 0.9536743164,
+       1)
+                maximum_set = True
+            if ebs_optimized_response["
+      InstanceTypes"][0]["EbsInfo"]["EbsOptimizedInfo"]["BaselineThroughputInMBps"
+      ]:
+                baseline_limit = ebs_optimized_response["InstanceTypes"
+      ][0]["EbsInfo"]["EbsOptimizedInfo"]["BaselineThroughputInMBps"]
+    
+                  # MB/s to MiB/s -----> (1000*1000)/1024/1024 = 0.9536743164
+ 
+                     baseline_limit = round(baseline_limit * 0.9536743164, 1)
+ 
+                     baseline_set = True
+
+        elif metric_type == "IOPS"
+      :
+            if ebs_optimized_response["InstanceTypes"][0]["EbsInfo"]["
+      EbsOptimizedInfo"]["MaximumIops"]:
+                maximum_limit = ebs_optimized_response["
+      InstanceTypes"][0]["EbsInfo"]["EbsOptimizedInfo"]["MaximumIops"]
+  
+                    maximum_set = True
+            if ebs_optimized_response["
+      InstanceTypes"][0]["EbsInfo"]["EbsOptimizedInfo"]["BaselineIops"]:
+
+                      baseline_limit = ebs_optimized_response["InstanceTypes"][0]["
+      EbsInfo"]["EbsOptimizedInfo"]["BaselineIops"]
+                baseline_set
+       = True
+                
+    # If both the max and the baseline limits have
+       been set from the API then we set both limit annotations
+    # Otherwise
+       we check if either of the maximum or baseline has been set and these are annotations
+       are plotted individually
+    if (maximum_set and baseline_set):
+       
+       if maximum_limit != baseline_limit:
+            jsonstring = jsonstring[:-1]
+       + ","annotations":{"horizontal":[{"label":"__FIRST_ANNOTATION_LABEL__
+      ","value":__FIRST_ANNOTATION_VALUE__},{"label":"__SECOND_ANNOTATION_LABEL__
+      ","value":__SECOND_ANNOTATION_VALUE__}]}}"
+            jsonstring =
+       jsonstring.replace("__FIRST_ANNOTATION_LABEL__", maximum_label)
+      
+            jsonstring = jsonstring.replace("__FIRST_ANNOTATION_VALUE__", str(maximum_limit))
+
+                  jsonstring = jsonstring.replace("__SECOND_ANNOTATION_LABEL__"
+      , baseline_label)
+            jsonstring = jsonstring.replace("__SECOND_ANNOTATION_VALUE__"
+      , str(baseline_limit))
+        else:
+            jsonstring = jsonstring[:-1]
+       + ","annotations":{"horizontal":[{"label":"__FIRST_ANNOTATION_LABEL__
+      ","value":__FIRST_ANNOTATION_VALUE__}]}}"
+            jsonstring =
+       jsonstring.replace("__FIRST_ANNOTATION_LABEL__", equal_label)
+        
+          jsonstring = jsonstring.replace("__FIRST_ANNOTATION_VALUE__", str(maximum_limit))
+
+          elif maximum_set:
+        jsonstring = jsonstring[:-1] + ","annotations
+      ":{"horizontal":[{"label":"__FIRST_ANNOTATION_LABEL__",
+      "value":__FIRST_ANNOTATION_VALUE__}]}}"
+        jsonstring = jsonstring.replace("
+      __FIRST_ANNOTATION_LABEL__", maximum_label)
+        jsonstring = jsonstring.replace("
+      __FIRST_ANNOTATION_VALUE__", str(maximum_limit))
+    elif baseline_set:
+
+              jsonstring = jsonstring[:-1] + ","annotations":{"horizontal
+      ":[{"label":"__SECOND_ANNOTATION_LABEL__","value":__SECOND_ANNOTATION_VALUE__}]}}"
+      
+        jsonstring = jsonstring.replace("__SECOND_ANNOTATION_LABEL__", baseline_label)
+
+              jsonstring = jsonstring.replace("__SECOND_ANNOTATION_VALUE__", str(baseline_limit))
+
+      
+    return jsonstring
+
+def create_volume_expression(metric_type, expression,
+       local_array, volume, expression_counter, math_expressions_io_size, math_expressions_array):
+
+          temp_string = expression.replace("__METRIC_ID_LIST__", ','.join(local_array))
+
+          temp_string = temp_string.replace("__VOLUME_ID__", volume)
+    temp_string
+       = temp_string.replace("__EXP_ID__", "e{}".format(expression_counter))
+
+          io_size_string = temp_string.replace(""visible":true", ""visible
+      ":false")
+
+    if metric_type == "IOPS":
+        io_size_string = re.sub('e
+      d{1}', "e"+str(expression_counter+1), io_size_string)
+    math_expressions_io_size.append(io_size_string)
+
+          math_expressions_array.append(temp_string)
+    expression_counter = expression_counter+1
+
+          return expression_counter
+
+def create_instance_expression(metric_type,
+       instance_id, array, math_expression_array, expression_counter, letter):
+
+          if metric_type == "Throughput":
+        expression = "[{"expression
+      ":"SUM([__METRIC_ID_LIST__])/1024/1024/__PERIOD__","label":"
+      __INSTANCE_ID__ Throughput - MiB/s","id":"__EXP_ID__","visible
+      ":true}]"
+    elif metric_type == "IOPS":
+        expression = "[{"
+      expression":"SUM([__METRIC_ID_LIST__])/__PERIOD__","label":
+      "__INSTANCE_ID__ Average IOPS","id":"__EXP_ID__","visible
+      ":true}]"
+    temp_string = expression.replace("__INSTANCE_ID__", instance_id)
+
+          temp_string = temp_string.replace("__EXP_ID__", "e{}".format(expression_counter))
+
+      
+    # Currently Throughput is m1,m2,m3 and IOPS are n1,n2,n3
+    final =
+       []
+    i = 0
+    while i < len(array):
+        final.append("{}{}".format(letter,
+       i+1))
+        i += 1
+    math_expression_array.append(temp_string.replace("
+      __METRIC_ID_LIST__", ','.join(final)))
+    expression_counter = expression_counter
+       + 1
+    return math_expression_array
+
+def get_attached_volumes(instance_id):
+
+          client = boto3.client('ec2')
+    volume_response = client.describe_volumes(
+
+              Filters=[
+            {
+                'Name': 'attachment.instance-id',
+
+                      'Values': [
+                    '{}'.format(instance_id),
+
+                      ]
+            }
+        ]
+    )
+    return volume_response
+
+      
+def get_ec2_info(instance_id):
+    try:
+        client = boto3.client('ec2')
+
+              instance = client.describe_instances(InstanceIds=[instance_id])
+ 
+             ec2 = boto3.resource('ec2')
+        return client, ec2.Instance(instance_id)
+
+          except botocore.exceptions.ClientError:
+        raise Exception("[ERROR]
+       EC2 Instance " + instance_id + " does not exist.")
+ 
+def get_all_cloudwatch_metrics(volume):
+
+          client = boto3.client('cloudwatch')
+    cloudwatch_response = client.list_metrics(
+
+              Namespace='AWS/EBS',
+        Dimensions=[
+            {
+       
+               'Name': 'VolumeId',
+                'Value': '{}'.format(volume)
+
+                  }
+        ]
+    )
+    return cloudwatch_response
+
+# This function
+       builds the respective bytes and ops arrays for all metrics in teh cloudwatch
+       api call response
+def build_metric_arrays(cloudwatch_response, bytes_metrics_count,
+       BYTES_METRIC_NAME_ARRAY, ops_metrics_count, OPS_METRIC_NAME_ARRAY):
+    j
+       = 0
+    while j < len(cloudwatch_response['Metrics']):
+
+        if (cloudwatch_response['Metrics'][j]['MetricName']
+       == "VolumeReadBytes") or (cloudwatch_response['Metrics'][j]['MetricName']
+       == "VolumeWriteBytes"):
+            bytes_metrics_count = bytes_metrics_count+1
+
+                  BYTES_METRIC_NAME_ARRAY.append(cloudwatch_response['Metrics'][j]['MetricName'])
+
+      
+        if (cloudwatch_response['Metrics'][j]['MetricName'] == "VolumeReadOps"
+      ) or (cloudwatch_response['Metrics'][j]['MetricName'] == "VolumeWriteOps"
+      ):
+            ops_metrics_count = ops_metrics_count+1
+            OPS_METRIC_NAME_ARRAY.append(cloudwatch_response['Metrics'][j]['MetricName'])
+
+              j = j + 1
+    return [bytes_metrics_count, BYTES_METRIC_NAME_ARRAY,
+       ops_metrics_count, OPS_METRIC_NAME_ARRAY]
+
+# This function is used to continuously
+       build each metric array while tracking the counts
+def get_metric_counts(volume,
+       local_array, metrics_count, metric_name_array, array, counter, expressions_array,
+       letter):
+    metric_expression = "["AWS/EBS","__METRIC_NAME__
+      ","VolumeId","__VOLUME_ID__",{"id":"__METRIC_ID__"
+      ,"visible":false}]"
+    metric_expression = metric_expression.replace("
+      __VOLUME_ID__", volume)
+                
+    ## If any of the metrics exist,
+       create expressions to select those metrics and give them metrics IDs (like
+       m1,m2)
+    j = metrics_count
+    while j > 0:
+        j = j-1
+       
+       temp_string = metric_expression.replace("__METRIC_NAME__", metric_name_array[j])
+
+              temp_string = temp_string.replace("__METRIC_ID__", "{}{}".format(letter,
+       counter))
+        # Currently Throughput is m1,m2,m3 and IOPS are n1,n2,n3
+
+              array.append("{}{}".format(letter, counter))
+        local_array.append("
+      {}{}".format(letter, counter))
+        counter = counter+1
+        expressions_array.append(temp_string)
+
+          return array, counter
+
+
+def get_markdown_contents(volume_id):
+    client
+       = boto3.resource("ec2") 
+    volume = client.Volume(volume_id)
+    markdown
+       = "{"markdown":"### Metrics for __VOLUME_ID__
+- Volume Type:
+       __VOLUME_TYPE__
+
+[button:More details on EBS Volume Types](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-volume-types.html)
+      
+
+| Calculated Metric | Mathematical Expression | Unit |
+| --------
+       | ------------------------- | ------ |
+| Volume calculated throughput
+       | SUM(VolumeReadBytes) + SUM(VolumeWriteBytes) / 1024 / 1024 / period | MiB/s
+       |
+| Volume calculated IOPS | SUM(VolumeReadOps) + SUM(VolumeWriteOps)
+       / period | IOPS |
+| Volume calculated IO size | Volume calculated throughput
+       / Volume calculated IOPS | KiB |"}"
+    markdown = markdown.replace("
+      __VOLUME_ID__", volume_id)
+    markdown = markdown.replace("__VOLUME_TYPE__"
+      , volume.volume_type)
+    return markdown
+    
+# This function builds the
+       widget list for the dashboard body
+def add_widgets(volume_widget_list, jsonstring_volume_throughput,
+       jsonstring_volume_iops, jsonstring_volume_io_size, markdownstring_volume_information,
+       x, y):
+    # Each volume widget plotted is 4x4 so each time we append to
+       the list we move the x co-ordinate by 8
+    volume_widget_list.append(create_widget("
+      text", x, y, 24, 6, markdownstring_volume_information))
+    y += 2
+    volume_widget_list.append(create_widget("
+      metric", x, y, 8, 4, jsonstring_volume_throughput))
+    x += 8
+    volume_widget_list.append(create_widget("
+      metric", x, y, 8, 4, jsonstring_volume_iops))
+    x += 8
+
+    if jsonstring_volume_io_size
+       != "none":
+        volume_widget_list.append(create_widget("metric",
+       x, y, 8, 4, jsonstring_volume_io_size))
+        x += 8
+    # If we reach
+       the margin then we reset the co-ordinates
+    if 24 <= x:
+        x = 0
+
+              y += 4
+        
+    return volume_widget_list, x, y
+
+# This function
+       creates a single widget according to specific parameters
+def create_widget(widget_type,
+       x, y, w, h, p):
+    return {
+        "type": widget_type,
+        "
+      x":x,
+        "y":y,
+        "width":w,
+        "height":h,
+    
+          "properties": json.loads(p)
+    }
+    
+# This function creates a new
+       dashboard 
+def create_dashboard(jsonstring_throughput, jsonstring_iops, volume_widget_list,
+       instance_id, start_time_arg, end_time_arg, ec2_info, region):
+    client
+       = boto3.client('cloudwatch')
+ 
+    markdownstring = "{"markdown"
+      :"# Aggregated Metrics for EC2 Instance __INSTANCE_ID__
+- Instance Type:
+       __INSTANCE_TYPE__
+- EBS Optimized: __EBS_OPTIMIZED__ 
+
+
+[button:
+       More details on EBS Optimized instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ebs-optimized.html)
+      
+[button: How can I use CloudWatch metrics to calculate the average throughput
+       and average number of IOPS my EBS volume is providing?](https://aws.amazon.com/premiumsupport/knowledge-center/ebs-cloudwatch-metrics-throughput-iops/)
+      
+
+--- 
+
+| Calculated Metric | Mathematical Expression | Unit |
+      
+| -------- | ------------------------- | ------ |
+| Instance calculated
+       Throughput | SUM ( FOR ALL VOLUMES [ SUM(VolumeReadBytes) + SUM(VolumeWriteBytes)
+       ] ) / 1024 / 1024 / period | MiB/s |
+| Instance calculated IOPS | SUM
+       ( FOR ALL VOLUMES [ SUM(VolumeReadOps) + SUM(VolumeWriteOps) ] ) / period
+       | IOPS |
+
+--- "}"
+    markdownstring = markdownstring.replace("
+      __INSTANCE_ID__", instance_id)
+    markdownstring = markdownstring.replace("
+      __INSTANCE_TYPE__", ec2_info.instance_type)
+    markdownstring = markdownstring.replace("
+      __EBS_OPTIMIZED__", str(ec2_info.ebs_optimized))
+    footer_markdownstring
+       = "{"markdown":"**In order to delete the dashboard, run the CLI
+       command** 
+
+ ```
+ $ aws cloudwatch delete-dashboards --dashboard-names
+       __INSTANCE_ID__-EBS-Statistics --region __REGION__ 
+ ``` 
+
+ NOTE:
+       You will need **cloudwatch:DeleteDashboards** IAM permission to delete the
+       dashboard."}"
+    footer_markdownstring = footer_markdownstring.replace("
+      __INSTANCE_ID__", instance_id)
+    footer_markdownstring = footer_markdownstring.replace("
+      __REGION__", region)
+    widget_list = [create_widget("text", 0, 0, 24,
+       7, markdownstring),  create_widget("metric", 0, 7, 12, 8, jsonstring_throughput),
+       create_widget("metric", 12, 7, 12, 8, jsonstring_iops), create_widget("
+      text", 0, 500, 24, 3, footer_markdownstring)] + volume_widget_list
+ 
+   
+       dashboard = {
+        "start": start_time_arg,
+        "end": end_time_arg,
+
+              "periodOverride": "inherit",
+        "widgets": widget_list
+
+          }
+
+    response = client.put_dashboard(DashboardName="{}-EBS-Statistics"
+      .format(instance_id),DashboardBody=json.dumps(dashboard))
+    return response
+
+      
+def getInstanceStats(event, context):
+    region, instance_id, start_time,
+       end_time, period = event['region'], event['instance_id'], event['start_time'],
+       event['end_time'], event['period']
+    VOLUMES, METRICS_LIST = [], [] 
+
+          counter_tp, counter_ops = 1, 1 # Used to keep track of all the metric IDs
+       for throughput and IOPS respectively (m1,m2,m3,..., n1,n2,n3,...)
+    x,
+       y = 0, 15 # Used to position widgets on the dashboard in terms of (x,y) co-ordinates
+
+          BYTES_ARRAY, OPS_ARRAY = [], [] 
+    expression_counter_tp, expression_counter_iops
+       = 1, 1 # Used to count the number of throughput and IOPS expressions on a
+       widget
+    EXPRESSIONS_ARRAY_THROUGHPUT, EXPRESSIONS_ARRAY_IOPS = [], []
+       
+    MATH_EXPRESSIONS_ARRAY_THROUGHPUT, MATH_EXPRESSIONS_ARRAY_IOPS, MATH_EXPRESSIONS_ARRAY_IO_SIZE
+       = [], [], [] 
+    volume_widget_list = [] 
+
+    try:
+        volume_response
+       = get_attached_volumes(instance_id)
+        ec2_client, ec2_info = get_ec2_info(instance_id)
+
+      
+        # Parsing volume_response from API call to extract volume IDs to an
+       array
+        i = 0
+        while i < len(volume_response['Volumes']):
+
+                  VOLUMES.append(volume_response['Volumes'][i]['VolumeId'])
+   
+               i = i + 1
+            
+
+        if not volume_response['Volumes']:
+
+                  raise Exception("[ERROR] There are no volume attachments for this
+       EC2 Instance.")
+        else:
+            # Get all available metrics for
+       each volume
+            i = 0
+            while i < len(VOLUMES):
+    
+                  # Get all metrics from CloudWatch
+                cloudwatch_response
+       = get_all_cloudwatch_metrics(VOLUMES[i])
+
+                limits = get_volume_limits(VOLUMES[i])
+
+                      maximum_throughput_limit, baseline_throughput_limit, maximum_iops_limit,
+       baseline_iops_limit = limits[0:4]
+
+                # Variables need to be
+       re-initialized for each new volume being processed
+                EXPRESSIONS_ARRAY_IO_SIZE,
+       MATH_EXPRESSIONS_ARRAY_IO_SIZE = [], []
+                BYTES_METRIC_NAME_ARRAY,
+       OPS_METRIC_NAME_ARRAY = [], []
+                bytes_metrics_count, ops_metrics_count
+       = 0, 0
+                LOCAL_BYTES_ARRAY, LOCAL_OPS_ARRAY = [], []
+
+  
+                    # Get bytes and ops metric arrays and set associated counts (further
+       explained in build_metric_arrays function)
+                arrays_and_counts
+       = build_metric_arrays(cloudwatch_response, bytes_metrics_count, BYTES_METRIC_NAME_ARRAY,
+       ops_metrics_count, OPS_METRIC_NAME_ARRAY)
+                bytes_metrics_count,
+       BYTES_METRIC_NAME_ARRAY, ops_metrics_count, OPS_METRIC_NAME_ARRAY = arrays_and_counts[0:4]
+
+                      
+                # Update metric_counts for each volume (further
+       explained in get_metrics_counts function)
+                BYTES_ARRAY, counter_tp
+       = get_metric_counts(VOLUMES[i], LOCAL_BYTES_ARRAY, bytes_metrics_count, BYTES_METRIC_NAME_ARRAY,
+       BYTES_ARRAY, counter_tp, EXPRESSIONS_ARRAY_THROUGHPUT, "m")
+          
+            OPS_ARRAY, counter_ops = get_metric_counts(VOLUMES[i], LOCAL_OPS_ARRAY,
+       ops_metrics_count, OPS_METRIC_NAME_ARRAY, OPS_ARRAY, counter_ops, EXPRESSIONS_ARRAY_IOPS,
+       "n")
+
+                # If bytes metrics exists, create a unique throughput
+       expression and pass to create_volume_expression
+                if bytes_metrics_count
+       > 0:
+                    throughput_expression = "[{"expression":
+      "SUM([__METRIC_ID_LIST__])/1024/1024/__PERIOD__","label":"__VOLUME_ID__
+       Throughput - MiB/s","id":"__EXP_ID__","visible":true}]"
+      
+                    expression_counter_tp = create_volume_expression("Throughput"
+      , throughput_expression, LOCAL_BYTES_ARRAY, VOLUMES[i], expression_counter_tp,
+       MATH_EXPRESSIONS_ARRAY_IO_SIZE, MATH_EXPRESSIONS_ARRAY_THROUGHPUT)
+     
+                     
+                # If ops metrics exists, create a unique ops
+       expression and pass to create_volume_expression
+                if ops_metrics_count
+       > 0:
+                    ops_expression = "[{"expression":"SUM([__METRIC_ID_LIST__])/__PERIOD__
+      ","label":"__VOLUME_ID__ Average IOPS","id":"__EXP_ID__
+      ","visible":true}]"
+                    expression_counter_iops = create_volume_expression("
+      IOPS", ops_expression, LOCAL_OPS_ARRAY, VOLUMES[i], expression_counter_iops,
+       MATH_EXPRESSIONS_ARRAY_IO_SIZE, MATH_EXPRESSIONS_ARRAY_IOPS)
+
+         
+             # IO Size counter is the sum of the number of throughput and IOPS counters
+       minus the number of the current volume being processed (as i starts at 0 we
+       +1 for the first number to be 1 and so on)
+                expression_counter_io_size
+       = expression_counter_tp + expression_counter_iops - (i + 1)
+
+          
+            # If bytes and ops both exist, create iosize expression and add to MATH_EXPRESSIONS_ARRAY_IO_SIZE[]
+
+                      if (bytes_metrics_count > 0) and (ops_metrics_count > 0):
+
+                          iosize_string = "[{"expression":"(__THRU_DIV_OPS__)*1024
+      ","label":"__VOLUME_ID__ Estimated IO Size - KiB","id":
+      "__EXP_ID__","visible":true}]"
+                    temp_string =
+       iosize_string.replace("__VOLUME_ID__", VOLUMES[i])
+                   
+       temp_string = temp_string.replace("__THRU_DIV_OPS__", "e{}".format(expression_counter_io_size-2)
+       + "/" + "e{}".format(expression_counter_io_size-1))
+                
+          temp_string = temp_string.replace("__EXP_ID__", "e{}".format(expression_counter_io_size))
+
+                          MATH_EXPRESSIONS_ARRAY_IO_SIZE.append(temp_string)
+  
+                        
+                # Create temporarily used variables for
+       each volume 
+                # Each is a list concatentation of the previously
+       build expressions array and the metric math expressions array
+          
+            volume_throughput = MATH_EXPRESSIONS_ARRAY_THROUGHPUT + EXPRESSIONS_ARRAY_THROUGHPUT
+
+                      volume_iops = MATH_EXPRESSIONS_ARRAY_IOPS + EXPRESSIONS_ARRAY_IOPS
+
+                      # volume_io_size could be empty if the IO size metrics aren't
+       calculated due to either bytes or IOPS metrics missing
+                volume_io_size
+       = MATH_EXPRESSIONS_ARRAY_IO_SIZE + EXPRESSIONS_ARRAY_THROUGHPUT + EXPRESSIONS_ARRAY_IOPS
+       + EXPRESSIONS_ARRAY_IO_SIZE
+                
+
+                jsonstring_volume_throughput
+       = fill_volume_jsonstring("Throughput", volume_throughput, maximum_throughput_limit,
+       baseline_throughput_limit, start_time, end_time, region, period, VOLUMES[i])
+
+                      jsonstring_volume_iops = fill_volume_jsonstring("IOPS", volume_iops,
+       maximum_iops_limit, baseline_iops_limit, start_time, end_time, region, period,
+       VOLUMES[i])
+                
+                # Reset metric math expression
+       arrays after the JSON strings are generated above
+                MATH_EXPRESSIONS_ARRAY_THROUGHPUT,
+       MATH_EXPRESSIONS_ARRAY_IOPS, MATH_EXPRESSIONS_ARRAY_IO_SIZE = [], [], []
+
+      
+
+                if volume_io_size != []:
+                    jsonstring_volume_io_size
+       = fill_volume_jsonstring("IOSize", volume_io_size, maximum_iops_limit, baseline_iops_limit,
+       start_time, end_time, region, period, VOLUMES[i])
+                else:
+
+                          jsonstring_volume_io_size = "none"
+
+              
+        # Add widgets to the dashboard for the jsonstrings generated from the expression
+       arrays
+ 
+                markdownstring_volume_information = get_markdown_contents(VOLUMES[i])
+
+                      volume_widget_list, x, y = add_widgets(volume_widget_list,
+       jsonstring_volume_throughput, jsonstring_volume_iops, jsonstring_volume_io_size,
+       markdownstring_volume_information, x, y)
+                i = i + 1
+
+ 
+
+                  if (not BYTES_ARRAY) and (not OPS_ARRAY):
+                raise
+       Exception("[ERROR] Metrics don't exist for any of the volumes attached to
+       this instance!")
+            if BYTES_ARRAY:
+                create_instance_expression("
+      Throughput", instance_id, BYTES_ARRAY, MATH_EXPRESSIONS_ARRAY_THROUGHPUT, expression_counter_tp,
+       "m")
+            if OPS_ARRAY:
+                create_instance_expression("
+      IOPS", instance_id, OPS_ARRAY, MATH_EXPRESSIONS_ARRAY_IOPS, expression_counter_iops,
+       "n")
+            
+            # We create the throughput and IOPS expression
+       arrays by adding metric math expressions to them
+            EXPRESSIONS_ARRAY_THROUGHPUT
+       = MATH_EXPRESSIONS_ARRAY_THROUGHPUT + EXPRESSIONS_ARRAY_THROUGHPUT
+     
+             EXPRESSIONS_ARRAY_IOPS = MATH_EXPRESSIONS_ARRAY_IOPS + EXPRESSIONS_ARRAY_IOPS
+
+                  # After this we convert the expression arrays to JSON strings again
+
+                  jsonstring_throughput = fill_jsonstring("Throughput", EXPRESSIONS_ARRAY_THROUGHPUT,
+       start_time, end_time, region, period, ec2_info, ec2_client)
+            jsonstring_iops
+       = fill_jsonstring("IOPS", EXPRESSIONS_ARRAY_IOPS, start_time, end_time,
+       region, period, ec2_info, ec2_client)
+            
+
+            response
+       = create_dashboard(jsonstring_throughput, jsonstring_iops, volume_widget_list,
+       instance_id, start_time, end_time, ec2_info, region)
+            if response["
+      ResponseMetadata"]["HTTPStatusCode"] == 200:
+                info_message
+       = "
+
+You can copy the generated dashboard URL into your browser and you
+       can then observe the metrics for the selected resource between the specified
+       start and end times.
+If you wish to delete the CloudWatch Dashboard generated
+       from this document, please consult the DeleteDashboard API documentation -
+       https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_DeleteDashboards.html"
+      
+                return "https://{}.console.aws.amazon.com/cloudwatch/home?region={}#dashboards:name={}-EBS-Statistics"
+      .format(region, region, instance_id) + info_message
+            
+    except
+       botocore.exceptions.ClientError as error:
+
+        raise error
+       
+       
+    except Exception as error:
+        raise error
+
+"
+    InputPayload:
+      instance_id: "{{ResourceId}}"
+      start_time: "{{StartTime}}"
+      end_time: "{{EndTime}}"
+      period: "{{Period}}"
+      region: "{{global:REGION}}"
+  outputs:
+  - Name: "CloudWatchDashboardLink"
+    Selector: "$.Payload"
+    Type: "String"
+outputs:
+- "getVolumeStats.CloudWatchDashboardLink"
+- "getInstanceStats.CloudWatchDashboardLink"

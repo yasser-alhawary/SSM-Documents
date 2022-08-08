@@ -1,0 +1,450 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-ScaleDownDocumentDBClusterSOP_2020-09-21
+
+            ## Intent
+            Scale down Amazon Document DB cluster.
+
+            ## Type
+            SOP
+
+            ## Risk
+            High
+
+            ## Requirements
+              * An Amazon Document DB cluster in "available" state with at least 3 DB instances in "available" state.
+
+            ## Permissions required for AutomationAssumeRole
+              * rds:CreateDBInstance
+              * rds:DeleteDBInstance
+              * rds:DescribeDBClusters
+              * rds:DescribeDBInstances
+
+            ## Cancellation behavior
+            Fail
+
+            ## Inputs
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: ARN of the IAM role with permissions listed above.
+
+            ### (Required) DBClusterIdentifier
+              * type: String
+              * description: Amazon Document DB cluster identifier.
+              * allowedPattern: "[a-zA-Z0-9_.-]+"
+
+            ### (Optional) NumberOfInstancesToDelete
+            * type: Integer
+            * description: The number of DB instances to delete. Ignored if at least one DBInstancesIdentifiersToDelete specified.
+            * default: 1
+
+            ### (Optional) DBInstancesIdentifiersToDelete
+              * type: StringList
+              * description: The list of identifiers of instances to be deleted.
+              * default: []
+
+            ## Details
+            The cluster after modification should satisfy the condition: 1 Primary + 1 Replica instances are available.
+            Note, that either 'NumberOfInstancesToDelete' or 'DBInstancesIdentifiersToDelete' should be provided.
+
+            ## Steps executed in normal flow
+              * RecordStartTime
+              * VerifyDBClusterAvailableStatusBeforeModification
+              * GetDbClusterMembers
+              * ValidateClusterMembersAmount
+              * GetDBInstancesToDelete
+              * ScaleDownDocDbCLuster
+              * WaitForInstancesAvailableStatus
+              * OutputRecoveryTime
+
+            ## Outputs
+            ### OutputRecoveryTime.RecoveryTime
+              * type: String
+              * description: overall recovery time for scaling up Amazon Document DB cluster.
+
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+outputs:
+  - OutputRecoveryTime.RecoveryTime
+  
+parameters:
+  DBClusterIdentifier:
+    type: String
+    description: (Required) Amazon Document DB cluster identifier.
+    allowedPattern: "[a-zA-Z0-9_.-]+"
+  NumberOfDBInstancesToDelete:
+    type: Integer
+    description: (Optional) The number of DB instances to delete. Ignored if at least one DBInstancesIdentifiersToDelete specified.
+    default: 1
+  DBInstancesIdentifiersToDelete:
+    type: StringList
+    description: (Optional) The list of identifiers of instances to be deleted.
+    default: []
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+mainSteps:
+  - name: RecordStartTime
+    description: Start recording execution time
+    action: 'aws:executeScript'
+    outputs:
+      - Name: StartTime
+        Selector: $.Payload
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: start_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def start_time(events, context):
+            return datetime.now(timezone.utc).isoformat()
+        
+        
+
+
+
+  - name: VerifyDBClusterAvailableStatusBeforeModification
+    description: On this step check, if the cluster is in "available" state.
+    action: aws:assertAwsResourceProperty
+    onFailure: Abort
+    inputs:
+      Service: docdb
+      Api: DescribeDBClusters
+      DBClusterIdentifier: '{{ DBClusterIdentifier }}'
+      PropertySelector: "$.DBClusters[0].Status"
+      DesiredValues:
+        - "available"
+
+  - name: GetDbClusterMembers
+    description: On this step retrieve DBClusterMembers.
+    action: aws:executeAwsApi
+    outputs:
+      - Name: DBClusterMembers
+        Selector: $.DBClusters[0].DBClusterMembers
+        Type: MapList
+    inputs:
+      Service: docdb
+      Api: DescribeDBClusters
+      Filters:
+        - Name: "db-cluster-id"
+          Values:
+            - '{{ DBClusterIdentifier }}'
+
+  - name: ValidateClusterMembersAmount
+    description: On this step validate that cluster contains at least 3 memebers.
+    action: 'aws:executeScript'
+    onFailure: Abort
+    inputs:
+      Runtime: python3.8
+      Handler: validate_cluster_members_amount
+      Script: |-
+        import logging
+        import random
+        import time
+        import uuid
+        from concurrent.futures import ThreadPoolExecutor
+        from datetime import datetime
+        from operator import itemgetter
+        from typing import List
+        
+        import boto3
+        from botocore.config import Config
+        
+        RESTORED_CLUSTER_SUFFIX_FORMAT = '%m-%d-%Y-%H-%M-%S'
+        
+        if len(logging.getLogger().handlers) > 0:
+            # The Lambda environment pre-configures a handler logging to stderr. If a handler is already configured,
+            # `.basicConfig` does not execute. Thus we set the level directly.
+            logging.getLogger().setLevel(logging.INFO)
+        else:
+            logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+        
+        
+
+        def check_required_params(required_params, events):
+            """
+            Check for required parameters in events.
+            """
+            for key in required_params:
+                if not events.get(key):
+                    raise KeyError(f'Requires {key} in events')
+        
+        
+
+        def validate_cluster_members_amount(events, context):
+            """
+            Ensure 2 instances before scaling down the cluster.
+            These 2 instances will satisfy the condition 1 Primary + 1 Replica.
+            """
+            required_params = [
+                'DBClusterMembers'
+            ]
+            check_required_params(required_params, events)
+        
+            if len(events['DBClusterMembers']) <= 2:
+                raise AssertionError('The amount of DBClusterMembers should be greater than 2 to perform scaling down.')
+        
+        
+
+      InputPayload:
+        DBClusterMembers: '{{ GetDbClusterMembers.DBClusterMembers }}'
+
+  - name: GetDBInstancesToDelete
+    description: >-
+                On this step define the instances to delete according to the input parameters.
+                Consider that the cluster should have 1 Primary and 1 Replica after the follow-up modification.
+    action: 'aws:executeScript'
+    onFailure: Abort
+    outputs:
+      - Name: DBInstancesIdentifiersToDelete
+        Selector: $.Payload.DBInstancesIdentifiersToDelete
+        Type: StringList
+    inputs:
+      Runtime: python3.8
+      Handler: get_instances_to_delete
+      Script: |-
+        import logging
+        import random
+        import time
+        import uuid
+        from concurrent.futures import ThreadPoolExecutor
+        from datetime import datetime
+        from operator import itemgetter
+        from typing import List
+        
+        import boto3
+        from botocore.config import Config
+        
+        RESTORED_CLUSTER_SUFFIX_FORMAT = '%m-%d-%Y-%H-%M-%S'
+        
+        if len(logging.getLogger().handlers) > 0:
+            # The Lambda environment pre-configures a handler logging to stderr. If a handler is already configured,
+            # `.basicConfig` does not execute. Thus we set the level directly.
+            logging.getLogger().setLevel(logging.INFO)
+        else:
+            logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+        
+        
+
+        def check_required_params(required_params, events):
+            """
+            Check for required parameters in events.
+            """
+            for key in required_params:
+                if not events.get(key):
+                    raise KeyError(f'Requires {key} in events')
+        
+        
+
+        def get_instances_to_delete_by_number(number, cluster_members):
+            """
+            Get list of random instances identifiers from cluster replicas members.
+            Ensure 1 Primary + 1 Replica remain after following deletion.
+            """
+            cluster_replicas_identifiers = []
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            docdb = boto3.client('docdb', config=config)
+            for member in cluster_members:
+                db_instance_identifer = member['DBInstanceIdentifier']
+                response = docdb.describe_db_instances(DBInstanceIdentifier=db_instance_identifer)
+                if not member['IsClusterWriter'] and response['DBInstances'][0]['DBInstanceStatus'] == 'available':
+                    cluster_replicas_identifiers.append(db_instance_identifer)
+        
+            cluster_members_amount = len(cluster_members)
+            if cluster_members_amount - 2 < number:
+                raise ValueError(f'Impossible to delete {number} instances. '
+                                 f'Max allowed for removal amount is {cluster_members_amount - 2}.')
+            return random.sample(cluster_replicas_identifiers, number)
+        
+        
+
+        def get_instances_to_delete_by_ids(ids, cluster_members):
+            """
+            Get list of instances identifiers to delete. Ensure 1 Primary + 1 Replica remain after following deletion.
+            """
+            cluster_writer_identifier = [
+                member['DBInstanceIdentifier'] for member in cluster_members if member['IsClusterWriter']
+            ][0]
+            if cluster_writer_identifier in ids:
+                raise ValueError(f'DBInstancesIdentifiersToDelete contains Primary identifier {cluster_writer_identifier}.')
+        
+            cluster_replicas_identifiers = [
+                member['DBInstanceIdentifier'] for member in cluster_members if not member['IsClusterWriter']
+            ]
+            # at least 1 item should remain in (cluster_replicas_identifiers - ids)
+            difference = [i for i in cluster_replicas_identifiers if i not in ids]
+            if not difference:
+                raise AssertionError(f'The condition `1 Primary + 1 Replica` is not satisfied if we remove instances: {ids}.')
+            if len(difference) == len(cluster_replicas_identifiers):
+                raise ValueError('DBInstancesIdentifiersToDelete does not contain identifiers belonging to cluster.')
+        
+            return ids
+        
+        
+
+        def get_instances_to_delete(events, context):
+            """
+            Get list of instances to delete, considering 1 condition: cluster should have 1 Primary and at least 1 Replica
+            instance after following deletion.
+            """
+            required_params = [
+                'DBClusterMembers'
+            ]
+            check_required_params(required_params, events)
+        
+            if not events.get('DBInstancesIdentifiersToDelete'):
+                logging.info('Parameter "DBInstancesIdentifiersToDelete" will be ignored')
+                check_required_params(['NumberOfDBInstancesToDelete'], events)
+                return {
+                    'DBInstancesIdentifiersToDelete': get_instances_to_delete_by_number(events['NumberOfDBInstancesToDelete'],
+                                                                                        events['DBClusterMembers'])}
+            else:
+                logging.info('Parameter "NumberOfDBInstancesToDelete" will be ignored')
+                return {
+                    'DBInstancesIdentifiersToDelete': get_instances_to_delete_by_ids(events['DBInstancesIdentifiersToDelete'],
+                                                                                     events['DBClusterMembers'])}
+
+      InputPayload:
+        DBClusterMembers: '{{ GetDbClusterMembers.DBClusterMembers }}'
+        NumberOfDBInstancesToDelete: '{{ NumberOfDBInstancesToDelete }}'
+        DBInstancesIdentifiersToDelete: '{{ DBInstancesIdentifiersToDelete }}'
+
+  - name: ScaleDownDocDbCLuster
+    description: On this step delete instances by ids provided in the previous step.
+    action: 'aws:executeScript'
+    onFailure: Abort
+    inputs:
+      Runtime: python3.8
+      Handler: scale_down_cluster
+      Script: |-
+        import logging
+        import random
+        import time
+        import uuid
+        from concurrent.futures import ThreadPoolExecutor
+        from datetime import datetime
+        from operator import itemgetter
+        from typing import List
+        
+        import boto3
+        from botocore.config import Config
+        
+        RESTORED_CLUSTER_SUFFIX_FORMAT = '%m-%d-%Y-%H-%M-%S'
+        
+        if len(logging.getLogger().handlers) > 0:
+            # The Lambda environment pre-configures a handler logging to stderr. If a handler is already configured,
+            # `.basicConfig` does not execute. Thus we set the level directly.
+            logging.getLogger().setLevel(logging.INFO)
+        else:
+            logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+        
+        
+
+        def check_required_params(required_params, events):
+            """
+            Check for required parameters in events.
+            """
+            for key in required_params:
+                if not events.get(key):
+                    raise KeyError(f'Requires {key} in events')
+        
+        
+
+        def scale_down_cluster(events, context):
+            """
+            Delete instances from the cluster.
+            """
+            required_params = [
+                'DBInstancesIdentifiersToDelete'
+            ]
+            check_required_params(required_params, events)
+        
+            docdb = boto3.client('docdb')
+            for identifier in events['DBInstancesIdentifiersToDelete']:
+                docdb.delete_db_instance(DBInstanceIdentifier=identifier)
+        
+        
+
+      InputPayload:
+        DBInstancesIdentifiersToDelete: '{{ GetDBInstancesToDelete.DBInstancesIdentifiersToDelete }}'
+
+  - name: WaitForInstancesAvailableStatus
+    description: On this step wait for instances are in "available" state.
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 900
+    onFailure: Abort
+    inputs:
+      Service: docdb
+      Api: DescribeDBInstances
+      Filters:
+        - Name: "db-cluster-id"
+          Values:
+            - '{{ DBClusterIdentifier }}'
+      PropertySelector: "$.DBInstances..DBInstanceStatus"
+      DesiredValues:
+          - "available"
+
+  - name: OutputRecoveryTime
+    description: Calculate execution time
+    action: 'aws:executeScript'
+    outputs:
+      - Name: RecoveryTime
+        Selector: $.Payload
+        Type: Integer
+    inputs:
+      Runtime: python3.8
+      Handler: recovery_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def recovery_time(events, context):
+            return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds
+        
+        
+
+      InputPayload:
+        StartTime: '{{ RecordStartTime.StartTime }}'
+    isEnd: true

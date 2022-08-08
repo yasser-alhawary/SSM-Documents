@@ -1,0 +1,850 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-ForceSQSFifoQueueMaxReceiveFailureTest_2020-11-27
+
+            ## Intent
+            Test FIFO SQS behavior after receiving a message more than maximum times allowed. The message should be moved to DLQ hence wait for ApproximateNumberOfMessagesVisible metric alarm for DLQ to trigger that number of messages in DLQ is more than 0
+
+            ## Type
+            TEST
+
+            ## Risk
+            High
+
+            ## Requirements:
+              * FIFO SQS queue with DLQ redrive policy set up
+              * Amazon CloudWatch alarm is setup for [ApproximateNumberOfMessagesVisible](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-available-cloudwatch-metrics.html) metric for DLQ. Should trigger when number messages is more than 0
+
+            ## Depends on
+            AWSResilienceHub-MoveSQSMessagesBetweenQueuesSOP_2021-03-11
+
+            ## Permissions required for AutomationAssumeRole
+            * cloudwatch:DescribeAlarms
+            * sqs:GetQueueAttributes
+            * sqs:SetQueueAttributes
+            * sqs:ReceiveMessage
+            * sqs:SendMessage
+            * sqs:DeleteMessage
+            * sqs:GetQueueUrl
+            * ssm:StartAutomationExecution
+            * ssm:GetAutomationExecution
+            * ssm:GetParameters
+            * iam:PassRole
+
+            ##### In case queues are encrypted with a KMS key
+              * kms:GenerateDataKey
+              * kms:Decrypt
+              * kms:Encrypt
+
+            ##### To write logs to CloudWatch
+              * logs:CreateLogStream
+              * logs:PutLogEvents
+              * logs:DescribeLogGroups
+              * logs:DescribeLogStreams
+
+            ## Supports Rollback
+            Yes. Revert redrive policy and visibility timeout. If `MoveMessagesFromDeadLetterQueue` is true the document executes AWSResilienceHub-MoveSQSMessagesBetweenQueuesSOP_2021-03-11 SOP to move messages back from DLQ
+
+            ## Cancellation behavior
+            Revert redrive policy and visibility timeout. If `MoveMessagesFromDeadLetterQueue` is true the document executes AWSResilienceHub-MoveSQSMessagesBetweenQueuesSOP_2021-03-11 SOP to move messages back from DLQ
+
+            ## Inputs
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: ARN of the IAM role with permissions listed above
+
+            ### (Required) QueueUrl
+              * type: String
+              * description: The URL of the SQS queue
+
+            ### (Required) DeadLetterQueueAlarmName
+              * type: String
+              * description: Amazon CloudWatch alarm for [ApproximateNumberOfMessagesVisible](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-available-cloudwatch-metrics.html) metric for DLQ. Should trigger when number messages is more than 0
+
+            ### (Optional) MoveMessagesFromDeadLetterQueue
+              * type: String
+              * description: Purge dead-letter queue and assert alarm to be green after test and also during rollback execution. True of false
+              * default: false
+
+            ### (Optional) IsRollback
+              * type: String
+              * description: Run the rollback steps of the document. True or False. If True, the parameter PreviousExecutionId should also be specified
+              * default: false
+
+            ### (Optional) PreviousExecutionId
+              * type: String
+              * description: SSM execution ID of the previous execution of this document for which resources need to be cleaned up
+
+            ## Details
+            The document injects failure by setting redrive policy to a small number of retries and visibility timeout
+            to zero and reading messages until they get redriven to DLQ. If `MoveMessagesFromDeadLetterQueue` input
+            parameter is true the document executes AWSResilienceHub-MoveSQSMessagesBetweenQueuesSOP_2021-03-11 SOP to move all
+            messages back from DLQ. Note that messages that have been already present in the DLQ before the test will
+            also be moved to the main queue. In case of issues users should manually remove messages from DLQ or use
+            AWSResilienceHub-MoveSQSMessagesBetweenQueuesSOP_2021-03-11 document to send them back.
+
+            ## Steps executed in normal flow
+              * CheckIsRollback
+              * AssertAlarmToBeGreenBeforeTest
+              * BackupCurrentExecution
+              * GetUpdatedRedrivePolicy
+              * SetQueueAttributes
+              * ReadMessage
+              * AssertAlarmToBeRed
+              * RollbackCurrentExecution
+              * CheckIsMoveMessagesFromDeadLetterQueue
+              * GetDeadLetterQueueUrl
+              * SleepBeforeGetNumberOfMessagesToMove
+              * GetNumberOfMessagesToMove
+              * MoveMessages
+              * AssertAlarmToBeGreen
+
+            ## Steps executed in rollback flow
+              * CheckIsRollback
+              * GetInputsFromPreviousExecution
+              * AssertQueueUrl
+              * PrepareRollbackOfPreviousExecutionQueueAttributes
+              * GetDeadLetterQueueUrlFromPreviousExecution
+              * RollbackPreviousExecutionQueueAttributes
+              * CheckIfMoveEnabledInPreviousExecution
+              * AssertMoveEnabledFlag
+              * GetDLQVisibilityTimeout
+              * WaitForDLQVisibilityTimeout
+              * MoveMessagesForPreviousExecution
+
+            ## Outputs
+            None
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  QueueUrl:
+    type: String
+    description: (Required) The URL of the queue
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+  DeadLetterQueueAlarmName:
+    type: String
+    description: (Required) Alarm which should be red after injection of the failure and green after the rollback process in the end of the test.
+  MoveMessagesFromDeadLetterQueue:
+    type: String
+    description: (Optional) Purge dead-letter queue and assert alarm to be green after test and also during rollback execution
+    default: 'false'
+  IsRollback:
+    type: String
+    description: >-
+      (Optional) Run the rollback steps of the document. True or False. If True, the parameter PreviousExecutionId should also be specified
+    default: 'false'
+  PreviousExecutionId:
+    type: String
+    description: >-
+      (Optional) SSM execution ID of the previous execution of this document for which resources need to be cleaned up
+    default: ''
+mainSteps:
+  - name: CheckIsRollback
+    description: Check if document should be executed in rollback mode
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: GetInputsFromPreviousExecution
+          Variable: "{{ IsRollback }}"
+          EqualsIgnoreCase: 'true'
+      Default: AssertAlarmToBeGreenBeforeTest
+
+  - name: GetInputsFromPreviousExecution
+    description: Get input from previous execution. This will be used to validate that rollback is executed with the same input
+    action: aws:executeScript
+    outputs:
+      - Name: QueueUrl
+        Selector: $.Payload.QueueUrl[0]
+        Type: String
+      - Name: MoveMessagesFromDeadLetterQueue
+        Selector: $.Payload.MoveMessagesFromDeadLetterQueue[0]
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: get_inputs_from_ssm_execution
+      InputPayload:
+        ExecutionId: '{{ PreviousExecutionId }}'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def get_inputs_from_ssm_execution(events, context):
+            output = {}
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events:
+                raise KeyError('Requires ExecutionId')
+        
+            if not events['ExecutionId']:
+                raise KeyError('Requires not empty ExecutionId')
+        
+            response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+            response_parameters = response['AutomationExecution']['Parameters']
+            # TODO DIG-853
+            for parameter in response_parameters:
+                output[parameter] = response_parameters[parameter]
+        
+            return output
+        
+        
+
+
+  - name: AssertQueueUrl
+    description: Validate that rollback is executed with the same input
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: PrepareRollbackOfPreviousExecutionQueueAttributes
+          Variable: "{{ GetInputsFromPreviousExecution.QueueUrl }}"
+          StringEquals: '{{ QueueUrl }}'
+    isEnd: true
+
+  - name: PrepareRollbackOfPreviousExecutionQueueAttributes
+    description: Get initital queue redrive policy
+    action: aws:executeScript
+    outputs:
+      - Name: RedrivePolicy
+        Selector: $.Payload.RedrivePolicy[0]
+        Type: String
+      - Name: VisibilityTimeout
+        Selector: $.Payload.VisibilityTimeout[0]
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: get_output_from_ssm_step_execution
+      InputPayload:
+        ExecutionId: '{{ PreviousExecutionId }}'
+        StepName: 'BackupCurrentExecution'
+        ResponseField: 'VisibilityTimeout,RedrivePolicy'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def get_output_from_ssm_step_execution(events, context):
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events or 'StepName' not in events or 'ResponseField' not in events:
+                raise KeyError('Requires ExecutionId, StepName and ResponseField in events')
+        
+            ssm_response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+            for step in ssm_response['AutomationExecution']['StepExecutions']:
+                if step['StepName'] == events['StepName']:
+                    response_fields = events['ResponseField'].split(',')
+                    output = {}
+                    for response_field in response_fields:
+                        if response_field in step['Outputs']:
+                            # Sets values in string type regardless of what is the original value type. In order to set
+                            # values with original types please use 'get_typed_output_from_ssm_step_execution'.
+                            output[response_field] = step['Outputs'][response_field]
+                        else:
+                            """
+                            By default SSM ignores empty values when encodes API outputs to JSON. It may result in
+                            a situation when an empty value is a valid value but step output completely misses it.
+                            Usually happens with SQS queue policies, default policy is returned by API as an empty value
+                            and executeApi step output ignores it. As a result, further steps in rollback execution will fail.
+                            Instead of ignoring this value we should use a default empty value in rollback, i.e. empty string
+                            represents a default sqs policy
+                            """
+                            output[response_field] = ['']
+                    return output
+        
+            # Could not find step name
+            raise Exception('Can not find step name % in ssm execution response', events['StepName'])
+        
+        
+
+
+  - name: GetDeadLetterQueueUrlFromPreviousExecution
+    description: Get DLQ URL from redrive policy
+    action: aws:executeScript
+    outputs:
+      - Name: QueueUrl
+        Selector: $.Payload.QueueUrl
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: get_dead_letter_queue_url
+      InputPayload:
+        SourceRedrivePolicy: '{{ PrepareRollbackOfPreviousExecutionQueueAttributes.RedrivePolicy }}'
+      Script: |-
+        import json
+        import logging
+        import time
+        import uuid
+        import boto3
+        import random
+        from datetime import datetime
+        from typing import List, Callable, Optional
+        from botocore.exceptions import ClientError
+        from botocore.config import Config
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+
+        def get_dead_letter_queue_url(events: dict, context: dict) -> dict:
+            """
+            Retrieves dead-letter queue URL by RedrivePolicy
+            """
+            if "SourceRedrivePolicy" not in events:
+                raise KeyError("Requires SourceRedrivePolicy in events")
+        
+            source_redrive_policy: str = events.get("SourceRedrivePolicy")
+            if not source_redrive_policy:
+                raise KeyError("Requires not empty SourceRedrivePolicy")
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            sqs_client = boto3.client("sqs", config=config)
+            source_redrive_policy: dict = json.loads(source_redrive_policy)
+            dead_letter_queue_name: str = source_redrive_policy.get("deadLetterTargetArn").split(':', 5)[5]
+            get_queue_url_response: dict = sqs_client.get_queue_url(QueueName=dead_letter_queue_name)
+            dead_letter_queue_url: str = get_queue_url_response['QueueUrl']
+        
+            return {"QueueUrl": dead_letter_queue_url}
+        
+        
+
+
+  - name: RollbackPreviousExecutionQueueAttributes
+    description: Revert initial redrive policy
+    action: aws:executeAwsApi
+    inputs:
+      Service: sqs
+      Api: SetQueueAttributes
+      QueueUrl: '{{ QueueUrl }}'
+      Attributes:
+        VisibilityTimeout: '{{ PrepareRollbackOfPreviousExecutionQueueAttributes.VisibilityTimeout }}'
+        RedrivePolicy: '{{ PrepareRollbackOfPreviousExecutionQueueAttributes.RedrivePolicy }}'
+
+  - name: CheckIfMoveEnabledInPreviousExecution
+    description: Check if flag to clear DLQ is enabled
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: AssertMoveEnabledFlag
+          Variable: "{{ GetInputsFromPreviousExecution.MoveMessagesFromDeadLetterQueue }}"
+          EqualsIgnoreCase: 'true'
+    isEnd: true
+
+  - name: AssertMoveEnabledFlag
+    description: Validate that flag to clear DLQ was set on the previous execution
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: GetDLQVisibilityTimeout
+          Variable: "{{ GetInputsFromPreviousExecution.MoveMessagesFromDeadLetterQueue }}"
+          EqualsIgnoreCase: '{{ MoveMessagesFromDeadLetterQueue }}'
+    isEnd: true
+
+  - name: GetDLQVisibilityTimeout
+    description: Get DLQ visibility timeout value
+    action: aws:executeAwsApi
+    outputs:
+      - Name: VisibilityTimeout
+        Selector: '$.Attributes.VisibilityTimeout'
+        Type: String
+    inputs:
+      Service: sqs
+      Api: GetQueueAttributes
+      AttributeNames:
+        - VisibilityTimeout
+      QueueUrl: '{{ GetDeadLetterQueueUrlFromPreviousExecution.QueueUrl }}'
+
+  - name: WaitForDLQVisibilityTimeout
+    description: Wait for DLQ visiblity timeout time to ensure all messages are visible
+    action: 'aws:sleep'
+    inputs:
+      Duration: 'PT{{ GetDLQVisibilityTimeout.VisibilityTimeout }}S'
+
+  - name: GetNumberOfMessagesToMoveForPreviousExecution
+    description: Count number of messages on DLQ to be moved back
+    action: aws:executeAwsApi
+    outputs:
+      - Name: ApproximateNumberOfMessages
+        Selector: '$.Attributes.ApproximateNumberOfMessages'
+        Type: String
+    inputs:
+      Service: sqs
+      Api: GetQueueAttributes
+      AttributeNames:
+        - ApproximateNumberOfMessages
+      QueueUrl: '{{ GetDeadLetterQueueUrlFromPreviousExecution.QueueUrl }}'
+
+  - name: MoveMessagesForPreviousExecution
+    description: Execute AWSResilienceHub-MoveSQSMessagesBetweenQueuesSOP_2021-03-11 SOP to move messages back from DLQ to queue
+    action: aws:executeAutomation
+    maxAttempts: 3
+    timeoutSeconds: 600
+    onFailure: Abort
+    inputs:
+      DocumentName: AWSResilienceHub-MoveSQSMessagesBetweenQueuesSOP_2021-03-11
+      RuntimeParameters:
+        SourceQueueUrl: '{{ GetDeadLetterQueueUrlFromPreviousExecution.QueueUrl }}'
+        TargetQueueUrl: '{{ GetInputsFromPreviousExecution.QueueUrl }}'
+        NumberOfMessagesToTransfer: '{{ GetNumberOfMessagesToMoveForPreviousExecution.ApproximateNumberOfMessages }}'
+        AutomationAssumeRole: '{{ AutomationAssumeRole }}'
+    isEnd: true
+
+  - name: AssertAlarmToBeGreenBeforeTest
+    description: Ensure alarm is green before starting test. Fail if alarm is not green within expected time
+    action: aws:waitForAwsResourceProperty
+    timeoutSeconds: 1200
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{ DeadLetterQueueAlarmName }}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: ["OK"]
+
+  - name: BackupCurrentExecution
+    description: Backup initial redrive policy for rollback
+    action: aws:executeAwsApi
+    outputs:
+      - Name: QueueArn
+        Selector: '$.Attributes.QueueArn'
+        Type: String
+      - Name: VisibilityTimeout
+        Selector: '$.Attributes.VisibilityTimeout'
+        Type: String
+      - Name: RedrivePolicy
+        Selector: '$.Attributes.RedrivePolicy'
+        Type: String
+    inputs:
+      Service: sqs
+      Api: GetQueueAttributes
+      AttributeNames:
+        - QueueArn
+        - VisibilityTimeout
+        - RedrivePolicy
+      QueueUrl: '{{ QueueUrl }}'
+
+  - name: GetUpdatedRedrivePolicy
+    description: Generate redrive policy with small receive count to force messages go to DLQ
+    action: aws:executeScript
+    outputs:
+      - Name: RedrivePolicy
+        Selector: $.Payload.RedrivePolicy
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: update_max_receive_count
+      InputPayload:
+        SourceRedrivePolicy: '{{ BackupCurrentExecution.RedrivePolicy }}'
+        MaxReceiveCount: 1
+      Script: |-
+        import json
+        import logging
+        import time
+        import uuid
+        import boto3
+        import random
+        from datetime import datetime
+        from typing import List, Callable, Optional
+        from botocore.exceptions import ClientError
+        from botocore.config import Config
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+
+        def update_max_receive_count(events: dict, context: dict) -> dict:
+            """
+            Update SQS Redrive Policy with new value of MaxReceiveCount
+            """
+            if "SourceRedrivePolicy" not in events or "MaxReceiveCount" not in events:
+                raise KeyError("Requires SourceRedrivePolicy and MaxReceiveCount in events")
+        
+            source_redrive_policy: str = events.get("SourceRedrivePolicy")
+            if not source_redrive_policy:
+                raise KeyError("Requires not empty SourceRedrivePolicy")
+        
+            max_receive_count: int = events.get("MaxReceiveCount")
+            if not 1 <= max_receive_count <= 1000:
+                raise KeyError("Requires MaxReceiveCount to be in a range 1...1000")
+        
+            source_redrive_policy: dict = json.loads(source_redrive_policy)
+            redrive_policy: dict = {
+                "deadLetterTargetArn": source_redrive_policy.get("deadLetterTargetArn"),
+                "maxReceiveCount": max_receive_count
+            }
+        
+            return {"RedrivePolicy": json.dumps(redrive_policy)}
+        
+        
+
+
+  - name: SetQueueAttributes
+    description: Set queue redrive policy to the generated one
+    action: aws:executeAwsApi
+    onFailure: 'step:RollbackCurrentExecution'
+    onCancel: 'step:TriggerRollback'
+    inputs:
+      Service: sqs
+      Api: SetQueueAttributes
+      QueueUrl: '{{ QueueUrl }}'
+      Attributes:
+        VisibilityTimeout: "0"
+        RedrivePolicy: '{{ GetUpdatedRedrivePolicy.RedrivePolicy }}'
+
+  - name: ReadMessage
+    description: Read messages on queue until they are moved to DLQ
+    action: aws:executeScript
+    onFailure: 'step:RollbackCurrentExecution'
+    onCancel: 'step:TriggerRollback'
+    inputs:
+      Runtime: python3.8
+      Handler: receive_messages_by_events
+      InputPayload:
+        QueueUrl: '{{ QueueUrl }}'
+        MaxNumberOfMessages: 2
+        WaitTimeSeconds: 20
+        RedrivePolicy: '{{ BackupCurrentExecution.RedrivePolicy }}'
+        VisibilityTimeout: '{{ BackupCurrentExecution.VisibilityTimeout }}'
+      Script: |-
+        import json
+        import logging
+        import time
+        import uuid
+        import boto3
+        import random
+        from datetime import datetime
+        from typing import List, Callable, Optional
+        from botocore.exceptions import ClientError
+        from botocore.config import Config
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+
+        def get_number_of_messages(queue_url: str) -> int:
+            """
+            Util function to get approximate number of messages from the queue
+            """
+            sqs_client = boto3.client("sqs")
+            response = sqs_client.get_queue_attributes(
+                QueueUrl=queue_url,
+                AttributeNames=[
+                    'ApproximateNumberOfMessages'
+                ]
+            )
+            return int(response['Attributes']['ApproximateNumberOfMessages'])
+        
+        
+
+        def get_dead_letter_queue_url(events: dict, context: dict) -> dict:
+            """
+            Retrieves dead-letter queue URL by RedrivePolicy
+            """
+            if "SourceRedrivePolicy" not in events:
+                raise KeyError("Requires SourceRedrivePolicy in events")
+        
+            source_redrive_policy: str = events.get("SourceRedrivePolicy")
+            if not source_redrive_policy:
+                raise KeyError("Requires not empty SourceRedrivePolicy")
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            sqs_client = boto3.client("sqs", config=config)
+            source_redrive_policy: dict = json.loads(source_redrive_policy)
+            dead_letter_queue_name: str = source_redrive_policy.get("deadLetterTargetArn").split(':', 5)[5]
+            get_queue_url_response: dict = sqs_client.get_queue_url(QueueName=dead_letter_queue_name)
+            dead_letter_queue_url: str = get_queue_url_response['QueueUrl']
+        
+            return {"QueueUrl": dead_letter_queue_url}
+        
+        
+
+        def receive_messages(source_queue_url: str, messages_transfer_batch_size: int, wait_timeout: int = 0) -> 
+                Optional[List[dict]]:
+            """
+            Receive messages
+            :param wait_timeout: The duration i seconds for which the call waits for a message to arrive in the queue
+            :param messages_transfer_batch_size: how many messages to receive
+            :param source_queue_url:  URL of the queue where from messages are received
+            :return: response of receive_message method
+            """
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            sqs_client = boto3.client("sqs", config=config)
+            receive_message_response: dict = 
+                sqs_client.receive_message(QueueUrl=source_queue_url,
+                                           MaxNumberOfMessages=messages_transfer_batch_size,
+                                           WaitTimeSeconds=wait_timeout,
+                                           MessageAttributeNames=['All'],
+                                           AttributeNames=['All'])
+            return receive_message_response.get('Messages')
+        
+        
+
+        def receive_messages_by_events(events: dict, context: dict) -> dict:
+            """
+            Receive messages using events as an input and invoke method receive_messages
+            :param context:
+            :param events:
+                'QueueUrl': URL of the queue where from messages are received
+                'MaxNumberOfMessages': how many messages to receive
+                'WaitTimeSeconds': duration in seconds for which the call waits for a message to arrive in the queue
+                'ScriptTimeout': script timeout in seconds
+                'RedrivePolicy': Redrive policy to check queue DLQ
+                'MaxAttempts': Max number of read attempts
+            :return: response of receive_message method
+            """
+            if "QueueUrl" not in events:
+                raise KeyError("Requires QueueUrl in events")
+        
+            if "MaxNumberOfMessages" in events and not 1 <= int(events['MaxNumberOfMessages']) <= 10:
+                raise KeyError("Requires MaxNumberOfMessages to be in a range 1..10")
+        
+            queue_url = events['QueueUrl']
+            script_timeout = int(events.get('ScriptTimeout', 300))
+            wait_timeout_seconds = int(events.get('WaitTimeSeconds', 5))
+            max_number_of_messages = int(events.get('MaxNumberOfMessages', 1))
+            max_attempts = int(events.get('MaxAttempts', 10))
+        
+            if "RedrivePolicy" not in events:
+                raise KeyError("Requires RedrivePolicy in events to check DLQ")
+            dlq_url = get_dead_letter_queue_url({'SourceRedrivePolicy': events['RedrivePolicy']}, {})['QueueUrl']
+        
+            start = datetime.now()
+            attempt = 1
+        
+            while (datetime.now() - start).total_seconds() < script_timeout and attempt <= max_attempts:
+                attempt += 1
+                received_messages = receive_messages(queue_url, max_number_of_messages, wait_timeout_seconds)
+                if received_messages is not None and len(received_messages) != 0:
+                    # Check if messages arrived to DLQ
+                    logger.debug('Wait for DLQ to receive messages')
+                    received_dlq_messages = receive_messages(dlq_url, 10, 20)
+                    if received_dlq_messages and len(received_dlq_messages) > 0:
+                        logger.debug(f'DLQ has {len(received_dlq_messages)} messages')
+                        return {
+                            "NumberOfReadMessages": len(received_messages),
+                            "NumberOfDLQMessages": len(received_dlq_messages)
+                        }
+                    else:
+                        logger.debug('Messages not found in DLQ')
+                else:
+                    logger.debug('Messages not received')
+        
+            raise Exception('Could not read messages before timeout')
+        
+        
+
+
+  - name: AssertAlarmToBeRed
+    description: Wait for expected alarm to be red after failure is injected
+    action: aws:waitForAwsResourceProperty
+    timeoutSeconds: 1200
+    onFailure: 'step:RollbackCurrentExecution'
+    onCancel: 'step:TriggerRollback'
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{ DeadLetterQueueAlarmName }}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: [ "ALARM" ]
+
+  - name: RollbackCurrentExecution
+    description: Revert redrive policy to initial state
+    action: aws:executeAwsApi
+    onCancel: 'step:TriggerRollback'
+    inputs:
+      Service: sqs
+      Api: SetQueueAttributes
+      QueueUrl: '{{ QueueUrl }}'
+      Attributes:
+        RedrivePolicy: '{{ BackupCurrentExecution.RedrivePolicy }}'
+        VisibilityTimeout: '{{ BackupCurrentExecution.VisibilityTimeout }}'
+
+  - name: CheckIsMoveMessagesFromDeadLetterQueue
+    description: Check if flag to clear DLQ is enabled
+    action: aws:branch
+    onCancel: 'step:TriggerRollback'
+    inputs:
+      Choices:
+        - NextStep: GetDeadLetterQueueUrl
+          Variable: "{{ MoveMessagesFromDeadLetterQueue }}"
+          EqualsIgnoreCase: 'true'
+    isEnd: true
+
+  - name: GetDeadLetterQueueUrl
+    description: Get DLQ URL from redrive policy
+    action: aws:executeScript
+    onCancel: 'step:TriggerRollback'
+    outputs:
+      - Name: QueueUrl
+        Selector: $.Payload.QueueUrl
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: get_dead_letter_queue_url
+      InputPayload:
+        SourceRedrivePolicy: '{{ BackupCurrentExecution.RedrivePolicy }}'
+      Script: |-
+        import json
+        import logging
+        import time
+        import uuid
+        import boto3
+        import random
+        from datetime import datetime
+        from typing import List, Callable, Optional
+        from botocore.exceptions import ClientError
+        from botocore.config import Config
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+
+        def get_dead_letter_queue_url(events: dict, context: dict) -> dict:
+            """
+            Retrieves dead-letter queue URL by RedrivePolicy
+            """
+            if "SourceRedrivePolicy" not in events:
+                raise KeyError("Requires SourceRedrivePolicy in events")
+        
+            source_redrive_policy: str = events.get("SourceRedrivePolicy")
+            if not source_redrive_policy:
+                raise KeyError("Requires not empty SourceRedrivePolicy")
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            sqs_client = boto3.client("sqs", config=config)
+            source_redrive_policy: dict = json.loads(source_redrive_policy)
+            dead_letter_queue_name: str = source_redrive_policy.get("deadLetterTargetArn").split(':', 5)[5]
+            get_queue_url_response: dict = sqs_client.get_queue_url(QueueName=dead_letter_queue_name)
+            dead_letter_queue_url: str = get_queue_url_response['QueueUrl']
+        
+            return {"QueueUrl": dead_letter_queue_url}
+        
+        
+
+
+  - name: SleepBeforeGetNumberOfMessagesToMove
+    description: Sleep for 1 minute for ApproximateNumberOfMessages metric to become stable
+    onCancel: 'step:TriggerRollback'
+    action: "aws:sleep"
+    inputs:
+      Duration: "PT60S"
+
+  - name: GetNumberOfMessagesToMove
+    description: Get number of messages on DLQ to move back
+    action: aws:executeAwsApi
+    onCancel: 'step:TriggerRollback'
+    outputs:
+      - Name: ApproximateNumberOfMessages
+        Selector: '$.Attributes.ApproximateNumberOfMessages'
+        Type: String
+    inputs:
+      Service: sqs
+      Api: GetQueueAttributes
+      AttributeNames:
+        - ApproximateNumberOfMessages
+      QueueUrl: '{{ GetDeadLetterQueueUrl.QueueUrl }}'
+
+  - name: MoveMessages
+    description: Execute AWSResilienceHub-MoveSQSMessagesBetweenQueuesSOP_2021-03-11 SOP to move messages back from DLQ
+    action: aws:executeAutomation
+    onCancel: 'step:TriggerRollback'
+    maxAttempts: 3
+    timeoutSeconds: 600
+    onFailure: Abort
+    inputs:
+      DocumentName: AWSResilienceHub-MoveSQSMessagesBetweenQueuesSOP_2021-03-11
+      RuntimeParameters:
+        SourceQueueUrl: '{{ GetDeadLetterQueueUrl.QueueUrl }}'
+        TargetQueueUrl: '{{ QueueUrl }}'
+        NumberOfMessagesToTransfer: '{{ GetNumberOfMessagesToMove.ApproximateNumberOfMessages }}'
+        AutomationAssumeRole: '{{ AutomationAssumeRole }}'
+
+  - name: AssertAlarmToBeGreen
+    description: Wait for the alarm to be green after test is complete
+    action: aws:waitForAwsResourceProperty
+    timeoutSeconds: 1200
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{ DeadLetterQueueAlarmName }}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: [ "OK" ]
+    isEnd: true
+  - name: TriggerRollback
+    description: This step is executed when ssm document is cancelled while it was in progress. This step starts a new execution of document in rollback mode to rollback the changes made as part of normal execution
+    action: 'aws:executeScript'
+    onFailure: Abort
+    outputs:
+      - Name: RollbackExecutionId
+        Selector: $.Payload.RollbackExecutionId
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: start_rollback_execution
+      InputPayload:
+        ExecutionId: '{{automation:EXECUTION_ID}}'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def start_rollback_execution(events, context):
+            output = {}
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events or not events['ExecutionId']:
+                raise KeyError('Requires not empty ExecutionId')
+        
+            response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+        
+            # Get parameters for current execution and add IsRollback and PreviousExecutionId
+            response_parameters = response['AutomationExecution']['Parameters']
+            response_parameters['IsRollback'] = ['true']
+            response_parameters['PreviousExecutionId'] = [events['ExecutionId']]
+        
+            rollback_execution_response = ssm.start_automation_execution(
+                DocumentName=response['AutomationExecution']['DocumentName'],
+                DocumentVersion=response['AutomationExecution']['DocumentVersion'],
+                Parameters=response_parameters
+            )
+            output['RollbackExecutionId'] = rollback_execution_response['AutomationExecutionId']
+            return output
+        
+        
+
+    isEnd: true

@@ -1,0 +1,84 @@
+description: |
+   ### Document name - AWSConfigRemediation-DeleteOpenSearchDomain
+
+   ## What does this document do?
+   This runbook deletes the given Amazon OpenSearch Service domain using the [DeleteDomain](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/configuration-api.html#configuration-api-actions-deletedomain) API.
+
+   ## Input Parameters
+   * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+   * DomainName: (Required) The name of the Amazon OpenSearch Service domain that you want to delete.
+
+   ## Output Parameters
+   * DeleteOpenSearchDomainAndVerify.Output: Success message or failure exception.
+
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that allows Systems Manager Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(?:aws|aws-us-gov|aws-cn):iam::d{12}:role/[w+=,.@/-]+$
+  DomainName:
+    type: String
+    description: (Required) The name of the Amazon OpenSearch Service domain that you want to delete.
+    allowedPattern: (d{12}/)?[a-z]{1}[a-z0-9-]{2,28}
+outputs:
+  - DeleteOpenSearchDomainAndVerify.Output
+mainSteps:
+  -
+    name: DeleteOpenSearchDomainAndVerify
+    action: "aws:executeScript"
+    description: |
+      ## DeleteOpenSearchDomainAndVerify
+      Accepts the Amazon OpenSearch Service domain name as input, deletes it, and verifies the deletion.
+      ## Outputs
+      * Output: Success message or failure exception.
+    timeoutSeconds: 600
+    inputs:
+      Runtime: python3.8
+      Handler: handler
+      InputPayload:
+        DomainName: "{{ DomainName }}"
+      Script: |-
+        import boto3
+        import re
+        from botocore.config import Config
+
+        config = Config(
+            retries={
+                "max_attempts": 10,
+                "mode": "standard"
+            }
+        )
+
+        opensearch_client = boto3.client("opensearch", config=config)
+
+        def verify_opensearch_domain_exist(domain_name):
+            desc_domain = opensearch_client.describe_domain(DomainName=domain_name)
+            if desc_domain["DomainStatus"]["Deleted"]:
+                return False
+            return True
+
+        def delete_opensearch_domain(domain_name):
+            return opensearch_client.delete_domain(DomainName=domain_name)
+
+        def handler(event, context):
+            domain_name = event["DomainName"]
+            domain_pattern = r"(d{12}/)?[a-z]{1}[a-z0-9-]{2,28}"
+            if re.match(domain_pattern, domain_name):
+                domain_name = domain_name.split("/")[-1]
+
+            response = delete_opensearch_domain(domain_name)['ResponseMetadata']
+            domain_exist = verify_opensearch_domain_exist(domain_name)
+            if not domain_exist:
+                return {
+                    "output": {
+                        "message": "Verification of delete Amazon OpenSearch service domain is successful.",
+                        "HTTPResponse": response,
+                    }
+                }
+            raise Exception("VERIFICATION FAILED. AMAZON OPENSEARCH SERVICE DOMAIN NOT DELETED.")
+
+    outputs:
+      - Name: Output
+        Selector: $.Payload.output
+        Type: StringMap

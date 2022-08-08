@@ -1,0 +1,613 @@
+description: "Get performance counters."
+sessionType: InteractiveCommands
+parameters:
+  CPU:
+    type: "String"
+    default: "Yes"
+    description: "(Optional) Get CPU performance."
+    allowedValues:
+    - "Yes"
+    - "No"
+  DriveRead:
+    type: "String"
+    default: "Yes"
+    description: "(Optional) Get Drive Reads performance."
+    allowedValues:
+    - "Yes"
+    - "No"
+  DriveWrite:
+    type: "String"
+    default: "Yes"
+    description: "(Optional) Get Drive Writes performance."
+    allowedValues:
+    - "Yes"
+    - "No"
+  NetworkSend:
+    type: "String"
+    default: "Yes"
+    description: "(Optional) Get Network Sends performance."
+    allowedValues:
+    - "Yes"
+    - "No"
+  NetworkReceive:
+    type: "String"
+    default: "Yes"
+    description: "(Optional) Get Network Receive performance."
+    allowedValues:
+    - "Yes"
+    - "No"
+  Memory:
+    type: "String"
+    default: "Yes"
+    description: "(Optional) Get Memory performance."
+    allowedValues:
+    - "Yes"
+    - "No"
+  PrintInteractiveStatements:
+    type: String
+    description: "(Optional) If set to 'No', the execution will not print text that indicates a keystoke is required to continue execution."
+    default: 'No'
+    allowedValues:
+    - 'Yes'
+    - 'No'
+properties:
+  windows:
+    commands: |
+        $ErrorActionPreference = 'Stop'
+        
+        Function ParseInputParameter {
+            param (
+                [string]$Name,
+                [string]$Value,
+                [string]$Regex
+            )
+        
+            $ValidParameterRegex = '^--%[ +{|{].*}( +)?$'
+            if ($Value -notmatch $ValidParameterRegex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            }
+            $parameterValue = $Value.Substring(3)
+        
+            $trimmedParameterValue = $parameterValue.TrimStart().TrimEnd()
+            $trimmedParameterValue = $trimmedParameterValue.Substring(1)
+            $trimmedParameterValue = $trimmedParameterValue.Substring(0, $trimmedParameterValue.Length - 1)
+        
+            if ($Regex -and $trimmedParameterValue -notmatch $Regex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            } else {
+                $trimmedParameterValue
+            }
+        }
+        
+        function ExitWithFailureMessage {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PrintJson) {ConvertTo-Json -InputObject @{error = $errorMessage} -Compress}
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit(1)
+        }
+        
+        function ExitWithFailureMessageAndExitCode {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [int]$ExitCode,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PSBoundParameters.ContainsKey('ExitCode') -eq $true) {
+                $exitCode = $ExitCode
+            } else {
+                $exitCode = 1
+            }
+            if ($PrintJson) {
+                $ErrorObject = @{
+                    error = $errorMessage
+                    exitCode = $exitCode
+                }
+                ConvertTo-Json -InputObject $ErrorObject -Compress
+            }
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit($exitCode)
+        }
+        
+        function ExitWithSuccessMessage {
+            param (
+                [string]$Message
+            )
+            Write-Host $Message
+            [System.Environment]::Exit(0)
+        }
+        
+        function WriteStandardError {
+            param (
+                [string]$Message
+            )
+            $Host.UI.WriteErrorLine($Message)
+        }
+
+        $CPU = Write-Output --%{{{ CPU }}}
+        $CPU = ParseInputParameter -Name 'CPU' -Value $CPU -Regex '(Yes|No)'
+        
+        $DriveRead = Write-Output --%{{{ DriveRead }}}
+        $DriveRead = ParseInputParameter -Name 'DriveRead' -Value $DriveRead -Regex '(Yes|No)'
+        
+        $DriveWrite = Write-Output --%{{{ DriveWrite }}}
+        $DriveWrite = ParseInputParameter -Name 'DriveWrite' -Value $DriveWrite -Regex '(Yes|No)'
+        
+        $NetworkSend = Write-Output --%{{{ NetworkSend }}}
+        $NetworkSend = ParseInputParameter -Name 'NetworkSend' -Value $NetworkSend -Regex '(Yes|No)'
+        
+        $NetworkReceive = Write-Output --%{{{ NetworkReceive }}}
+        $NetworkReceive = ParseInputParameter -Name 'NetworkReceive' -Value $NetworkReceive -Regex '(Yes|No)'
+        
+        $Memory = Write-Output --%{{{ Memory }}}
+        $Memory = ParseInputParameter -Name 'Memory' -Value $Memory -Regex '(Yes|No)'
+        
+        $PrintInteractiveStatements = Write-Output --%{{{ PrintInteractiveStatements }}}
+        $PrintInteractiveStatements = ParseInputParameter -Name 'PrintInteractiveStatements' -Value $PrintInteractiveStatements -Regex '(Yes|No)'
+        
+        $Counters = New-Object -TypeName 'System.Collections.ArrayList'
+        
+        Function UpdateCountersJson {
+            param(
+                [Parameter(Mandatory = $true)]
+                [string]$ValueName,
+                [Parameter(Mandatory = $true)]
+                [string]$Value,
+                [Parameter(Mandatory = $true)]
+                [string]$Unit,
+                [Parameter(Mandatory = $true)]
+                [string]$Device,
+                [Parameter(Mandatory = $true)]
+                [string]$Name
+            )
+        
+            $Output = @( @{name = "$ValueName"; value = "$Value"; unit = "$Unit" } )
+            $CounterObj = $Counters | ConvertFrom-Json
+            $CounterObj.groups.$Device.counters.$Name += $Output
+            $CounterObj = ConvertTo-Json -InputObject $CounterObj -Depth 6 -Compress
+        
+            return $CounterObj
+        }
+        
+        Function Main {
+            $null = $Counters.Clear()
+           [int]$Timestamp = (Get-Date -UFormat %s) -replace ',','.'
+        
+            $Output = @{ 'timestamp' = "$Timestamp";
+                'groups' = @{
+                    'cpus' = @{
+                        'counters' = @{
+                            'total_cpu_utilization' = @();
+                        }
+                    }
+                    'disks' = @{
+                        'counters' = @{
+                            'total_disk_bytes_read_write' = @();
+                        }
+                    }
+                    'ethernet_adapters' = @{
+                        'counters' = @{
+                            'total_data_bytes_sent_received' = @();
+                        }
+                    }
+                    'memory' = @{
+                        'counters' = @{
+                            'total_memory_bytes_used' = @();
+                        }
+                    }
+                }
+            } | ConvertTo-Json -Depth 6 -Compress
+        
+            $null = $Counters.Add("$Output")
+        
+            if ($CPU -eq 'Yes') {
+                $Processors = Get-CimInstance -Query 'select Name, PercentProcessorTime from Win32_PerfFormattedData_PerfOS_Processor'
+                $Unit = 'Percent'
+                $Device = 'cpus'
+                $Name = 'total_cpu_utilization'
+        
+                foreach ($processor in $Processors) {
+                    $ValueName = $processor.Name
+                    if ($ValueName -like '_Total') {
+                        $ValueName = 'total_cpu'
+                        $Value = $processor.PercentProcessorTime
+                        $Counters = UpdateCountersJson -Device $Device -Name $Name -ValueName $ValueName -Value $Value -Unit $Unit
+                    }
+                }
+            }
+        
+            if (($DriveRead -eq 'Yes') -or ($DriveWrite -eq 'Yes')) {
+                $Drivesinfo = Get-CimInstance -Query 'SELECT * from Win32_PerfFormattedData_PerfDisk_LogicalDisk'
+                $Unit = 'KilobytesSecond'
+                $Device = 'disks'
+                $Name = 'total_disk_bytes_read_write'
+        
+                if ($DriveRead -eq 'Yes') {
+                    $ValueName = 'total_drivereads'
+        
+                    foreach ($drive in $Drivesinfo) {
+                        $DriveName = $drive.Name
+                        if ($DriveName -like '_Total') {
+                            $Value = $drive.DiskReadBytesPersec / 1000
+                            $Counters = UpdateCountersJson -Device $Device -Name $Name -ValueName $ValueName -Value $Value -Unit $Unit
+                        }
+                    }
+                }
+        
+                if ($DriveWrite -eq 'Yes') {
+                    $ValueName = 'total_drivewrites'
+        
+                    foreach ($drive in $Drivesinfo) {
+                        $DriveName = $drive.Name
+                        if ($DriveName -like '_Total') {
+                            $Value = $drive.DiskWriteBytesPersec / 1000
+                            $Counters = UpdateCountersJson -Device $Device -Name $Name -ValueName $ValueName -Value $Value -Unit $Unit
+                        }
+                    }
+                }
+            }
+        
+            if (($NetworkSend -eq 'Yes') -or ($NetworkReceive -eq 'Yes')) {
+                $Interfaces = ([System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces())
+                $Unit = 'KilobytesSecond'
+                $Device = 'ethernet_adapters'
+                $Name = 'total_data_bytes_sent_received'
+        
+                foreach ($adapter in $Interfaces) {
+                    $ValueSent0 = $adapter.GetIPStatistics().BytesSent / 1000
+                    $ValueRecieved0 = $adapter.GetIPStatistics().BytesReceived / 1000
+                    $TotalSent0 = $TotalSent0 + $ValueSent0
+                    $TotalRecieved0 = $TotalRecieved0 + $ValueRecieved0
+                }
+        
+                Start-Sleep -Seconds 1
+        
+                if ($NetworkSend -eq 'Yes') {
+                    $ValueName = 'total_datasent'
+        
+                    foreach ($adapter in $Interfaces) {
+                        $Value = $adapter.GetIPStatistics().BytesSent / 1000
+                        $TotalSent1 = $TotalSent1 + $Value
+                    }
+        
+                    $TotalSent = $TotalSent1 - $TotalSent0
+                    $Counters = UpdateCountersJson -ValueName $ValueName -Value $TotalSent -Unit $Unit -Device $Device -Name $Name
+                }
+        
+                if ($NetworkReceive -eq 'Yes') {
+                    $ValueName = 'total_datareceived'
+        
+                    foreach ($adapter in $Interfaces) {
+                        $Value = $adapter.GetIPStatistics().BytesReceived / 1000
+                        $TotalRecieved1 = $TotalRecieved1 + $Value
+                    }
+        
+                    $TotalRecieved = $TotalRecieved1 - $TotalRecieved0
+                    $Counters = UpdateCountersJson -ValueName $ValueName -Value $TotalRecieved -Unit $Unit -Device $Device -Name $Name
+                }
+        
+            }
+        
+            if ($Memory -eq 'Yes') {
+                $ComputerMemory = Get-CimInstance -ClassName win32_operatingsystem
+                $Name = 'total_memory_bytes_used'
+                $Device = 'memory'
+                $ValueName = 'memory_used'
+                $Unit = 'Megabytes'
+                $Value = (($ComputerMemory.TotalVisibleMemorySize - $ComputerMemory.FreePhysicalMemory) / 1024)
+                $Counters = UpdateCountersJson -Device $Device -Name $Name -ValueName $ValueName -Value $Value -Unit $Unit
+        
+                $ValueName = 'total_memory'
+                $Value = (($ComputerMemory.TotalVisibleMemorySize) / 1024)
+                $Counters = UpdateCountersJson -Device $Device -Name $Name -ValueName $ValueName -Value $Value -Unit $Unit
+            }
+        
+            $Counters
+        }
+        
+        do {
+            Main
+            ''
+        
+            if ($PrintInteractiveStatements -eq 'Yes') {
+                $continue = Read-Host -Prompt 'Press q to end loop, or any other key to continue ...'
+            } else {
+                $continue = Read-Host
+            }
+        } while ($continue -ne 'q')
+    runAsElevated: true
+  linux:
+    commands: |
+        JQ="jq"
+        VERSION="1.6"
+        PRODUCT_PATH="/opt/amazon/ssm/fleet_manager"
+        JQ_BINARY="$PRODUCT_PATH/$JQ-$VERSION"
+        
+        CheckSha256FileHash() {
+            FILE_PATH="$1"
+            SHA256="$2"
+        
+            if [ -f "$FILE_PATH" ]; then
+                TEST=$("${command_path}echo" "$SHA256  $FILE_PATH" | /usr/bin/sha256sum -c 2>&1) || return 1
+                return 0
+            fi
+        
+            return 1
+        }
+        
+        SetLockedDownPermissions() {
+            "${command_path}chmod" u+rwx "$1"
+            "${command_path}chmod" go-rwx "$1"
+            "${command_path}chown" "$(/usr/bin/whoami)":"$(/usr/bin/id --group --name)" "$1"
+        }
+        
+        CreateLockedDownFolder() {
+            "${command_path}mkdir" -p "$1"
+            SetLockedDownPermissions "$1"
+        }
+        
+        DownloadFile() {
+            SOURCE="$1"
+            DESTINATION="$2"
+            if [ -f /usr/bin/curl ]; then
+                /usr/bin/curl -s "$SOURCE" -o "$DESTINATION"
+            elif [ -f /usr/bin/wget ]; then
+                /usr/bin/wget -q "$SOURCE" -O "$DESTINATION"
+            else
+                ExitWithFailureMessage "Unable to download the source using 'curl' or 'wget'. Failing execution." 'PRINT_JSON'
+            fi
+        }
+        
+        IfRunningKernelVersion2() {
+            "${command_path}uname" -r | grep -q '^2.' || return 1
+        }
+        
+        GetJQSHA256Hash() {
+            case "$1" in
+                'aarch64')
+                    "${command_path}echo" "a6e84e979b91b26763c700d4ba6c616554444bbbf0cf1863e96611b0e68b88f2"
+                    ;;
+                'armv6l')
+                    "${command_path}echo" "4717f1350a963e5ae5446e61eb21e3936754f84dd13586d494dcd6b497b267c1"
+                    ;;
+                'armv7l')
+                    "${command_path}echo" "e097be6c7ef954d581a359ad2d7aa4ec19c89bd3b9ab55919c826a1d30373a5c"
+                    ;;
+                'i686')
+                    "${command_path}echo" "062902c5a177cb80866d556a07e10331d9f8b8b676ffb1b7cd2985a9c2e539c8"
+                    ;;
+                'x86_64')
+                    "${command_path}echo" "15d1d1b093481c737603247a785731b7f32f3b4dccd63f77186de8bfe4f6fd68"
+                    ;;
+                'x86_64_kernel2')
+                    "${command_path}echo" "af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44"
+                    ;;
+                *)
+                    ExitWithFailureMessage "The CPU architecture '$1' is not supported. Failing execution." 'PRINT_JSON'
+                    ;;
+            esac
+        }
+        
+        RandomString() {
+            "${command_path}cat" /dev/urandom | /usr/bin/tr -dc 'a-zA-Z0-9' | /usr/bin/fold -w ${1:-32} | /usr/bin/head -n 1
+        }
+        
+        InstallJQ() {
+            CreateLockedDownFolder "$PRODUCT_PATH"
+        
+            CPU_ARCH=$("${command_path}uname" -m)
+            IfRunningKernelVersion2 && CPU_ARCH="${CPU_ARCH}_kernel2"
+            JQ_SHA256=$(GetJQSHA256Hash "$CPU_ARCH")
+        
+            CheckSha256FileHash "$JQ_BINARY" "$JQ_SHA256" || {
+                JQ_TEMP_BINARY="$PRODUCT_PATH/$(RandomString)"
+        
+                OS_NAME=$("${command_path}uname" -s)
+                REGION="us-east-1"
+                S3_BUCKET="aws-fleet-manager-artifacts-us-east-1"
+                S3_DNS="s3.us-east-1.amazonaws.com"
+                SOURCE="https://$S3_BUCKET.$S3_DNS/$JQ/$VERSION/$OS_NAME/$CPU_ARCH/$JQ"
+                DownloadFile "$SOURCE" "$JQ_TEMP_BINARY"
+        
+                CheckSha256FileHash "$JQ_TEMP_BINARY" "$JQ_SHA256" || {
+                    "${command_path}rm" --force "$JQ_TEMP_BINARY"
+                    ExitWithFailureMessage "Downloading the $JQ binary failed. Failing execution."
+                }
+        
+                "${command_path}mv" "$JQ_TEMP_BINARY" "$JQ_BINARY"
+            }
+        
+            SetLockedDownPermissions "$JQ_BINARY"
+        }
+
+        InstallJQ
+
+        Main () {
+            Counters=''
+        
+            #Grab first dataset and sleep for one second, that way can properly get two datasets to figure out bytes per seconds
+            if [ "$CPU" = 'Yes' ] || [ "$DriveRead" = 'Yes' ] || [ "$DriveWrite" = 'Yes' ] || [ "$NetworkSend" = 'Yes' ] || [ "$NetworkReceive" = 'Yes' ]; then
+                while IFS= read -r cpuline; do
+                    case "$cpuline" in
+                        "cpu "*)
+                            totalidle0=$("${command_path}echo" "$cpuline" | "${command_path}grep" -e 'cpu ' | /usr/bin/awk '{print $5+$6}')
+                            totalnoneidle0=$("${command_path}echo" "$cpuline" | "${command_path}grep" -e 'cpu ' | /usr/bin/awk '{print $2+$3+$4+$7+$8+$9}')
+                            overalltotal0=$((totalidle0 + totalnoneidle0))
+                            ;;
+                    esac
+                done <"$cpustatfile"
+        
+                while IFS= read -r partitions; do
+                    driveread0=$("${command_path}echo" "$partitions" | "${command_path}grep" -e '[a-z][a-z][a-z][a-z]' | /usr/bin/awk '{print $4}')
+                    drivewritten0=$("${command_path}echo" "$partitions" | "${command_path}grep" -e '[a-z][a-z][a-z][a-z]' | /usr/bin/awk '{print $8}')
+                    totalread0=$((totalread0 + driveread0))
+                    totalwritten0=$((totalwritten0 + drivewritten0))
+                done <"$diskstatfile"
+        
+                while IFS= read -r netline; do
+                    case "$netline" in
+                        *':'*)
+                            bytessent0=$("${command_path}echo" "$netline" | /usr/bin/awk '{print $10}')
+                            bytesreceived0=$("${command_path}echo" "$netline" | /usr/bin/awk '{print $2}')
+                            totalsent0=$((totalsent0 + bytessent0))
+                            totalreceived0=$((totalreceived0 + bytesreceived0))
+                            ;;
+                    esac
+                done <"$netstatfile"
+        
+                sleep 1
+            fi
+        
+            timestamp=$(date +%s)
+            Counters=$("${command_path}echo" "[ $timestamp ]" | "$JQ_BINARY" -c '{timestamp: .[0]}')
+        
+            if [ "$CPU" = 'Yes' ]; then
+                cpuCounters=$("${command_path}echo" '{"groups": {"cpus": {"counters": {"total_cpu_utilization": []}}}}' | "$JQ_BINARY" -c '.')
+                Counters=$("$JQ_BINARY" -c --argjson Counters "$Counters" --argjson output "$cpuCounters" -n '$Counters * $output')
+        
+                unit='Percent'
+                name='total_cpu'
+        
+                while IFS= read -r cpuline; do
+                    case "$cpuline" in
+                        "cpu "*)
+                            idle1=$("${command_path}echo" "$cpuline" | "${command_path}grep" -e 'cpu ' | /usr/bin/awk '{print $5+$6}')
+                            noneidle1=$("${command_path}echo" "$cpuline" | "${command_path}grep" -e 'cpu ' | /usr/bin/awk '{print $2+$3+$4+$7+$8+$9}')
+                            overalltotal1=$((idle1 + noneidle1))
+                            totaldif=$((overalltotal1 - overalltotal0))
+                            ideldif=$((idle1 - totalidle0))
+                            value=""$("${command_path}echo" "[$totaldif, $ideldif]" | "$JQ_BINARY" -c '(1000*(.[0] - .[1])/.[0]/10)')""
+                            output=$("${command_path}echo" "[ "$name", "$value", "$unit"]" | "$JQ_BINARY" -c '{name: .[0], value: .[1], unit: .[2]}')
+                            Counters=$("${command_path}echo" "$Counters" | "$JQ_BINARY" -c --argjson output "$output" '.groups.cpus.counters.total_cpu_utilization += [$output]')
+                            ;;
+                    esac
+                done <"$cpustatfile"
+            fi
+        
+            if [ "$DriveRead" = 'Yes' ] || [ "$DriveWrite" = 'Yes' ]; then
+                drivereadCounters=$("${command_path}echo" '{"groups": {"disks": {"counters": {"total_disk_bytes_read_write": []}}}}' | "$JQ_BINARY" -c '.')
+                Counters=$("$JQ_BINARY" -c --argjson Counters "$Counters" --argjson drivereadCounters "$drivereadCounters" -n '$Counters * $drivereadCounters')
+                unit='KilobytesSecond'
+        
+                if [ "$DriveRead" = 'Yes' ]; then
+                    while IFS= read -r partitions; do
+                        driveread1=$("${command_path}echo" "$partitions" | "${command_path}grep" -e '[a-z][a-z][a-z][a-z]' | /usr/bin/awk '{print $4}')
+                        totalread1=$((totalread1 + driveread1))
+                    done <"$diskstatfile"
+        
+                    name='total_drivereads'
+                    value="$("${command_path}echo" "[$totalread1, $totalread0]" | "$JQ_BINARY" -c '((.[0] - .[1])/1000)')"
+                    output=$("${command_path}echo" "[ "$name", "$value", "$unit"]" | "$JQ_BINARY" -c '{name: .[0], value: .[1], unit: .[2]}')
+                    Counters=$("${command_path}echo" "$Counters" | "$JQ_BINARY" -c --argjson output "$output" '.groups.disks.counters.total_disk_bytes_read_write += [$output]')
+                fi
+        
+                if [ "$DriveWrite" = 'Yes' ]; then
+                    while IFS= read -r partitions; do
+                        drivewritten1=$("${command_path}echo" "$partitions" | "${command_path}grep" -e '[a-z][a-z][a-z][a-z]' | /usr/bin/awk '{print $8}')
+                        totalwritten1=$((totalwritten1 + drivewritten1))
+                    done <"$diskstatfile"
+        
+                    name='total_drivewrites'
+                    value="$("${command_path}echo" "[$totalwritten1, $totalwritten0]" | "$JQ_BINARY" -c '((.[0] - .[1])/1000)')"
+                    output=$("${command_path}echo" "[ "$name", "$value", "$unit"]" | "$JQ_BINARY" -c '{name: .[0], value: .[1], unit: .[2]}')
+                    Counters=$("${command_path}echo" "$Counters" | "$JQ_BINARY" -c --argjson output "$output" '.groups.disks.counters.total_disk_bytes_read_write += [$output]')
+                fi
+            fi
+        
+            if [ "$NetworkSend" = 'Yes' ] || [ "$NetworkReceive" = 'Yes' ]; then
+                    netCounters=$("${command_path}echo" '{"groups": {"ethernet_adapters": {"counters": {"total_data_bytes_sent_received": []}}}}' | "$JQ_BINARY" -c '.')
+                    Counters=$("$JQ_BINARY" -c --argjson Counters "$Counters" --argjson netCounters "$netCounters" -n '$Counters * $netCounters')
+                    unit='KilobytesSecond'
+        
+                if [ "$NetworkSend" = 'Yes' ]; then
+                    while IFS= read -r netline; do
+                        case "$netline" in
+                            *':'*)
+                                bytessent1=$("${command_path}echo" "$netline" | /usr/bin/awk '{print $10}')
+                                totalsent1=$((totalsent1 + bytessent1))
+                                ;;
+                        esac
+                    done <"$netstatfile"
+        
+                    name='total_datasent'
+                    value="$("${command_path}echo" "[$totalsent1, $totalsent0]" | "$JQ_BINARY" -c '((.[0] - .[1])/1000)')"
+                    output=$("${command_path}echo" "[ "$name", "$value", "$unit"]" | "$JQ_BINARY" -c '{name: .[0], value: .[1], unit: .[2]}')
+                    Counters=$("${command_path}echo" "$Counters" | "$JQ_BINARY" -c --argjson output "$output" '.groups.ethernet_adapters.counters.total_data_bytes_sent_received += [$output]')
+                fi
+        
+                if [ "$NetworkReceive" = 'Yes' ]; then
+                    while IFS= read -r netline; do
+                        case "$netline" in
+                            *':'*)
+                                bytesreceived1=$("${command_path}echo" "$netline" | /usr/bin/awk '{print $2}')
+                                totalreceived1=$((totalreceived1 + bytesreceived1))
+                                ;;
+                        esac
+                    done <"$netstatfile"
+        
+                    name='total_datareceived'
+                    value="$("${command_path}echo" "[$totalreceived1, $totalreceived0]" | "$JQ_BINARY" -c '((.[0] - .[1])/1000)')"
+                    output=$("${command_path}echo" "[ "$name", "$value", "$unit"]" | "$JQ_BINARY" -c '{name: .[0], value: .[1], unit: .[2]}')
+                    Counters=$("${command_path}echo" "$Counters" | "$JQ_BINARY" -c --argjson output "$output" '.groups.ethernet_adapters.counters.total_data_bytes_sent_received += [$output]')
+                fi
+        
+            fi
+        
+            if [ "$Memory" = 'Yes' ]; then
+                memCounters=$("${command_path}echo" '{"groups": {"memory": {"counters": {"total_memory_bytes_used": []}}}}' | "$JQ_BINARY" -c '.')
+                Counters=$("$JQ_BINARY" -c --argjson Counters "$Counters" --argjson memCounters "$memCounters" -n '$Counters * $memCounters')
+                name='memory_used'
+                unit='Megabytes'
+                meminfo=$("${command_path}cat" /proc/meminfo)
+                total=$("${command_path}echo" "$meminfo" | "${command_path}grep" -e '^MemTotal' | /usr/bin/awk '{print $2}')
+                availableMem=$("${command_path}echo" "$meminfo" | "${command_path}grep" -e '^MemAvailable' | /usr/bin/awk '{print $2}')
+                availableMemValue="$("${command_path}echo" "[$total, $availableMem]" | "$JQ_BINARY" -c '((.[0] - .[1])/1024)')"
+                output=$("${command_path}echo" "[ "$name", "$availableMemValue", "$unit"]" | "$JQ_BINARY" -c '{name: .[0], value: .[1], unit: .[2]}')
+                Counters=$("${command_path}echo" "$Counters" | "$JQ_BINARY" -c --argjson output "$output" '.groups.memory.counters.total_memory_bytes_used += [$output]')
+        
+                name='total_memory'
+                totalMemValue="$("${command_path}echo" "[$total]" | "$JQ_BINARY" -c '(.[0]/1024)')"
+                output=$("${command_path}echo" "[ "$name", "$totalMemValue", "$unit"]" | "$JQ_BINARY" -c '{name: .[0], value: .[1], unit: .[2]}')
+                Counters=$("${command_path}echo" "$Counters" | "$JQ_BINARY" -c --argjson output "$output" '.groups.memory.counters.total_memory_bytes_used += [$output]')
+            fi
+        
+            "${command_path}echo" "$Counters"
+        }
+        
+        CPU='{{ CPU }}'
+        DriveRead='{{ DriveRead }}'
+        DriveWrite='{{ DriveWrite }}'
+        NetworkSend='{{ NetworkSend }}'
+        NetworkReceive='{{ NetworkReceive }}'
+        Memory='{{ Memory }}'
+        PrintInteractiveStatements='{{ PrintInteractiveStatements }}'
+        
+        cpustatfile='/proc/stat'
+        diskstatfile='/proc/diskstats'
+        netstatfile='/proc/net/dev'
+        
+        while [ "$Reply" != 'q' ]; do
+            Main
+            "${command_path}echo"
+        
+            if [ "$PrintInteractiveStatements" = 'Yes' ]; then
+                /usr/bin/printf 'Press q to end loop, or any other key to continue ...'
+            fi
+        
+            read -r Reply
+        done
+    runAsElevated: true

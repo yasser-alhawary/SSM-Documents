@@ -1,0 +1,451 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+  ## Intent
+    'Test that the application stays up even if all instances are replaced. This proves that the app will work even with fresh installs.'
+
+  ## Type
+    Test
+
+  ## Risk
+    Small
+
+  ## Requirements
+    * ASG has more than 1 instances
+    * There is a synthetic alarm setup for application
+
+  ## Permissions required for AutomationAssumeRole
+    * cloudwatch:DescribeAlarms
+    * autoscaling:DescribeAutoScalingGroups
+    * autoscaling:DescribeInstanceRefreshes
+    * autoscaling:StartInstanceRefresh
+    * autoscaling:CancelInstanceRefresh
+    * ssm:GetAutomationExecution
+    * ssm:StartAutomationExecution
+    * iam:PassRole (Restricted to same role)
+
+  ## Supports Rollback
+    Yes.
+
+  ## Cancellation behavior
+    Rollback execution.
+
+  ## Inputs
+  ### (Required) AutomationAssumeRole:
+    * type: String
+    * description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf
+
+  ### (Required) AutoScalingGroupName:
+    * type: String
+    * description: (Required) Name of auto scaling group
+
+  ### (Required) CanaryAlarmName:
+    * type: String
+    * description: (Required) Alarm which should stay green during this test.
+
+  ### (Optional) PercentageOfInstances:
+    * type: Integer
+    * description: (Optional) Percentage of ASG EC2 instances to be replaced at once.
+    * default: 20
+
+  ### (Optional) IsRollback:
+    * type: String
+    * description: (Optional) Run the rollback steps of the document. True or False. If True, the parameter PreviousExecutionId should also be specified.
+    * default: 'false'
+
+  ### (Optional) PreviousExecutionId:
+    * type: String
+    * description: (Optional) SSM execution ID of the previous execution of this document for which resources need to be cleaned up.
+    * default: ''
+
+  ## Details
+    * Start Instance Refresh in ASG
+    * Wait for refresh to finish
+    * Assert alarm to be green after test
+
+  ## Steps executed in normal flow
+    * SelectExecutionMode
+    * AssertAlarmToBeGreenBeforeTest
+    * AssertNoSuspendedProcesses
+    * AssertNoRefreshInProgress
+    * StartInstanceRefresh
+    * WaitForRefreshToFinish
+    * AssertAlarmToBeGreen
+
+  ## Steps executed in rollback flow
+    * SelectExecutionMode
+    * GetInputsFromPreviousExecution
+    * AssertAutoScalingGroupName
+    * CancelInstanceRefresh
+    * WaitForRefreshToBeCancelled
+
+  ## Outputs
+    None
+
+schemaVersion: '0.3'
+assumeRole: '{{ AutomationAssumeRole }}'
+parameters:
+  AutoScalingGroupName:
+    type: String
+    description: (Required) Name of AutoScalingGroup.
+  CanaryAlarmName:
+    type: String
+    description: (Required) Alarm which should stay green during this test.
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+  PercentageOfInstances:
+    type: Integer
+    description: (Optional) Percentage of instances to replace at once.
+    default: 20
+  IsRollback:
+    type: String
+    description: (Optional) Run the rollback steps of the document. True or False. If True, the parameter PreviousExecutionId should also be specified.
+    default: 'false'
+  PreviousExecutionId:
+    type: String
+    description: (Optional) SSM execution ID of the previous execution of this document for which resources need to be cleaned up.
+    default: ''
+mainSteps:
+  - name: SelectExecutionMode
+    description: Check if document should be executed in rollback mode
+    action: 'aws:branch'
+    inputs:
+      Choices:
+        - NextStep: AssertAlarmToBeGreenBeforeTest
+          Variable: '{{IsRollback}}'
+          StringEquals: 'false'
+      Default: GetInputsFromPreviousExecution
+  - name: AssertAlarmToBeGreenBeforeTest
+    description: Ensure alarm is green before starting test. Fail if alarm is not green within expected time.
+    action: aws:waitForAwsResourceProperty
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{CanaryAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: ["OK"]
+  - name: AssertNoSuspendedProcesses
+    description: Check for no suspended processes in ASG
+    action: 'aws:executeScript'
+    onFailure: Abort
+    inputs:
+      Runtime: python3.8
+      Handler: assert_no_suspended_process
+      InputPayload:
+        AutoScalingGroupName: '{{AutoScalingGroupName}}'
+      Script: |-
+        import logging
+        import random
+        import time
+        from math import ceil
+        
+        import boto3
+        from botocore.config import Config
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        
+
+
+        def assert_no_suspended_process(events, context):
+            if 'AutoScalingGroupName' not in events:
+                raise KeyError('Requires AutoScalingGroupName in events')
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            autoscaling = boto3.client('autoscaling', config=config)
+            auto_scaling_groups = autoscaling.describe_auto_scaling_groups(
+                AutoScalingGroupNames=[
+                    events['AutoScalingGroupName']
+                ]
+            )
+        
+            if len(auto_scaling_groups['AutoScalingGroups'][0]['SuspendedProcesses']) > 0:
+                raise Exception('ASG % has suspended processes', events['AutoScalingGroupName'])
+        
+        
+
+  - name: AssertNoRefreshInProgress
+    description: Check for no refresh in progress already
+    action: 'aws:executeScript'
+    onFailure: Abort
+    inputs:
+      Runtime: python3.8
+      Handler: assert_no_refresh_in_progress
+      InputPayload:
+        AutoScalingGroupName: '{{AutoScalingGroupName}}'
+      Script: |-
+        import logging
+        import random
+        import time
+        from math import ceil
+        
+        import boto3
+        from botocore.config import Config
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        
+
+
+        def assert_no_refresh_in_progress(events, context):
+            if 'AutoScalingGroupName' not in events:
+                raise KeyError('Requires AutoScalingGroupName in events')
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            autoscaling = boto3.client('autoscaling', config=config)
+            instance_refreshes = autoscaling.describe_instance_refreshes(
+                AutoScalingGroupName=events['AutoScalingGroupName']
+            )
+        
+            for instance_refresh in instance_refreshes['InstanceRefreshes']:
+                if instance_refresh['Status'] in ['Pending', 'InProgress', 'Cancelling']:
+                    raise Exception('Instance refresh in progress, refresh status %, refresh id %',
+                                    instance_refreshes['InstanceRefreshes'][0]['Status'],
+                                    instance_refreshes['InstanceRefreshes'][0]['InstanceRefreshId'])
+        
+        
+
+  - name: StartInstanceRefresh
+    description: Start instance refresh in ASG
+    action: 'aws:executeScript'
+    onFailure: Abort
+    onCancel: 'step:TriggerRollback'
+    outputs:
+      - Name: InstanceRefreshId
+        Selector: $.Payload.InstanceRefreshId
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: start_instance_refresh
+      InputPayload:
+        AutoScalingGroupName: '{{AutoScalingGroupName}}'
+        PercentageOfInstances: '{{PercentageOfInstances}}'
+      Script: |-
+        import logging
+        import random
+        import time
+        from math import ceil
+        
+        import boto3
+        from botocore.config import Config
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        
+
+
+        def start_instance_refresh(events, context):
+            if 'AutoScalingGroupName' not in events or 'PercentageOfInstances' not in events:
+                raise KeyError('Requires AutoScalingGroupName, PercentageOfInstances in events')
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            autoscaling = boto3.client('autoscaling', config=config)
+            refresh_response = autoscaling.start_instance_refresh(
+                AutoScalingGroupName=events['AutoScalingGroupName'],
+                Strategy='Rolling',
+                Preferences={'MinHealthyPercentage': (100 - events['PercentageOfInstances'])}
+            )
+        
+            output = {}
+            output['InstanceRefreshId'] = refresh_response['InstanceRefreshId']
+            return output
+        
+        
+
+  - name: WaitForRefreshToFinish
+    description: Wait for refresh to finish
+    action: 'aws:waitForAwsResourceProperty'
+    timeoutSeconds: 3600
+    onFailure: 'step:CancelInstanceRefresh'
+    onCancel: 'step:TriggerRollback'
+    inputs:
+      Service: autoscaling
+      Api: DescribeInstanceRefreshes
+      PropertySelector: '$.InstanceRefreshes[0].Status'
+      DesiredValues:
+        - Successful
+      AutoScalingGroupName: '{{AutoScalingGroupName}}'
+      InstanceRefreshIds:
+        - '{{StartInstanceRefresh.InstanceRefreshId}}'
+  - name: AssertAlarmToBeGreen
+    description: Wait for the alarm to be green after test is complete.
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 900
+    onFailure: Abort
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+      - "{{CanaryAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: ["OK"]
+    isEnd: true
+  - name: GetInputsFromPreviousExecution
+    description: Get input from previous execution. This will be used to validate that rollback is executed with the same input
+    action: aws:executeScript
+    outputs:
+      - Name: AutoScalingGroupName
+        Selector: $.Payload.AutoScalingGroupName[0]
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: get_inputs_from_ssm_execution
+      InputPayload:
+        ExecutionId: '{{ PreviousExecutionId }}'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def get_inputs_from_ssm_execution(events, context):
+            output = {}
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events:
+                raise KeyError('Requires ExecutionId')
+        
+            if not events['ExecutionId']:
+                raise KeyError('Requires not empty ExecutionId')
+        
+            response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+            response_parameters = response['AutomationExecution']['Parameters']
+            # TODO DIG-853
+            for parameter in response_parameters:
+                output[parameter] = response_parameters[parameter]
+        
+            return output
+        
+        
+
+  - name: AssertAutoScalingGroupName
+    description: Validate that rollback is executed with the same input
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: CancelInstanceRefresh
+          Variable: "{{ GetInputsFromPreviousExecution.AutoScalingGroupName }}"
+          StringEquals: '{{ AutoScalingGroupName }}'
+    isEnd: true
+  - name: CancelInstanceRefresh
+    description: Cancel instance refresh
+    action: 'aws:executeScript'
+    onFailure: Abort
+    outputs:
+      - Name: InstanceRefreshId
+        Selector: $.Payload.InstanceRefreshId
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: cancel_instance_refresh
+      InputPayload:
+        AutoScalingGroupName: '{{AutoScalingGroupName}}'
+      Script: |-
+        import logging
+        import random
+        import time
+        from math import ceil
+        
+        import boto3
+        from botocore.config import Config
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        
+
+
+        def cancel_instance_refresh(events, context):
+            if 'AutoScalingGroupName' not in events:
+                raise KeyError('Requires AutoScalingGroupName in events')
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            autoscaling = boto3.client('autoscaling', config=config)
+            output = autoscaling.cancel_instance_refresh(
+                AutoScalingGroupName=events['AutoScalingGroupName']
+            )
+            return output
+        
+        
+
+  - name: WaitForRefreshToBeCancelled
+    description: Wait for refresh to be cancelled
+    action: 'aws:waitForAwsResourceProperty'
+    timeoutSeconds: 3600
+    onFailure: Abort
+    inputs:
+      Service: autoscaling
+      Api: DescribeInstanceRefreshes
+      PropertySelector: '$.InstanceRefreshes[0].Status'
+      DesiredValues:
+        - Cancelled
+      AutoScalingGroupName: '{{GetInputsFromPreviousExecution.AutoScalingGroupName}}'
+      InstanceRefreshIds:
+        - '{{CancelInstanceRefresh.InstanceRefreshId}}'
+    isEnd: true
+  - name: TriggerRollback
+    description: This step is executed when ssm document is cancelled while it was in progress and starts a new execution of document in rollback mode to rollback the changes made as part of normal execution
+    action: 'aws:executeScript'
+    onFailure: Abort
+    outputs:
+      - Name: RollbackExecutionId
+        Selector: $.Payload.RollbackExecutionId
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: start_rollback_execution
+      InputPayload:
+        ExecutionId: '{{automation:EXECUTION_ID}}'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def start_rollback_execution(events, context):
+            output = {}
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events or not events['ExecutionId']:
+                raise KeyError('Requires not empty ExecutionId')
+        
+            response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+        
+            # Get parameters for current execution and add IsRollback and PreviousExecutionId
+            response_parameters = response['AutomationExecution']['Parameters']
+            response_parameters['IsRollback'] = ['true']
+            response_parameters['PreviousExecutionId'] = [events['ExecutionId']]
+        
+            rollback_execution_response = ssm.start_automation_execution(
+                DocumentName=response['AutomationExecution']['DocumentName'],
+                DocumentVersion=response['AutomationExecution']['DocumentVersion'],
+                Parameters=response_parameters
+            )
+            output['RollbackExecutionId'] = rollback_execution_response['AutomationExecutionId']
+            return output
+        
+        
+
+    isEnd: true

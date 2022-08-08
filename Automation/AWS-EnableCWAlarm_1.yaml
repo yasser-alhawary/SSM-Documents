@@ -1,0 +1,239 @@
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+  ## Document Name - AWS-EnableCWAlarm
+
+  ## What does this document do?
+  This document creates a CloudWatch alarm for AWS resources that do not have one. This document can be used with the following AWS resources:
+  * EC2 instances
+  * EBS volumes
+  * S3 buckets
+  * RDS clusters
+
+  ## Notes
+  This document will execute successfully even if alarm creation fails for one or more resources.
+  Please check the execution output for complete information on successes and failures.
+
+  ## Input Parameters
+  * ResourceARNs: (Required) A comma separated list of ARNs of the resources to create a CloudWatch alarm for.
+  * MetricName: (Required) The name for the metric associated with the alarm.
+  * Statistic: (Required) The statistic for the metric associated with the alarm.
+    * Allowed values: Average | Maximum | Minimum | SampleCount | Sum
+  * Threshold: (Required) The value to compare with the specified statistic.
+  * ComparisonOperator: (Required) The arithmetic operation to use when comparing the specified statistic and threshold.
+    * Allowed Values: GreaterThanOrEqualToThreshold | GreaterThanThreshold | GreaterThanUpperThreshold | LessThanLowerOrGreaterThanUpperThreshold | LessThanLowerThreshold | LessThanOrEqualToThreshold | LessThanThreshold
+  * Period: (Required) The period, in seconds, over which the statistic is applied.
+    * Allowed values: 10 | 30 | 60 | Any multiple of 60
+  * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  * EnableCWAlarm.SuccessfulResources: A list of resource ARN(s) for which a CloudWatch alarm was successfully created.
+  * EnableCWAlarm.FailedResources: A maplist of resource ARN(s) for which a CloudWatch alarm was not created and the reason for the failure.
+
+  ## Minumum Permissions Required
+  * `cloudwatch:PutMetricAlarm` on all resources.
+
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  ResourceARNs:
+    type: StringList
+    description: (Required) A comma separated list of ARNs of the resources to create a CloudWatch alarm for.
+    allowedPattern: ^(.*S.*)
+  MetricName:
+    type: String
+    description: (Required) The name for the metric associated with the alarm.
+    allowedPattern: '[a-zA-Z]*'
+  Statistic:
+    type: String
+    description: (Required) The statistic for the metric associated with the alarm.
+    allowedValues:
+    - Average
+    - Maximum
+    - Minimum
+    - SampleCount
+    - Sum
+  Threshold:
+    type: Integer
+    description: (Required) The value to compare with the specified statistic.
+  ComparisonOperator:
+    type: String
+    description: (Required) The arithmetic operation to use when comparing the specified statistic and threshold.
+    allowedValues:
+    - GreaterThanOrEqualToThreshold
+    - GreaterThanThreshold
+    - GreaterThanUpperThreshold
+    - LessThanLowerOrGreaterThanUpperThreshold
+    - LessThanLowerThreshold
+    - LessThanOrEqualToThreshold
+    - LessThanThreshold
+  Period:
+    type: Integer
+    description: (Required) The period, in seconds, over which the statistic is applied.
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::d{12}:role/[w+=,.@_/-]+|^$'
+outputs:
+  - EnableCWAlarm.SuccessfulResources
+  - EnableCWAlarm.FailedResources
+mainSteps:
+- name: EnableCWAlarm
+  action: aws:executeScript
+  onFailure: Abort
+  isCritical: true
+  isEnd: true
+  timeoutSeconds: 600
+  description: |
+    ## EnableCWAlarm
+    Creates CloudWatch alarms for the targeted resources.
+    ## Inputs
+    * ResourceARNs: A list of ARNs of the resources to create a CloudWatch alarm for.
+    * MetricName: The name for the metric associated with the alarm.
+    * Statistic: The statistic for the metric associated with the alarm.
+    * Threshold: The value to compare with the specified statistic.
+    * ComparisonOperator: The arithmetic operation to use when comparing the specified statistic and threshold.
+    * Period: The period, in seconds, over which the statistic is applied.
+    ## Outputs
+    * SuccessfulResources: A list of resource ARN(s) for which a CloudWatch alarm was successfully created.
+    * FailedResources: A maplist of resource ARN(s) for which a CloudWatch alarm was not created and the reason for the failure.
+  inputs:
+    Runtime: python3.7
+    Handler: enable_cw_alarm
+    InputPayload:
+      ResourceARNs: '{{ResourceARNs}}'
+      MetricName: '{{MetricName}}'
+      ComparisonOperator: '{{ComparisonOperator}}'
+      Period: '{{Period}}'
+      Statistic: '{{Statistic}}'
+      Threshold: '{{Threshold}}'
+    Script: |
+      import boto3
+
+      CWclient = boto3.client('cloudwatch')
+
+      def enable_cw_alarm (event, context):
+          FailedResources = []
+          SuccessResources = []
+          ComparisonOperator = event['ComparisonOperator']
+          Period = event['Period']
+          Statistic = event['Statistic']
+          Threshold = float(event['Threshold'])
+          metricName = event["MetricName"]
+          resourceArns = event["ResourceARNs"]
+          for arn in resourceArns:
+              try:
+                  alarmData = get_alarm_data(arn, metricName)
+                  create_CW_alarm(alarmData, metricName, ComparisonOperator, Period, Statistic, Threshold)
+                  SuccessResources.append(arn)
+              except Exception as e:
+                  FailedResources.append({'resourceARN': arn, "error": str(e)})
+          return {
+              'FailedResources': FailedResources,
+              'SuccessfulResources': SuccessResources
+          }
+
+      def get_alarm_data(resourceArn, metricName):
+          splittedArn = resourceArn.split(':')
+          service = splittedArn[2]
+          if service.lower() == "s3".lower():
+              StorageType = ""
+              if metricName.lower() == "NumberOfObjects".lower():
+                  StorageType = "AllStorageTypes"
+              elif metricName.lower() =="BucketSizeBytes".lower():
+                  StorageType = "StandardStorage"
+              else :
+                  raise Exception("Metric Name '{}' not supported.".format(metricName))
+              alarm_var = {
+                  "identifier": splittedArn[5],
+                  "namespace": "AWS/S3",
+                  "Dimensions": [
+                      {
+                          'Name': 'BucketName',
+                          'Value': splittedArn[5]
+                      },
+                      {
+                          'Name': 'StorageType',
+                          'Value': StorageType
+                      }
+                  ]
+
+              }
+              return alarm_var
+
+          elif service.lower() == "ec2".lower():
+              ec2resource = splittedArn[5].split("/")
+              if ec2resource[0].lower() == "volume":
+                  alarm_var = {
+                      "identifier": ec2resource[1],
+                      "namespace": "AWS/EBS",
+                      "Dimensions": [
+                          {
+                              'Name': 'VolumeId',
+                              'Value': ec2resource[1]
+                          }
+                      ]
+                  }
+              elif ec2resource[0].lower() == "instance":
+                  alarm_var = {
+                      "identifier": ec2resource[1],
+                      "namespace": "AWS/EC2",
+                      "Dimensions": [
+                          {
+                              'Name': 'InstanceId',
+                              'Value': ec2resource[1]
+                          }
+                      ]
+                  }
+              return alarm_var
+          elif service.lower() == "rds".lower():
+              alarm_var = {
+                  "identifier": splittedArn[6],
+                  "namespace": "AWS/RDS",
+                  "Dimensions": [
+                      {
+                          'Name': 'DBClusterIdentifier',
+                          'Value': splittedArn[6]
+                      }
+                  ]
+              }
+              return alarm_var
+          else:
+              raise Exception("Service '{}' not supported.".format(service))
+
+      def create_CW_alarm (alarmData, metricName, ComparisonOperator, Period, Statistic, Threshold):
+          CWclient.put_metric_alarm(
+              AlarmName = 'alarm_' + alarmData['identifier'] + '_' + metricName,
+              ComparisonOperator = ComparisonOperator,
+              EvaluationPeriods = 1,
+              MetricName = metricName,
+              Namespace = alarmData['namespace'],
+              Period = Period,
+              Statistic = Statistic,
+              Threshold = Threshold,
+              ActionsEnabled = False,
+              AlarmDescription = 'Cloudwatch alarm for ('+alarmData['identifier']+') with metricName ' + metricName,
+              Dimensions = alarmData['Dimensions']
+          )
+  outputs:
+    - Name: SuccessfulResources
+      Selector: $.Payload.SuccessfulResources
+      Type: StringList
+    - Name: FailedResources
+      Selector: $.Payload.FailedResources
+      Type: MapList

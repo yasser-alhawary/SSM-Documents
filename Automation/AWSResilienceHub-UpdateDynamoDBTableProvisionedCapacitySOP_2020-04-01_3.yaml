@@ -1,0 +1,289 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-UpdateDynamoDBTableProvisionedCapacitySOP_2020-04-01
+
+            ## Intent
+            Update provisioned capacity for DynamoDB Table
+
+            ## Type
+            SOP
+
+            ## Risk
+            Small
+
+            ## Requirements
+              * DynamoDB table
+
+            ## Permissions required for AutomationAssumeRole
+              * dynamodb:UpdateTable
+              * dynamodb:DescribeTable
+              * ssm:GetAutomationExecution
+
+            ## Cancellation behavior
+            Fail
+
+            ## Inputs
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: ARN of the IAM role with permissions listed above
+
+            ### (Required) DynamoDBTableName
+              * type: String
+              * description: DynamoDB Table Name
+
+            ### (Required) DynamoDBTableRCU
+              * type: String
+              * description:  Requested DynamoDB table Read Capacity Units
+
+            ### (Required) DynamoDBTableWCU
+              * type: String
+              * description: Requested DynamoDB table Write Capacity Units
+
+            ## Details
+            The document updates DynamoDB table provisioned read and write capacity units and verifies that that table
+            is active.
+
+            ## Steps executed in normal flow
+              * RecordStartTime
+              * UpdateDynamoDBTableProvisionedCapacity
+              * VerifyDynamoDBTableUpdateStatus
+              * GetUpdatedProvisionedThroughput
+              * OutputRecoveryTime
+
+            ## Outputs
+            ### GetUpdatedProvisionedThroughput.ReadCapacityUnits
+              * type: Integer
+              * description: DynamoDB table Read Capacity Units after update
+
+            ### GetUpdatedProvisionedThroughput.WriteCapacityUnits
+              * type: Integer
+              * description: DynamoDB table Write Capacity Units after update
+
+            ### OutputRecoveryTime.RecoveryTime
+              * type: Integer
+              * description: Time to recover in seconds
+
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  DynamoDBTableName:
+    type: String
+    description: (Required) The DynamoDB Table Name.
+  DynamoDBTableRCU:
+    type: Integer
+    description: (Required) The DynamoDB Table Read Capacity Units.
+  DynamoDBTableWCU:
+    type: Integer
+    description: (Required) The DynamoDB Table Write Capacity Units.
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+outputs:
+  - GetUpdatedProvisionedThroughput.ReadCapacityUnits
+  - GetUpdatedProvisionedThroughput.WriteCapacityUnits
+  - OutputRecoveryTime.RecoveryTime
+
+mainSteps:
+  - name: RecordStartTime
+    description: Start recording execution time
+    action: 'aws:executeScript'
+    outputs:
+      - Name: StartTime
+        Selector: $.Payload
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: start_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def start_time(events, context):
+            return datetime.now(timezone.utc).isoformat()
+        
+        
+
+
+  - name: AssertBillingModeProvisioned
+    description: Asserts that billing mode iS PROVISIONED
+    action: 'aws:executeScript'
+    inputs:
+      Runtime: python3.8
+      Handler: validate_billing_mode
+      Script: |-
+        import logging
+        import random
+        import time
+        from typing import Any, Callable, Iterator, List
+        
+        import boto3
+        from botocore.config import Config
+        
+        boto3_config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        ENABLED_INSIGHTS_STATUSES = ['ENABLING', 'ENABLED']
+        GLOBAL_TABLE_ACTIVE_STATUSES = ['ACTIVE']
+        
+        
+
+        def _execute_boto3_dynamodb(delegate: Callable[[Any], dict]) -> dict:
+            """
+            Executes the given delegate with dynamodb client parameter
+            :param delegate: The delegate to execute (with boto3 function)
+            :return: The output of the given function
+            """
+            dynamo_db_client = boto3.client('dynamodb', config=boto3_config)
+            description = delegate(dynamo_db_client)
+            if not description['ResponseMetadata']['HTTPStatusCode'] == 200:
+                logging.error(description)
+                raise ValueError('Failed to execute request')
+            return description
+        
+        
+
+        def _describe_table(table_name: str) -> dict:
+            """
+            Describes the given dynamodb table
+            :param table_name: The table name
+            :return: The dictionary of table description properties
+            """
+            return _execute_boto3_dynamodb(
+                delegate=lambda x: x.describe_table(TableName=table_name))
+        
+        
+
+        def validate_billing_mode(events: dict, context: dict) -> None:
+            """
+            Validate billing mode to be specific value.
+            :param events: The dictionary that supposed to have the following keys:
+            * `ExpectedValues` - The list of values the property expected to be
+            * `TableName` - The target table name
+            :return: The status of continuous backup
+            """
+            if 'ExpectedValues' not in events:
+                raise KeyError('Requires ExpectedValues')
+            if 'TableName' not in events:
+                raise KeyError('Requires TableName')
+        
+            table_name: str = events['TableName']
+            expected_values: List[str] = events['ExpectedValues']
+        
+            description = _describe_table(table_name=table_name)
+            billing_mode = description.get('Table', {}).get('BillingModeSummary', {}).get('BillingMode', '')
+        
+            # process empty property case
+            if not billing_mode and (not expected_values or '' in expected_values or None in expected_values):
+                return
+            else:
+                if billing_mode not in expected_values:
+                    raise ValueError(
+                        f'BillingMode is required to be one of the following values {expected_values}, '
+                        'but was {match.value}')
+        
+        
+
+      InputPayload:
+        ExpectedValues:
+          - "PROVISIONED"
+          - ""
+        TableName: "{{ DynamoDBTableName }}"
+
+  - name: UpdateDynamoDBTableProvisionedCapacity
+    description: Update table's provisioned read and write capacity units
+    action: aws:executeAwsApi
+    onFailure: Abort
+    inputs:
+      Service: dynamodb
+      Api: UpdateTable
+      TableName: "{{ DynamoDBTableName }}"
+      ProvisionedThroughput:
+        ReadCapacityUnits: "{{ DynamoDBTableRCU }}"
+        WriteCapacityUnits: "{{ DynamoDBTableWCU }}"
+
+  - name: VerifyDynamoDBTableUpdateStatus
+    description: Wait for the table to become active
+    action: aws:waitForAwsResourceProperty
+    onFailure: Abort
+    inputs:
+      Service: dynamodb
+      Api: DescribeTable
+      TableName: "{{ DynamoDBTableName }}"
+      PropertySelector: "$.Table.TableStatus"
+      DesiredValues:
+        - "ACTIVE"
+
+  - name: GetUpdatedProvisionedThroughput
+    description: Get updated provisioned read and write capacity units
+    action: aws:executeAwsApi
+    onFailure: Abort
+    inputs:
+      Service: dynamodb
+      Api: DescribeTable
+      TableName: "{{ DynamoDBTableName }}"
+    outputs:
+      - Name: ReadCapacityUnits
+        Selector: "$.Table.ProvisionedThroughput.ReadCapacityUnits"
+        Type: Integer
+      - Name: WriteCapacityUnits
+        Selector: "$.Table.ProvisionedThroughput.WriteCapacityUnits"
+        Type: Integer
+
+  - name: OutputRecoveryTime
+    description: Calculate execution time
+    action: 'aws:executeScript'
+    outputs:
+      - Name: RecoveryTime
+        Selector: $.Payload
+        Type: Integer
+    inputs:
+      Runtime: python3.8
+      Handler: recovery_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def recovery_time(events, context):
+            return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds
+        
+        
+
+      InputPayload:
+        StartTime: '{{ RecordStartTime.StartTime }}'

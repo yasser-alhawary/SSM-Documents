@@ -1,0 +1,148 @@
+description: |
+  ### Document name - AWSConfigRemediation-DeleteUnusedIAMGroup
+
+  ## What does this document do?
+  This runbook deletes an unused AWS IAM Group without users using the [DeleteGroup] (https://docs.aws.amazon.com/IAM/latest/APIReference/API_DeleteGroup.html) API.
+
+  ## Input Parameters
+  * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    * Example: `arn:aws:iam::123456789012:role/PrimaryAutomationAssumeRole`
+  * GroupId: (Required) The stable and unique string identifying the group.
+    * Example: `AGPAYJAVWZHLDACG63X2Y`
+
+  ## Output Parameters
+  * DeleteUnusedIAMGroupAndVerify.Response: Success message and HTTP response metadata or failure exception.
+
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(?:aws|aws-us-gov|aws-cn):iam::d{12}:role/[w+=,.@/-]+$
+  GroupId:
+    type: String
+    description: (Required) The stable and unique string identifying the group.
+    allowedPattern: ^AGPA[A-Z0-9]{12,128}$
+
+outputs:
+  - DeleteUnusedIAMGroupAndVerify.Response
+mainSteps:
+  -
+    name: DeleteUnusedIAMGroupAndVerify
+    action: aws:executeScript
+    description: |
+      ## DeleteUnusedIAMGroupAndVerify
+      Deletes the specified unused IAM group and verifies it.
+      ## Outputs
+      * Response: Success message and HTTP response metadata or failure exception.
+    timeoutSeconds: 600
+    isEnd: true
+    inputs:
+      Runtime: python3.7
+      Handler: delete_unused_iamgroup_handler
+      InputPayload:
+        GroupId: "{{ GroupId }}"
+      Script: |-
+        import boto3
+        from botocore.config import Config
+        from time import sleep
+
+        PAGE_SIZE = 1000
+        THROTTLE_PERIOD = 0.05
+
+        config = Config(
+            retries={
+                "max_attempts": 10,
+                "mode": "standard"
+            }
+        )
+
+        iam_client = boto3.client("iam", config=config)
+
+        def get_group_name(iam_group_id):
+            paginator = iam_client.get_paginator("list_groups")
+            page_iterator = paginator.paginate(PaginationConfig={"PageSize": PAGE_SIZE})
+            for page in page_iterator:
+                for group in page["Groups"]:
+                    if group["GroupId"] == iam_group_id:
+                        return group["GroupName"]
+                sleep(THROTTLE_PERIOD)
+
+        def get_managed_group_policies(iam_group_name):
+            managed_group_policies = []
+            paginator = iam_client.get_paginator("list_attached_group_policies")
+            page_iterator = paginator.paginate(GroupName=iam_group_name, PaginationConfig={"PageSize": PAGE_SIZE})
+            for page in page_iterator:
+                for policy in page["AttachedPolicies"]:
+                    policy_arn = policy["PolicyArn"]
+                    managed_group_policies.append(policy_arn)
+                sleep(THROTTLE_PERIOD)
+            return managed_group_policies
+
+        def get_inline_group_policies(iam_group_name):
+            inline_group_policies = []
+            paginator = iam_client.get_paginator('list_group_policies')
+            page_iterator = paginator.paginate(GroupName=iam_group_name, PaginationConfig={"PageSize": PAGE_SIZE})
+            for page in page_iterator:
+                policy_names = page["PolicyNames"]
+                inline_group_policies.extend(policy_names)
+                sleep(THROTTLE_PERIOD)
+            return inline_group_policies
+
+        def detach_attached_group_policies(group_name, attached_group_policies):
+            responses = []
+            for policy_arn in attached_group_policies:
+                response = iam_client.detach_group_policy(GroupName=group_name, PolicyArn=policy_arn)
+                responses.append(response)
+            return responses
+
+        def delete_inline_group_policy(group_name, inline_group_policies):
+            responses = []
+            for policy_name in inline_group_policies:
+                response = iam_client.delete_group_policy(GroupName=group_name, PolicyName=policy_name)
+                responses.append(response)
+            return responses
+
+        def delete_group(group_name):
+            return iam_client.delete_group(GroupName=group_name)
+
+        def is_group_deleted(group_name):
+            try:
+                iam_client.get_group(GroupName=group_name)
+                return False
+            except iam_client.exceptions.NoSuchEntityException:
+                return True
+
+        def delete_unused_iamgroup_handler(event, context):
+            iam_group_id = event["GroupId"]
+            iam_group_name = get_group_name(iam_group_id)
+            if iam_group_name is None:
+                error_message = f"IAM GROUP WITH ID '{iam_group_id}' DOES NOT EXIST."
+                raise Exception(error_message)
+
+            # Delete inline group policies attached to the IAM group
+            inline_group_policies = get_inline_group_policies(iam_group_name)
+            delete_inline_policies_responses = delete_inline_group_policy(iam_group_name, inline_group_policies)
+
+            # Detach managed group policies attached to the IAM group
+            attached_group_policies = get_managed_group_policies(iam_group_name)
+            detach_managed_policy_responses = detach_attached_group_policies(iam_group_name, attached_group_policies)
+
+            # Deletes the IAM group
+            delete_response = delete_group(iam_group_name)
+
+            # Verifies that the IAM group is deleted successfully.
+            if not is_group_deleted(iam_group_name):
+                raise Exception(f"VERIFICATION FAILED. IAM GROUP {iam_group_name} NOT DELETED.")
+            return {
+                "output": "IAM Group deleted successfully.",
+                "http_response": {
+                    "delete_group_response": delete_response,
+                    "delete_inline_policies_response": delete_inline_policies_responses,
+                    "detach_managed_policies_response": detach_managed_policy_responses
+                }
+            }
+    outputs:
+      - Name: Response
+        Selector: $.Payload
+        Type: StringMap

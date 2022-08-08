@@ -1,0 +1,523 @@
+schemaVersion: "0.3"
+description: "The AWSSupport-ShareRDSSnapshot will allow to automatically perform
+   the operation described here:  https://aws.amazon.com/premiumsupport/knowledge-center/share-encrypted-rds-snapshot-kms-key/.
+   If you have an encrypted snapshot of an Amazon Relational Database Service (Amazon
+   RDS) instance  or cluster that uses the default AWS Key Management Service (AWS
+   KMS) key, you can't share a snapshot that's encrypted with it. You need to copy
+   the snapshot using a customer managed key, and then share the snapshot with the
+   target account. This automation document will perform these steps for you. You
+   can provide a snapshot to be copied and shared with the target account -or- you
+   can provide database instance/cluster id for which the latest snapshot will be
+   shared."
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  Database:
+    type: "String"
+    description: "(Optional) The name of the database instance or cluster to share
+       with the given account. This field is optional if SnapshotName is provided."
+    default: ""
+    allowedPattern: "^$|^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$"
+    maxChars: 63
+  SnapshotName:
+    type: "String"
+    description: "(Optional) The name (SnapshotIdentifier) of the manual/system generated
+       database instance/cluster snapshot to share with the given account. This field
+       is optional if Database is provided."
+    default: ""
+    allowedPattern: "^$|^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$|^rds:[A-Za-z0-9]+(-[A-Za-z0-9]+)*$"
+    maxChars: 255
+  KmsKey:
+    type: "String"
+    description: "(Optional) ARN of the shared KMS Key. If no key is provided, the
+       automation creates the key as per https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-modifying-external-accounts.html#cross-account-key-policy
+       on the current account with principal target accounts root account"
+    allowedPattern: "^$|^arn:aws:kms:[-a-z0-9]*:[0-9]*:key/[-a-z0-9]*$"
+    default: ""
+  AccountIds:
+    type: "StringList"
+    allowedPattern: "^[0-9]{12}(,[0-9]{12})*$"
+    description: "(Required) Comma-separated list of Account Ids for sharing the Snapshot."
+  AutomationAssumeRole:
+    type: "String"
+    description: "(Optional) The ARN of the role that allows Automation to perform
+       the actions on your behalf."
+    allowedPattern: "^$|^arn:aws:iam::[0-9]*:role/[/w+=,.@-]+$"
+    default: ""
+mainSteps:
+- name: "CheckOrCreateKey"
+  onFailure: "Abort"
+  isCritical: true
+  action: "aws:executeScript"
+  description: "Validate if key is missing from the input parameters
+and create key
+     with required policy, if needed
+"
+  inputs:
+    Runtime: "python3.7"
+    Handler: "create_key"
+    InputPayload:
+      account_ids: "{{AccountIds}}"
+      account_current: "{{global:ACCOUNT_ID}}"
+      kms_key_provided: "{{KmsKey}}"
+      automation_id: "{{automation:EXECUTION_ID}}"
+      database: "{{Database}}"
+      snapshot_name: "{{SnapshotName}}"
+    Script: "import json
+import boto3
+
+def create_key(event, context):
+  #validate
+       if snapshot and database both are blank
+  if event['database'] == "" and
+       event['snapshot_name'] == "":
+    #nothing to go on, return failure
+ 
+         raise ValueError('Please provide either Database or SnapshotName to start
+       with')
+
+  key_created = False
+  if event['kms_key_provided'] == "":
+
+          #key is missing in input parameter - create
+    #create policy for the
+       key as per sample https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-modifying-external-accounts.html#cross-account-key-policy
+
+          samplePolicy = ('{"Id":"key-policy","Version":"2012-10-17","Statement"
+      :[{"Sid":"Allow Key usage - external account","Effect":"Allow",'
+ 
+             '"Principal":{"AWS":"arn:aws:iam::123456789012:root"},"Action"
+      :["kms:Encrypt","kms:Decrypt","kms:ReEncrypt*","kms:GenerateDataKey*"
+      ,"kms:DescribeKey"],"Resource":"*"},{"Sid":"Allow attachment of persistent
+       resources - external account","Effect":"Allow",'
+        '"Principal"
+      :{"AWS":"arn:aws:iam::123456789012:root"},"Action":["kms:CreateGrant"
+      ,"kms:ListGrants","kms:RevokeGrant"],"Resource":"*","Condition":{"
+      Bool":{"kms:GrantIsForAWSResource":"true"}}},{"Sid":"Allow administration
+       of the key - local account","Effect":"Allow",'
+        '"Principal"
+      :{"AWS":"arn:aws:iam::123456789012:root"},"Action":["kms:Create*","
+      kms:Describe*","kms:Enable*","kms:List*","kms:Put*","kms:Update*","
+      kms:Revoke*","kms:Disable*","kms:Get*","kms:Delete*","kms:ScheduleKeyDeletion"
+      ,"kms:CancelKeyDeletion"],"Resource":"*"}]}'
+    )           
+    policyTemplate
+       =json.loads(samplePolicy)
+    policyStatement = policyTemplate['Statement']
+
+          
+    exAccountsInPrincipal = []
+    homeAccountInPrincipal = "arn:aws:iam::"
+      + event['account_current'] +":root"
+    for acc in event['account_ids']:
+
+            exAccountsInPrincipal.append("arn:aws:iam::"+ acc +":root")
+   
+       
+    #Update policy admin(local) and usage principals(external)
+    policyStatement[0]['Principal']['AWS']
+       = exAccountsInPrincipal
+    policyStatement[1]['Principal']['AWS'] = exAccountsInPrincipal
+
+          policyStatement[2]['Principal']['AWS'] = homeAccountInPrincipal
+    returnPolicy
+       = json.dumps(policyTemplate, indent=2)
+
+    #we have the policy, create
+       key
+    kms = boto3.client('kms')
+
+    tagKey = 'Name'
+    tagValue =
+       'AWSSupport-ShareRDSSnapshot: '+ event['automation_id']
+    resp = kms.create_key(
+
+            Policy = returnPolicy,
+      Description = "Key created for the document
+       AWSSupport-ShareRDSSnapshot Document",
+      Tags = [
+        {
+     
+           'TagKey': tagKey,
+          'TagValue': tagValue
+        }
+      ]
+
+          )
+    returnKey = resp['KeyMetadata']['Arn']
+    key_created = True
+
+        else:
+    #key is present, using the same
+    returnKey = event['kms_key_provided']
+
+      
+  return {
+    'key_arn': returnKey,
+    'key_created': key_created
+  }
+"
+  outputs:
+  - Name: "Key"
+    Selector: "$.Payload.key_arn"
+    Type: "String"
+- name: "BranchIfSnapshotProvided"
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  action: "aws:branch"
+  inputs:
+    Choices:
+    - Not:
+        Variable: "{{SnapshotName}}"
+        StringEquals: ""
+      NextStep: "IsDBInstanceSnapshot"
+    Default: "IsDBInstance"
+- name: "IsDBInstanceSnapshot"
+  onFailure: "step:IsDBClusterSnapshot"
+  isCritical: false
+  nextStep: "FormatInstanceSnapshotName"
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "rds"
+    Api: "DescribeDBSnapshots"
+    DBSnapshotIdentifier: "{{SnapshotName}}"
+  outputs:
+  - Name: "DBSnapshotIdentifier"
+    Selector: "$.DBSnapshots[0].DBSnapshotIdentifier"
+    Type: "String"
+- name: "FormatInstanceSnapshotName"
+  action: "aws:executeScript"
+  nextStep: "CopyCustomerDBSnapshot"
+  timeoutSeconds: 45
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  outputs:
+  - Name: "SnapshotName"
+    Selector: "$.Payload.snapshot_name"
+    Type: "String"
+  inputs:
+    Runtime: "python3.7"
+    Handler: "handler"
+    InputPayload:
+      snapshotId: "{{ IsDBInstanceSnapshot.DBSnapshotIdentifier }}"
+    Script: "def handler(events, context):
+    snapshot_id = events['snapshotId']
+
+          #Obtain the snapshot name clean, in case of system generated.
+    if ':'
+       in snapshot_id:
+        snapshot_id = snapshot_id.replace(':','-')
+    return
+       {
+    'snapshot_name': snapshot_id
+    }
+"
+- name: "CopyCustomerDBSnapshot"
+  action: "aws:executeAwsApi"
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  inputs:
+    Service: "rds"
+    Api: "CopyDBSnapshot"
+    SourceDBSnapshotIdentifier: "{{ SnapshotName }}"
+    TargetDBSnapshotIdentifier: "{{FormatInstanceSnapshotName.SnapshotName}}-{{automation:EXECUTION_ID}}"
+    KmsKeyId: "{{CheckOrCreateKey.Key}}"
+  outputs:
+  - Name: "DBSnapshotIdentifier"
+    Selector: "$.DBSnapshot.DBSnapshotIdentifier"
+    Type: "String"
+- name: "WaitForAvailableStateCustomerDBSnapshot"
+  action: "aws:waitForAwsResourceProperty"
+  maxAttempts: 10
+  timeoutSeconds: 600
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  inputs:
+    Service: "rds"
+    Api: "DescribeDBSnapshots"
+    DBSnapshotIdentifier: "{{CopyCustomerDBSnapshot.DBSnapshotIdentifier}}"
+    PropertySelector: "$.DBSnapshots[0].Status"
+    DesiredValues:
+    - "available"
+- name: "ShareCustomerDBSnapshot"
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "rds"
+    Api: "ModifyDBSnapshotAttribute"
+    DBSnapshotIdentifier: "{{CopyCustomerDBSnapshot.DBSnapshotIdentifier}}"
+    AttributeName: "restore"
+    ValuesToAdd: "{{ AccountIds }}"
+  isEnd: true
+- name: "IsDBClusterSnapshot"
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "rds"
+    Api: "DescribeDBClusterSnapshots"
+    DBClusterSnapshotIdentifier: "{{ SnapshotName }}"
+  nextStep: "FormatClusterSnapshotName"
+  outputs:
+  - Name: "DBClusterSnapshotIdentifier"
+    Selector: "$.DBClusterSnapshots[0].DBClusterSnapshotIdentifier"
+    Type: "String"
+- name: "FormatClusterSnapshotName"
+  action: "aws:executeScript"
+  nextStep: "CopyCustomerDBClusterSnapshot"
+  timeoutSeconds: 45
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  outputs:
+  - Name: "SnapshotName"
+    Selector: "$.Payload.snapshot_name"
+    Type: "String"
+  inputs:
+    Runtime: "python3.7"
+    Handler: "handler"
+    InputPayload:
+      snapshotId: "{{ IsDBClusterSnapshot.DBClusterSnapshotIdentifier }}"
+    Script: "def handler(events, context):
+  snapshot_id = events['snapshotId']
+
+        #Obtain the snapshot name clean, in case of system generated.
+  if ':' in
+       snapshot_id:
+    snapshot_id = snapshot_id.replace(':','-')
+  return {'snapshot_name':
+       snapshot_id}
+"
+- name: "CopyCustomerDBClusterSnapshot"
+  action: "aws:executeAwsApi"
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  inputs:
+    Service: "rds"
+    Api: "CopyDBClusterSnapshot"
+    SourceDBClusterSnapshotIdentifier: "{{ SnapshotName }}"
+    TargetDBClusterSnapshotIdentifier: "{{FormatClusterSnapshotName.SnapshotName}}-{{automation:EXECUTION_ID}}"
+    KmsKeyId: "{{CheckOrCreateKey.Key}}"
+  outputs:
+  - Name: "DBClusterSnapshotIdentifier"
+    Selector: "$.DBClusterSnapshot.DBClusterSnapshotIdentifier"
+    Type: "String"
+- name: "WaitForAvailableStateCustomerDBClusterSnapshot"
+  action: "aws:waitForAwsResourceProperty"
+  maxAttempts: 10
+  timeoutSeconds: 600
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  inputs:
+    Service: "rds"
+    Api: "DescribeDBClusterSnapshots"
+    DBClusterSnapshotIdentifier: "{{CopyCustomerDBClusterSnapshot.DBClusterSnapshotIdentifier}}"
+    PropertySelector: "$.DBClusterSnapshots[0].Status"
+    DesiredValues:
+    - "available"
+- name: "ShareCustomerDBClusterSnapshot"
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "rds"
+    Api: "ModifyDBClusterSnapshotAttribute"
+    DBClusterSnapshotIdentifier: "{{CopyCustomerDBClusterSnapshot.DBClusterSnapshotIdentifier}}"
+    AttributeName: "restore"
+    ValuesToAdd: "{{ AccountIds }}"
+  isEnd: true
+- name: "IsDBInstance"
+  onFailure: "step:IsDBCluster"
+  isCritical: false
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "rds"
+    Api: "DescribeDBInstances"
+    DBInstanceIdentifier: "{{Database}}"
+  nextStep: "DBSnapshots"
+- name: "IsDBCluster"
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "rds"
+    Api: "DescribeDBClusters"
+    DBClusterIdentifier: "{{Database}}"
+  nextStep: "DBClusterSnapshots"
+- name: "DBSnapshots"
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "rds"
+    Api: "DescribeDBSnapshots"
+    DBInstanceIdentifier: "{{Database}}"
+  outputs:
+  - Name: "DBSnapshots"
+    Selector: "$.DBSnapshots"
+    Type: "MapList"
+- name: "LatestDBSnapshot"
+  action: "aws:executeScript"
+  timeoutSeconds: 45
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  inputs:
+    Runtime: "python3.7"
+    Handler: "lambda_handler"
+    InputPayload:
+      snapshots: "{{ DBSnapshots.DBSnapshots }}"
+    Script: "def lambda_handler(events, context):
+  snapshots = events['snapshots']
+
+        return {'message': sorted(snapshots, key = lambda i: i['SnapshotCreateTime'],
+       reverse=True)[0]['DBSnapshotIdentifier']}
+"
+  outputs:
+  - Name: "SnapshotIdentifier"
+    Selector: "$.Payload.message"
+    Type: "String"
+- name: "CopyDBSnapshot"
+  action: "aws:executeAwsApi"
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  inputs:
+    Service: "rds"
+    Api: "CopyDBSnapshot"
+    SourceDBSnapshotIdentifier: "{{ LatestDBSnapshot.SnapshotIdentifier }}"
+    TargetDBSnapshotIdentifier: "{{Database}}-{{automation:EXECUTION_ID}}"
+    KmsKeyId: "{{CheckOrCreateKey.Key}}"
+  outputs:
+  - Name: "DBSnapshotIdentifier"
+    Selector: "$.DBSnapshot.DBSnapshotIdentifier"
+    Type: "String"
+- name: "WaitForAvailableStateDBSnapshot"
+  action: "aws:waitForAwsResourceProperty"
+  maxAttempts: 10
+  timeoutSeconds: 600
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  inputs:
+    Service: "rds"
+    Api: "DescribeDBSnapshots"
+    DBSnapshotIdentifier: "{{CopyDBSnapshot.DBSnapshotIdentifier}}"
+    PropertySelector: "$.DBSnapshots[0].Status"
+    DesiredValues:
+    - "available"
+- name: "ShareDBSnapshot"
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "rds"
+    Api: "ModifyDBSnapshotAttribute"
+    DBSnapshotIdentifier: "{{CopyDBSnapshot.DBSnapshotIdentifier}}"
+    AttributeName: "restore"
+    ValuesToAdd: "{{ AccountIds }}"
+  isEnd: true
+- name: "DBClusterSnapshots"
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "rds"
+    Api: "DescribeDBClusterSnapshots"
+    DBClusterIdentifier: "{{Database}}"
+  outputs:
+  - Name: "DBClusterSnapshots"
+    Selector: "$.DBClusterSnapshots"
+    Type: "MapList"
+- name: "LatestDBClusterSnapshot"
+  action: "aws:executeScript"
+  timeoutSeconds: 45
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  inputs:
+    Runtime: "python3.7"
+    Handler: "lambda_handler"
+    InputPayload:
+      snapshots: "{{ DBClusterSnapshots.DBClusterSnapshots }}"
+    Script: "def lambda_handler(events, context):
+  snapshots = events['snapshots']
+
+        return {'message': sorted(snapshots, key = lambda i: i['SnapshotCreateTime'],
+       reverse=True)[0]['DBClusterSnapshotIdentifier']}
+"
+  outputs:
+  - Name: "SnapshotIdentifier"
+    Selector: "$.Payload.message"
+    Type: "String"
+- name: "CopyDBClusterSnapshot"
+  action: "aws:executeAwsApi"
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  inputs:
+    Service: "rds"
+    Api: "CopyDBClusterSnapshot"
+    SourceDBClusterSnapshotIdentifier: "{{ LatestDBClusterSnapshot.SnapshotIdentifier
+       }}"
+    TargetDBClusterSnapshotIdentifier: "{{Database}}-{{automation:EXECUTION_ID}}"
+    KmsKeyId: "{{CheckOrCreateKey.Key}}"
+  outputs:
+  - Name: "DBClusterSnapshotIdentifier"
+    Selector: "$.DBClusterSnapshot.DBClusterSnapshotIdentifier"
+    Type: "String"
+- name: "WaitForAvailableStateDBClusterSnapshot"
+  action: "aws:waitForAwsResourceProperty"
+  maxAttempts: 10
+  timeoutSeconds: 600
+  onFailure: "step:CleanupKmsKey"
+  isCritical: true
+  inputs:
+    Service: "rds"
+    Api: "DescribeDBClusterSnapshots"
+    DBClusterSnapshotIdentifier: "{{CopyDBClusterSnapshot.DBClusterSnapshotIdentifier}}"
+    PropertySelector: "$.DBClusterSnapshots[0].Status"
+    DesiredValues:
+    - "available"
+- name: "ShareDBClusterSnapshot"
+  action: "aws:executeAwsApi"
+  inputs:
+    Service: "rds"
+    Api: "ModifyDBClusterSnapshotAttribute"
+    DBClusterSnapshotIdentifier: "{{CopyDBClusterSnapshot.DBClusterSnapshotIdentifier}}"
+    AttributeName: "restore"
+    ValuesToAdd: "{{ AccountIds }}"
+  isEnd: true
+- name: "CleanupKmsKey"
+  action: "aws:executeScript"
+  description: "Remove the key if created via this automation execution
+This step
+     schedules for deletion of the key
+The pending window for deletion is 30 days
+"
+  inputs:
+    Runtime: "python3.7"
+    Handler: "remove_key"
+    InputPayload:
+      kms_key_provided: "{{KmsKey}}"
+      kms_key_created: "{{CheckOrCreateKey.Key}}"
+    Script: "import boto3
+
+def remove_key(event, context):
+  if event['kms_key_provided']
+       == "":
+    kms = boto3.client('kms')
+
+    resp = kms.schedule_key_deletion(
+
+            KeyId = event['kms_key_created']
+    )
+
+    return {
+      'message':
+       "The key {} is scheduled to delete on {}".format(resp['KeyId'],resp['DeletionDate']),
+
+            'scheduled_for_deletion': True
+    }
+  else:
+    return {
+      'message':
+       "The key {} is pre-existing, no actions taken for the key.".format(event['kms_key_provided']),
+
+            'scheduled_for_deletion': False
+    }
+"
+  outputs:
+  - Name: "CleanupMessage"
+    Selector: "$.Payload.message"
+    Type: "String"
+  isEnd: true
+  isCritical: true

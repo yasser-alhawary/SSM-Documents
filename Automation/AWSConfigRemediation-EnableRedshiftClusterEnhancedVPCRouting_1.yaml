@@ -1,0 +1,95 @@
+  ### Document name - AWSConfigRemediation-EnableRedshiftClusterEnhancedVPCRouting  
+
+  ## What does this document do?
+  This document enables enhanced VPC routing on a Amazon Redshift cluster using the [ModifyCluster](https://docs.aws.amazon.com/redshift/latest/APIReference/API_ModifyCluster.html) API.
+  
+  ## Input Parameters
+  * ClusterIdentifier: (Required) The unique identifier of the cluster to be modified.
+  * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.  
+
+  ## Output Parameters
+  ModifyRedshiftCluster.Response - Standard HTTP response metadata of the ModifyCluster API.  
+
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+outputs:
+  - ModifyRedshiftCluster.Response
+parameters:
+  ClusterIdentifier:
+    type: String
+    description: The unique identifier of the cluster to be modified.
+    allowedPattern: ^(?!-)(?!.*--)([a-z][a-z0-9-]{0,62})(?<!-)$ 
+  AutomationAssumeRole:
+    type: String
+    description: The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:iam::d{12}:role/[w+=,.@-]+
+mainSteps:
+  - name: DescribeRedshiftClusters
+    action: "aws:executeAwsApi"
+    description: |
+      ## DescribeRedshiftCluster
+      Obtains the Amazon Redshift cluster details using the [DescribeClusters](https://docs.aws.amazon.com/redshift/latest/APIReference/API_DescribeClusters.html) API.
+      ## Outputs
+      * EnhancedVPCRouting: EnhancedVpcRouting boolean property from DescribeClusters API response.    
+    inputs:
+      Service: redshift
+      Api: DescribeClusters
+      ClusterIdentifier: "{{ ClusterIdentifier }}"
+    outputs:
+      - Name: EnhancedVPCRouting
+        Selector: "$.Clusters[0].EnhancedVpcRouting"
+        Type: Boolean
+  - name: CheckEnhancedVPCRouting
+    description: |
+      ## CheckEnhancedVPCRouting
+      Checks whether EnhancedVpcRouting property is set to true from the output of previous step.
+    action: "aws:branch"
+    inputs:
+      Choices:
+        - NextStep: ModifyRedshiftCluster
+          Variable: "{{DescribeRedshiftClusters.EnhancedVPCRouting}}"
+          BooleanEquals: false
+    isEnd: true
+  - name: ModifyRedshiftCluster
+    action: "aws:executeAwsApi"
+    description: |
+      ## ModifyRedshiftCluster 
+      Modifies the EnhancedVpcRouting property to true using the [ModifyCluster] (https://docs.aws.amazon.com/redshift/latest/APIReference/API_ModifyCluster.html) API.
+      ## Outputs
+      * Response: Standard HTTP response metadata of the ModifyCluster API.
+    inputs:
+      Service: redshift
+      Api: ModifyCluster
+      EnhancedVpcRouting: true
+      ClusterIdentifier: "{{ ClusterIdentifier }}"
+    outputs:
+      - Name: Response
+        Selector: "$.ResponseMetadata"
+        Type: StringMap
+  - name: WaitUntilEnhancedVPCRoutingEnabled
+    description: |
+      ## WaitUntilEnhancedVPCRoutingEnabled
+      Waits until the EnhancedVpcRouting property is changed to true for the given cluster identifer using DescribeClusters API or timeout after specified number of seconds.
+    action: "aws:waitForAwsResourceProperty"
+    timeoutSeconds: 300
+    inputs:
+      Service: redshift
+      Api: DescribeClusters
+      ClusterIdentifier: "{{ ClusterIdentifier }}"
+      PropertySelector: "$.Clusters[0].EnhancedVpcRouting"
+      DesiredValues:
+        - "True"
+  - name: AssertEnhancedVPCRouting
+    description: |
+      ## AssertEnhancedVPCRouting
+      Checks whether EnhancedVpcRouting property is true or not for the given cluster identifier using DescribeClusters API.
+    action: "aws:assertAwsResourceProperty"
+    inputs:
+      Service: redshift
+      Api: DescribeClusters
+      ClusterIdentifier: "{{ ClusterIdentifier }}"
+      PropertySelector: "$.Clusters[0].EnhancedVpcRouting"
+      DesiredValues:
+        - "True"
+    isEnd: true
+

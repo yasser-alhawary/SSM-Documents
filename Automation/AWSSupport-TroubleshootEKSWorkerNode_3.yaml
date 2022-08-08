@@ -1,0 +1,686 @@
+schemaVersion: "0.3"
+description: "# AWSSupport-TroubleshootEKSWorkerNode
+
+----
+
+The *AWSSupport-TroubleshootEKSWorkerNode*
+   runbook is designed to help troubleshooting EKS worker node that [failed to join
+   an EKS cluster](https://docs.aws.amazon.com/eks/latest/userguide/troubleshooting.html#worker-node-fail).
+   This automation runbook checks both EKS cluster configuration and worker node
+   and validates the following:
+
+- Node tags are applied.
+- Worker node Instance
+   type is supported. 
+- Network communication between worker node and Cluster API
+   server is allowed. 
+- Node [IAM Role and Policies](https://docs.aws.amazon.com/eks/latest/userguide/create-node-role.html).
+
+  - Cluster [IAM role and Policies](https://docs.aws.amazon.com/eks/latest/userguide/service_IAM_role.html).
+
+  - VPC Endpoints for [private Clusters](https://docs.aws.amazon.com/eks/latest/userguide/private-clusters.html).
+   
+- Worker node [AMI version](https://docs.aws.amazon.com/eks/latest/userguide/eks-optimized-ami.html).
+   
+- VPC DHCP optionset. 
+- Kubelet, container runtime.
+
+
+### Prerequisites:
+
+  
+* To check Kubelet status and container runtime, EC2 instance must be an online
+   managed instance(connected with AWS Systems Manager). If your EC2 instance is
+   not an online managed instance, only this step of the test will be skipped, however
+   all other checks will be executed.
+
+### Disclaimer:
+
+* This runbook doesn't
+   make any changes to your EKS cluster or your worker node.
+* This runbook doesn't
+   support worker nodes running Windows or Bottlerocket Operating Systems.
+
+###
+   Workflow Specifications:
+
+ This workflow uses AWS Systems Manager Automation
+   and takes in the following parameters:
+
+- **ClusterName** - **(Required)**:
+   The EKS cluster name. 
+- **WorkerID** - **(Required)** : Worker node that failed
+   to join the EKS cluster.
+- **AutomationAssumeRole** - **(Optional)** The IAM
+   role which AWS Systems Manager will assume to execute this automation. This role
+   must allow these IAM actions:
+
+        - iam:GetRole
+        - iam:GetInstanceProfile
+
+          - iam:ListAttachedRolePolicies
+        - ec2:DescribeDhcpOptions
+   
+       - ec2:DescribeNatGateways
+        - ec2:DescribeSecurityGroups
+        -
+   ec2:DescribeImages
+        - ec2:DescribeNetworkInterfaces
+        - ec2:DescribeVpcs
+
+          - ec2:DescribeVpcEndpoints
+        - ec2:DescribeSubnets
+        - ec2:DescribeNetworkAcls
+
+          - ec2:DescribeInstanceStatus
+        - ec2:DescribeInstances
+       
+   - ec2:DescribeRouteTables
+        - ec2:DescribeVpcAttribute
+        - ec2:DescribeInstanceAttribute
+
+          - eks:DescribeCluster
+        - ssm:DescribeInstanceInformation
+    
+      - ssm:ListCommandInvocations
+        - ssm:ListCommands
+        - ssm:SendCommand
+
+  
+
+
+Please visit the documentation on [Automation Setup](https://docs.aws.amazon.com/systems-manager/latest/userguide/automation-setup.html)
+   for more information."
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    default: ""
+    type: "String"
+    description: "(Optional) IAM role which AWS Systems Manager will assume to execute
+       this automation. For more information, visit - https://docs.aws.amazon.com/systems-manager/latest/userguide/automation-setup.html"
+    allowedPattern: "^$|^arn:aws:iam::[0-9]*:role/[/w+=,.@-]+$"
+  ClusterName:
+    type: "String"
+    description: "(Required) The name of the EKS cluster"
+    allowedPattern: "[-a-zA-Z0-9]{1,100}$"
+  WorkerID:
+    type: "String"
+    description: "(Required) The EC2 instance ID for the Worker node which failed
+       to join the cluster"
+    default: ""
+    allowedPattern: "^i-[a-z0-9]{8,17}$"
+mainSteps:
+- name: "validateIfClusterExistsAndActive"
+  action: "aws:assertAwsResourceProperty"
+  isCritical: true
+  timeoutSeconds: 30
+  maxAttempts: 3
+  inputs:
+    Service: "eks"
+    Api: "DescribeCluster"
+    name: "{{ClusterName}}"
+    PropertySelector: "$.cluster.status"
+    DesiredValues:
+    - "ACTIVE"
+- name: "validateIfInstanceExistsAndRunning"
+  action: "aws:assertAwsResourceProperty"
+  isCritical: true
+  timeoutSeconds: 30
+  maxAttempts: 3
+  inputs:
+    Service: "ec2"
+    Api: "DescribeInstanceStatus"
+    InstanceIds:
+    - "{{WorkerID}}"
+    PropertySelector: "$.InstanceStatuses[0].InstanceState.Name"
+    DesiredValues:
+    - "running"
+- name: "TroubleshootWorkerNode"
+  action: "aws:executeScript"
+  isCritical: true
+  inputs:
+    Runtime: "python3.7"
+    InputPayload:
+      ClusterName: "{{ClusterName}}"
+      WorkerID: "{{WorkerID}}"
+    Handler: "script_handler"
+    Script: "# Copyright 2022 Amazon.com, Inc. and its affiliates. All Rights Reserved.
+
+      # SPDX-License-Identifier: LicenseRef-.amazon.com.-AmznSL-1.0
+# Licensed under
+       the Amazon Software License (the "License").
+# You may not use this file
+       except in compliance with the License.
+# A copy of the License is located
+       at
+#   http://aws.amazon.com/asl/
+# or in the "license" file accompanying
+       this file. This file is distributed
+# on an "AS IS" BASIS, WITHOUT WARRANTIES
+       OR CONDITIONS OF ANY KIND, either
+# express or implied. See the License for
+       the specific language governing
+# permissions and limitations under the License.
+
+      
+from base.node import Node
+from base.cluster import Cluster
+from base.messages
+       import Messages
+from case import cluster_enis
+from case import ClusterSec_check
+
+      from case import cp_iam_role
+from case import dhcp_options
+from case import
+       iam_role_check
+from case import node_tags
+from case import node_ami
+from
+       case import cluster_public_endpoint_access
+from case import vpc_dns
+from
+       case import node_cni
+from case import instancetype
+from case import nacls_basic_rules
+
+      from case import sts_endpoint
+from case import node_iam_role
+from case import
+       public_subnet_IP
+from case import s3_endpoint_route
+from case import userdata
+
+      from case import verifyNat
+from case import vpc_endpoint_check
+from case import
+       node_sg_outbound
+from case import outposts_check
+from case import sw_daemons
+
+      from case import imds_check
+
+def script_handler(events, context):
+
+    worker_node_id
+       = events['WorkerID']
+    cluster_name = events['ClusterName']
+
+    messages
+       = Messages()
+
+    cluster = Cluster(cluster_name)
+    node = Node(worker_node_id)
+
+      
+    if not cluster.isActive:
+        messages.render('I0',
+            
+                  'ERROR',
+                        messages.generalMessages['clusterNotActive'],
+
+                              cluster_name=cluster_name)
+    else:
+        messages.render('I0',
+
+                              'NODASH',
+                        messages.generalMessages['clusterActive'],
+
+                              cluster_name=cluster_name)
+        if node.IsTerminated:
+
+                  messages.render('I0',
+                            'ERROR',
+ 
+                                 messages.nodeMessages['terminatedInstance'],
+ 
+                                 node_id=worker_node_id)
+        else:
+       
+           messages.render('I2',
+                            'NODASH',
+       
+                           messages.clusterMessages['checkingClusterSG'])
+     
+             if ClusterSec_check.ClusterSecuritygroup(node.privateIpAddress,
+  
+                                                         node.securityGroupIDs,
+
+                                                           cluster.clusterSecurityGroup):
+
+                      messages.render('I3',
+                                'INFO',
+
+                                      messages.clusterMessages['clusterSGOK'], cluster_sg=cluster.clusterSecurityGroup)
+
+                  else:
+                messages.render('I3',
+                
+                      'ERROR',
+                                messages.clusterMessages['clusterSGNOK'],
+       cluster_sg=cluster.clusterSecurityGroup)
+            messages.render('I2',
+
+                                  'NODASH',
+                            messages.networkMessages['checkingDHCP'])
+
+                  if dhcp_options.dhcp_options_check(node.InstanceVpc):
+       
+               messages.render('I3',
+                                'INFO',
+ 
+                                     messages.networkMessages['dhcpOK'])
+      
+            else:
+                messages.render('I3',
+                      
+                'ERROR',
+                                messages.networkMessages['dhcpNOK'])
+
+      
+            messages.render('I2',
+                            'NODASH',
+
+                                  messages.clusterMessages['checkingServiceRole'],
+
+                                  cluster_role=cluster.roleArn)
+            cp_iam_role.check_cluster_role(cluster.roleArn,
+
+                                                 cluster_name,
+                
+                                 messages)
+                
+            messages.render('I2',
+
+                                  'NODASH',
+                            messages.networkMessages['checkingClusterENIs'])
+
+                  cluster_enis.execute_checks(cluster, messages)
+            if
+       cluster.isOnlyPublic:
+                cluster_public_endpoint_access.execute_checks(node,
+       cluster, messages)
+            
+            messages.render('I2',
+    
+                              'NODASH',
+                            messages.networkMessages['checkingVpcDNS'])
+
+                  vpc_dns.check_vpc_attributes(cluster.vpcId, messages)
+
+##############worker
+       node checks#############
+            messages.render('I0',
+            
+                      'NODASH',
+                            messages.generalMessages['thinSeperator'])
+
+                  messages.render('I0',
+                            'NODASH',
+
+                                  messages.nodeMessages['instanceStateOK'],
+   
+                               node_id=worker_node_id)
+            messages.render('I2',
+
+                                  'NODASH',
+                            messages.nodeMessages['checkingInstanceFamily'])
+
+                  if instancetype.validateInstanceType(node.InstanceType):
+    
+                  messages.render('I3',
+                                'INFO',
+
+                                      messages.nodeMessages['instanceFamilyOK'],
+
+                                      instance_family=node.InstanceType)
+      
+            else:
+                messages.render('I3',
+                      
+                'ERROR',
+                                messages.nodeMessages['instanceFamilyNOK'],
+
+                                      instance_family=node.InstanceType)
+      
+            messages.render('I2',
+                            'NODASH',
+      
+                            messages.nodeMessages['checkingInstanceNetworking'])
+
+                  if node.IsPrivate:
+                messages.render('I3',
+   
+                                   'INFO',
+                                messages.nodeMessages['privateInstance'],
+
+                                      nat_gateway=node.NatGatway)
+             
+         isNatPublic = verifyNat.verify_nat(node.NatGatway, node.InstanceVpc)
+ 
+                     if not isNatPublic:
+                    messages.render('I4',
+
+                                          'ERROR',
+                            
+              messages.nodeMessages['privateNAT'],
+                            
+              nat_gateway=node.NatGatway)
+                else:
+              
+            messages.render('I4',
+                                    'INFO2',
+
+                                          messages.nodeMessages['natOK'],
+     
+                                     nat_gateway=node.NatGatway)
+            elif
+       node.IsPublic:
+                messages.render('I3',
+                  
+                    'INFO',
+                                messages.nodeMessages['publicInstance'],
+
+                                      internet_gateway=node.InternetGateway)
+  
+                    if node.PublicIpAddress:
+                    messages.render('I4',
+
+                                          'INFO2',
+                            
+              messages.nodeMessages['instanceWithPublicIP'],
+                  
+                        public_ip=node.PublicIpAddress)
+                else:
+
+                         messages.render('I4',
+                                
+          'ERROR',
+                                    messages.nodeMessages['instanceWithoutPublicIP'])
+
+      
+                if public_subnet_IP.is_public_ip_map(node.InstanceSubnet):
+
+                          messages.render('I4',
+                               
+           'INFO2',
+                                    messages.nodeMessages['instanceAutoAssignIP'],
+
+                                          instance_subnet=node.instance_subnet_id)
+
+                      else:
+                    messages.render('I4',
+        
+                                  'ERROR',
+                                    messages.nodeMessages['instanceNoAutoAssingIP'],
+
+                                          instance_subnet=node.instance_subnet_id)
+
+                  else:
+                messages.render('I3',
+                
+                      'INFO',
+                                messages.nodeMessages['privateInstanceVPCEndpoint'])
+
+                      messages.render('I3',
+                                'INFO',
+
+                                      messages.networkMessages['checkingVPCE'])
+
+                      vpc_endpoint_check.vpce_all_checks(node.Region,
+         
+                                                node.InstanceVpc,
+             
+                                            node.InstanceSubnet,
+              
+                                           node.privateIpAddress,
+             
+                                            node.securityGroupIDs,
+            
+                                             messages)
+                s3_endpoint_route.check_s3_endpoints(node,
+       messages)
+            
+            messages.render('I2',
+             
+                     'NODASH',
+                            messages.nodeMessages['checkingInstanceProfile'])
+
+                  if node.Instanceprofile:
+                messages.render('I3',
+
+                                      'INFO',
+                                messages.nodeMessages['displayInstanceProfile'],
+
+                                      node_id=node.name,
+                      
+                instance_profile=node.Instanceprofile)
+                if iam_role_check.iam_role_check(node.IAMRole):
+
+                          messages.render('I4',
+                               
+           'INFO2',
+                                    messages.nodeMessages['instanceProfileOK'],
+
+                                          instance_role=node.IAMRole)
+         
+             else:
+                    messages.render('I4',
+                 
+                         'ERROR',
+                                    messages.nodeMessages['instanceProfilePath'],
+
+                                          instance_role= node.IAMRole)
+        
+              checkTrustRelationship = node_iam_role.check_trust_relationship(
+
+                          node.role_name
+                )
+                checkIAMPolicy
+       = node_iam_role.check_instance_role(node.role_name)
+                if not
+       checkIAMPolicy[0]:
+                    messages.render('I4',
+          
+                                'ERROR',
+                                    messages.nodeMessages['instanceIAMPolicyNOK'],
+
+                                          instance_role=node.IAMRole,
+         
+                                 node=worker_node_id,
+                         
+                 policy=str(checkIAMPolicy[1]))
+                else:
+        
+                  messages.render('I4',
+                                    'INFO2',
+
+                                          messages.nodeMessages['instanceIAMPolicyOK'],
+
+                                          instance_role=node.IAMRole)
+         
+             if checkTrustRelationship:
+                    messages.render('I4',
+
+                                          'INFO2',
+                            
+              messages.nodeMessages['instanceProfileThrustOK'],
+               
+                           instance_role=node.IAMRole)
+                else:
+ 
+                         messages.render('I4',
+                                
+          'ERROR',
+                                    messages.nodeMessages['instanceProfileThrustNOK'],
+
+                                          instance_role=node.IAMRole)
+         
+         else:
+                messages.render('I3',
+                         
+             'ERROR',
+                                messages.nodeMessages['instanceProfileNOK'])
+
+      
+            messages.render('I2',
+                            'NODASH',
+
+                                  messages.nodeMessages['checkingUserData'])
+  
+                if userdata.check_userdata(node.UserData,
+                     
+                        cluster_name):
+                messages.render('I3',
+ 
+                                     'INFO',
+                                messages.nodeMessages['userDataOK'])
+
+                  else:
+                messages.render('I3',
+                
+                      'ERROR',
+                                messages.nodeMessages['userDataNOK'])
+
+      
+            node_tags.execute_checks(node, cluster, messages)
+          
+        node_ami.execute_checks(node, cluster, messages)
+            node_cni.execute_checks(node,
+       messages)
+            node_sg_outbound.execute_checks(node, messages)
+ 
+                 outposts_check.execute_checks(node,messages)
+
+            messages.render('I2',
+
+                                  'NODASH',
+                            messages.networkMessages['checkingNACL'])
+
+                  nacls_basic_rules.execute_checks(node, cluster, messages)
+
+ 
+                 messages.render('I2',
+                                'NODASH',
+
+                                      messages.nodeMessages['CheckingStsEndpoint'])
+
+                  if sts_endpoint.check_sts_endpoint(node.Region):
+            
+          messages.render('I3',
+                                'INFO',
+      
+                                messages.nodeMessages['CorrectSTSendpoint'], region=node.Region)
+
+                  else:
+                messages.render('I3',
+                
+                      'ERROR',
+                                messages.nodeMessages['MissingSTSendpoint'],
+       region=node.Region)
+            messages.render('I2',
+                 
+                 'NODASH',
+                            messages.nodeMessages['checkingImdsEndpoint'])
+
+                  if imds_check.imds_check(node):
+                messages.render('I3',
+
+                                      'INFO',
+                                messages.nodeMessages['ImdsEndpointEnabled'])
+
+                  else:
+                messages.render('I3',
+                
+                      'ERROR',
+                                messages.nodeMessages['ImdsEndpointDisabled'])
+
+                  messages.render('I2',
+                            'NODASH',
+
+                                      messages.nodeMessages['checkingSSMAgent'])
+
+                  if sw_daemons.ssm_agent_check(node.name):
+                messages.render('I3',
+
+                                      'INFO',
+                                messages.nodeMessages['ssmAgentReachable'])
+
+                      if sw_daemons.check_containerd(node.name):
+              
+            messages.render('I4',
+                                    'INFO2',
+
+                                          messages.nodeMessages['daemonRunning'],
+       daemon_name='containerd')
+                else:
+                    messages.render('I4',
+
+                                          'ERROR',
+                            
+              messages.nodeMessages['daemonNotRunning'], daemon_name='containerd')
+
+                      if float(cluster.version) < 1.23 :
+                    if
+       sw_daemons.check_docker(node.name):
+                        messages.render('I4',
+
+                                              'INFO2',
+                        
+                      messages.nodeMessages['daemonRunning'], daemon_name='docker')
+
+                          else:
+                        messages.render('I4',
+
+                                              'ERROR',
+                        
+                      messages.nodeMessages['daemonNotRunning'], daemon_name='docker')
+
+                      if sw_daemons.check_kubelet(node.name):
+                 
+         messages.render('I4',
+                                    'INFO2',
+  
+                                        messages.nodeMessages['daemonRunning'], daemon_name='kubelet')
+
+                      else:
+                    messages.render('I4',
+        
+                                  'ERROR',
+                                    messages.nodeMessages['daemonNotRunning'],
+       daemon_name='kubelet')
+            else:
+                messages.render('I3',
+
+                                      'WARNING',
+                              
+        messages.nodeMessages['ssmAgentNotReachable'])                  
+      
+                        
+            messages.render('I0',
+                   
+               'NODASH',
+                            messages.generalMessages['thickSeparator'])
+
+          messages.render('I0',
+                    'NODASH',
+                
+          messages.generalMessages['executionComplete'])
+    
+    return {
+  
+            'Message': messages.bufferPrettify()
+    }
+
+"
+    Attachment: "attachment.zip"
+  outputs:
+  - Name: "Message"
+    Selector: "$.Payload.Message"
+    Type: "String"
+files:
+  attachment.zip:
+    checksums:
+      sha256: "26551d241cb41de61576518a41d8bd8a683a6da1b99c487c1c35623823d78818"
+outputs:
+- "TroubleshootWorkerNode.Message"

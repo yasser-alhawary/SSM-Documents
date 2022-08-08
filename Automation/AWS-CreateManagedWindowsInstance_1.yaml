@@ -1,0 +1,984 @@
+schemaVersion: "0.3"
+description: "Creates a Windows Managed Instance"
+assumeRole: "{{AutomationAssumeRole}}"
+parameters:
+  AmiId:
+    type: "String"
+    description: "(Required) AMI id to use for launching the instance."
+    default: "{{ssm:/aws/service/ami-windows-latest/Windows_Server-2016-English-Full-Base}}"
+  VpcId:
+    type: "String"
+    description: "(Required) New instance will be deployed into this vpc or in the
+       default vpc if not specified."
+    default: "Default"
+  RoleName:
+    type: "String"
+    description: "(Required) Role Name to create."
+    default: "SSMManagedInstanceProfileRole"
+  GroupName:
+    type: "String"
+    description: "(Required) Security Group Name to create."
+    default: "SSMSecurityGroupForWindowsInstances"
+  InstanceType:
+    type: "String"
+    description: "(Required) Type of instance to launch. Default is t2.medium."
+    default: "t2.medium"
+  KeyPairName:
+    type: "String"
+    description: "(Required) Key pair to use when creating instance."
+  RemoteAccessCidr:
+    type: "String"
+    description: "(Required) Creates Security group with port for RDP (Port range
+       3389) open to IPs specified by CIDR (default is 0.0.0.0/0). If the security
+       group already exists it will not be modified and rules will not be changed."
+    default: "0.0.0.0/0"
+  StackName:
+    type: "String"
+    description: "(Optional) Specify stack name used by this document"
+    default: "CreateManagedInstanceStack{{automation:EXECUTION_ID}}"
+  AutomationAssumeRole:
+    type: "String"
+    description: "(Optional) The ARN of the role that allows Automation to perform
+       the actions on your behalf"
+    default: ""
+  SubnetId:
+    type: "String"
+    description: "(Required) New instance will be deployed into this subnet or in
+       the default subnet if not specified."
+    default: "Default"
+mainSteps:
+- name: "createManagedInstanceStack"
+  action: "aws:createStack"
+  maxAttempts: 1
+  onFailure: "Abort"
+  inputs:
+    OnFailure: "ROLLBACK"
+    Capabilities:
+    - "CAPABILITY_IAM"
+    Parameters:
+    - ParameterKey: "AmiId"
+      ParameterValue: "{{AmiId}}"
+    - ParameterKey: "InstanceType"
+      ParameterValue: "{{InstanceType}}"
+    - ParameterKey: "RoleName"
+      ParameterValue: "{{RoleName}}"
+    - ParameterKey: "GroupName"
+      ParameterValue: "{{GroupName}}"
+    - ParameterKey: "VpcId"
+      ParameterValue: "{{VpcId}}"
+    - ParameterKey: "SubnetId"
+      ParameterValue: "{{SubnetId}}"
+    - ParameterKey: "LambdaRoleArn"
+      ParameterValue: "{{AutomationAssumeRole}}"
+    - ParameterKey: "KeyName"
+      ParameterValue: "{{KeyPairName}}"
+    - ParameterKey: "RemoteAccessCidr"
+      ParameterValue: "{{RemoteAccessCidr}}"
+    StackName: "{{StackName}}"
+    TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'
+Conditions:
+  IsVerbose:
+
+          Fn::Equals:
+    - {Ref: Verbose}
+    - 'true'
+  IsVerboseAndLambdaRoleNotSpecified:
+
+          Fn::And:
+    - {Condition: LambdaAssumeRoleNotSpecified}
+    - {Condition:
+       IsVerbose}
+  KeyNameSpecified:
+    Fn::And:
+    - Fn::Not:
+      - Fn::Equals:
+
+              - {Ref: KeyName}
+        - ''
+    - Fn::Not:
+      - Fn::Equals:
+
+              - {Ref: KeyName}
+        - undefined
+  LambdaAssumeRoleNotSpecified:
+
+          Fn::Or:
+    - Fn::Equals:
+      - {Ref: LambdaRoleArn}
+      - ''
+
+          - Fn::Equals:
+      - {Ref: LambdaRoleArn}
+      - undefined
+  RemoteAccessSpecified:
+
+          Fn::And:
+    - Fn::Not:
+      - Fn::Equals:
+        - {Ref: RemoteAccessCidr}
+
+              - ''
+    - Fn::Not:
+      - Fn::Equals:
+        - {Ref: RemoteAccessCidr}
+
+              - undefined
+Parameters:
+  AmiId: {Description: AMI ID to be deploy.,
+       Type: String}
+  GroupName: {Description: (Required) Security Group Name to
+       use or create if it does
+      not exists., Type: String}
+  InstanceType:
+       {Description: Instance Type to deploy., Type: String}
+  KeyName: {Default:
+       '', Description: Name of an existing EC2-VPC KeyPair, Type: String}
+  LambdaRoleArn:
+       {Default: '', Description: 'Assume role used by the lambda function.
+   
+         If not specified this template will create a temporarily role to be used
+       by
+      the lambda created in this template.
+
+      ', Type: String}
+
+        RemoteAccessCidr: {Default: '', Description: 'CIDR block allowed access to
+       SSH or
+      RDP to the instance that is deployed. Only added to ingress
+       if a new security
+      group is created.
+
+      ', Type: String}
+  RoleName:
+       {Description: (Required) Role name to use or create if it does not exists.,
+
+          Type: String}
+  SubnetId: {Description: Subnet to deploy the instance
+       in., Type: String}
+  Verbose:
+    AllowedValues: ['true', 'false']
+   
+       Default: 'true'
+    Description: 'Verbose setting
+
+      '
+    Type: String
+
+        VpcId: {Description: VPC to deploy the instance in., Type: String}
+Resources:
+
+        CollectInformation:
+    Properties:
+      AmiId: {Ref: AmiId}
+      ServiceToken:
+
+              Fn::GetAtt: [CollectInformationLambda, Arn]
+      VpcId: {Ref: VpcId}
+
+          Type: Custom::CollectInformation
+  CollectInformationLambda:
+    Properties:
+
+            Code: {ZipFile: "import base64
+import boto3
+import traceback
+
+      nimport cfnresponse
+
+          
+def handler_ami_info(event, context):
+      nttry:
+ttec2 = boto3.client('ec2')
+
+          ttami_id = event[
+      "ResourceProperties"].get("AmiId", None)
+ttvpc_id
+      
+           = event["ResourceProperties"].get("VpcId", "")
+
+      ttif ami_id is
+           None:
+tttraise Exception("AMI id
+       must be provided")
+
+ttdata
+           = {}
+
+tt# find
+       platform based on ami
+ttimages = ec2.describe_images(ImageIds=[ami_id])[
+      "
+          Images"]
+ttif len(images) == 0:
+tttraise Exception(
+      "No image found
+           with " + ami_id)
+ttdata["Platform
+      "] = images[0].get("Platform"
+          , "linux")
+ttdata[
+      "UserData"] = ""
+
+tt# find default vpc id
+          
+       if non is specified
+ttif len(vpc_id) == 0 or vpc_id == "Default
+      "
+          :
+tttvpc_id = ""
+tttfor vpc in ec2.describe_vpcs().get('Vpcs',
+      
+           []):
+ttttif vpc.get('IsDefault', False):
+tt
+      tttvpc_id = vpc['VpcId']
+
+          tttttbreak
+tt
+      tif len(vpc_id) == 0:
+ttttraise Exception("
+          Unable
+       to find default vpc")
+ttdata["VpcId"] = vpc_id
+
+ttcfnresponse.send(event,
+      
+           context, cfnresponse.SUCCESS, data, event.get("PhysicalResourceId
+      ",
+           None))
+texcept Exception as e:
+ttprint(str(e))
+      ntttraceback.print_exc()
+
+          ttcfnresponse.send(event, context,
+       cfnresponse.FAILED, {}, event.get("
+          PhysicalResourceId"
+      , None))
+
+
+def handler_delete(event, context):
+t
+          # Nothing
+       to do... this is a informational lambda and no resource is created.
+
+
+                tcfnresponse.send(event, context, cfnresponse.SUCCESS, {}, event[
+      "PhysicalResourceId"
+          ])
+
+
+def handler(event, context):
+      ntif event["RequestType"] in ["
+          Create", "Update
+      "]:
+tthandler_ami_info(event, context)
+telif event["
+     
+           RequestType"] in ["Delete"]:
+tthandler_delete(event, context)
+      n"}
+      Handler: index.handler
+      MemorySize: 128
+      Role:
+   
+           Fn::If:
+        - LambdaAssumeRoleNotSpecified
+        - Fn::GetAtt:
+       [LambdaRole, Arn]
+        - {Ref: LambdaRoleArn}
+      Runtime: python3.7
+
+            Timeout: 60
+    Type: AWS::Lambda::Function
+  CollectSubnetInfoLambda:
+
+          Properties:
+      Code: {ZipFile: "import boto3
+import traceback
+      n
+import cfnresponse
+
+
+
+          def handler_subnet_info(event,
+       context):
+ttry:
+ttec2 = boto3.client('ec2')
+
+          t
+      tvpc_id = event["ResourceProperties"].get("VpcId", "")
+
+      ttsubnet_id
+           = event["ResourceProperties"].get("SubnetId
+      ", "")
+
+ttdata =
+           {}
+
+ttif len(subnet_id)
+       == 0 or subnet_id == "Default":
+ttt
+          subnet_id =
+       ""
+tttfor subnet in ec2.describe_subnets(Filters=[{'Name':
+      
+           'vpc-id', 'Values': [vpc_id]}]).get('Subnets'):
+ttt
+      tif subnet.get('DefaultForAz',
+           False) and subnet['VpcId'] ==
+       vpc_id:
+tttttsubnet_id = subnet['SubnetId']
+
+          
+      tttttbreak
+tttif len(subnet_id) == 0:
+ttttraise Exception(
+      "
+          Unable to find default subnet for vpc")
+ttdata["
+      SubnetId"] = subnet_id
+
+          
+ttcfnresponse.send(event, context,
+       cfnresponse.SUCCESS, data, event.get("
+          PhysicalResourceId
+      ", None))
+texcept Exception as e:
+ttprint(str(e))
+
+        
+        tttraceback.print_exc()
+ttcfnresponse.send(event, context, cfnresponse.FAILED,
+      
+           {}, event.get("PhysicalResourceId", None))
+
+
+def
+       handler_delete(event,
+           context):
+t# Nothing to do... this
+       is a informational lambda and no
+           resource is created.
+
+      tcfnresponse.send(event, context, cfnresponse.SUCCESS,
+           {}, event[
+      "PhysicalResourceId"])
+
+
+def handler(event, context):
+
+     
+           tif event["RequestType"] in ["Create", "Update"]:
+      ntthandler_subnet_info(event,
+           context)
+telif event[
+      "RequestType"] in ["Delete"]:
+tthandler_delete(event,
+  
+               context)
+"}
+      Handler: index.handler
+      MemorySize:
+       128
+      Role:
+        Fn::If:
+        - LambdaAssumeRoleNotSpecified
+
+              - Fn::GetAtt: [LambdaRole, Arn]
+        - {Ref: LambdaRoleArn}
+ 
+           Runtime: python3.7
+      Timeout: 60
+    Type: AWS::Lambda::Function
+
+        CollectSubnetInformation:
+    Properties:
+      ServiceToken:
+       
+       Fn::GetAtt: [CollectSubnetInfoLambda, Arn]
+      SubnetId: {Ref: SubnetId}
+
+            VpcId:
+        Fn::GetAtt: [CollectInformation, VpcId]
+    Type: Custom::CollectSubnetInformation
+
+        CreateInstance:
+    DeletionPolicy: Retain
+    Properties:
+      IamInstanceProfile:
+       {Ref: RoleName}
+      ImageId: {Ref: AmiId}
+      InstanceType: {Ref: InstanceType}
+
+            KeyName:
+        Fn::If:
+        - KeyNameSpecified
+        - {Ref:
+       KeyName}
+        - {Ref: 'AWS::NoValue'}
+      SecurityGroupIds:
+     
+       - Fn::GetAtt: [CreateSecurityGroup, SecurityGroupId]
+      SubnetId:
+  
+            Fn::GetAtt: [CollectSubnetInformation, SubnetId]
+      UserData:
+ 
+             Fn::GetAtt: [CollectInformation, UserData]
+    Type: AWS::EC2::Instance
+
+        CreateInstanceRole:
+    Properties:
+      InstanceProfileName: {Ref: RoleName}
+
+            ServiceToken:
+        Fn::GetAtt: [InstanceProfileLambda, Arn]
+   
+       Type: Custom::InstanceProfile
+  CreateSecurityGroup:
+    Properties:
+ 
+           AccessCidr: {Ref: RemoteAccessCidr}
+      GroupName: {Ref: GroupName}
+
+            Platform:
+        Fn::GetAtt: [CollectInformation, Platform]
+     
+       ServiceToken:
+        Fn::GetAtt: [SecurityGroupLambda, Arn]
+      VpcId:
+
+              Fn::GetAtt: [CollectInformation, VpcId]
+    Type: Custom::SecurityGroup
+
+        InstanceProfileLambda:
+    Properties:
+      Code: {ZipFile: "import os
+      nimport json
+import boto3
+
+import cfnresponse
+
+          
+POLICY_ARNS
+       = ['arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore']
+
+        
+        
+
+def handler_create(event, context):
+tname = event["ResourceProperties
+      "
+          ].get("InstanceProfileName", None)
+tiam = boto3.client('iam')
+      nttry:
+
+          ttif name is None:
+tttraise Exception(
+      "InstanceProfileName must be
+           defined")
+
+tttry:
+      ntttif iam.get_instance_profile(InstanceProfileName=name):
+
+    
+            ttttcfnresponse.send(event, context, cfnresponse.SUCCESS, {},
+       "existing:{}"
+          .format(name))
+ttttreturn
+
+      ttexcept iam.exceptions.NoSuchEntityException:
+
+          tttpass
+      n
+ttprint("Role " + name + " does not exist. Creating"
+
+                )
+
+ttis_china_region = os.environ['AWS_REGION'].startswith('cn-')
+      nt
+          tec2_service_principal = "ec2.amazonaws.com.cn" if
+       is_china_region else
+           "ec2.amazonaws.com"
+
+t
+      tmy_access_control_policy = {
+ttt"Version"
+          : "
+      2012-10-17",
+ttt"Statement": [
+tttt{
+ttt
+      tt"Effect"
+          : "Allow",
+ttttt"Principal
+      ": {
+tttttt"Service": [
+t
+          ttt
+      ttt"ssm.amazonaws.com",
+tttttttec2_service_principal
+      n
+          tttttt]
+ttttt},
+ttttt"
+      Action": "sts:AssumeRole"
+t
+          ttt}
+tt
+      t]
+tt}
+
+tt# Get the desired role
+ttiam.create_role(
+
+      
+          tttRoleName=name,
+tttDescription='Role created from
+       Lambda',
+tt
+          tAssumeRolePolicyDocument=json.dumps(my_access_control_policy))
+      n
+tt
+          for policy in POLICY_ARNS:
+tttiam.attach_role_policy(RoleName=name,
+      
+           PolicyArn=policy)
+ttprint("Role " + name + " created
+      ")
+
+tt
+          # create the instance profile
+ttiam.create_instance_profile(InstanceProfileName=name)
+      n
+          
+ttiam.add_role_to_instance_profile(InstanceProfileName=name,
+       RoleName=name)
+
+          ttprint("Instance profile " + name
+       + " created")
+ttcfnresponse.send(event,
+           context,
+       cfnresponse.SUCCESS, {}, "created:{}".format(name))
+texcept
+
+                 Exception as e:
+ttprint(str(e))
+ttdelete_all(iam,
+       name)
+ttcfnresponse.send(event,
+           context, cfnresponse.FAILED,
+       {}, "created:{}".format(name))
+
+
+def
+           handler_update(event,
+       context):
+tcfnresponse.send(event, context, cfnresponse.FAILED,
+  
+               {}, event["PhysicalResourceId"])
+
+
+def handler_delete(event,
+       context):
+
+          tcf = boto3.client("cloudformation")
+
+      tstack = cf.describe_stacks(StackName=event["
+          StackId"])[
+      "Stacks"][0]
+tresource_id = event["PhysicalResourceId"
+   
+             ]
+tif resource_id.startswith("existing:") or stack["StackStatus
+      "]
+           == "DELETE_IN_PROGRESS":
+ttcfnresponse.send(event,
+       context, cfnresponse.SUCCESS,
+           {}, event["PhysicalResourceId
+      "])
+ttreturn
+t_, name = event["PhysicalResourceId"
+    
+            ].split(":")
+
+ttry:
+ttdelete_all(boto3.client('iam'),
+       name)
+tt
+          cfnresponse.send(event, context, cfnresponse.SUCCESS,
+       {}, resource_id)
+
+          texcept Exception as e:
+ttprint(str(e))
+      nttdelete_all(boto3.client('iam'),
+           name)
+ttcfnresponse.send(event,
+       context, cfnresponse.FAILED, {}, resource_id)
+
+          
+
+def delete_all(iam,
+       name):
+tclean_policies(iam, name)
+tclean_instance_profile(iam,
+
+                 name)
+tdelete_instance_profile(iam, name)
+tdelete_role(iam,
+       name)
+
+          
+
+def clean_policies(iam, name):
+ttry:
+
+      ttattached = iam.list_attached_role_policies(RoleName=name)
+
+       
+         ttfor policy in attached["AttachedPolicies"]:
+tttiam.detach_role_policy(RoleName=name,
+      
+           PolicyArn=policy["PolicyArn"])
+texcept Exception as
+       e:
+ttprint(str(e))
+
+          
+
+def clean_instance_profile(iam,
+       name):
+ttry:
+ttinstance_profile
+           = iam.get_instance_profile(InstanceProfileName=name)
+      nttfor role in
+           instance_profile["InstanceProfile"
+      ].get("Roles", []):
+tttiam.remove_role_from_instance_profile(
+      n
+          ttttInstanceProfileName=name,
+ttttRoleName=role[
+      "RoleName"]
+
+          ttt)
+texcept Exception as e:
+
+      ttprint(str(e))
+
+
+def delete_instance_profile(iam,
+           name):
+      nttry:
+ttiam.delete_instance_profile(InstanceProfileName=name)
+
+
+                texcept Exception as e:
+ttprint(str(e))
+
+
+def delete_role(iam,
+       name):
+
+          ttry:
+ttiam.delete_role(RoleName=name)
+
+      texcept Exception as e:
+t
+          tprint(str(e))
+
+
+def handler(event,
+       context):
+tif event["RequestType"
+          ] == "Create
+      ":
+tthandler_create(event, context)
+telif event["RequestType
+      "
+          ] == "Update":
+tthandler_update(event, context)
+      ntelse:
+tthandler_delete(event,
+           context)
+"}
+   
+         Handler: index.handler
+      MemorySize: 128
+      Role:
+        Fn::If:
+
+              - LambdaAssumeRoleNotSpecified
+        - Fn::GetAtt: [LambdaRole,
+       Arn]
+        - {Ref: LambdaRoleArn}
+      Runtime: python3.7
+      Timeout:
+       60
+    Type: AWS::Lambda::Function
+  LambdaLogPolicy:
+    Condition: IsVerboseAndLambdaRoleNotSpecified
+
+          Properties:
+      PolicyDocument:
+        Statement:
+          Action:
+       ['log:CreateLogStream', 'log:PutLogEvents', 'log:CreateLogGroup']
+      
+          Effect: Allow
+          Resource: {'Fn::Sub': 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*'}
+
+              Version: '2012-10-17'
+      PolicyName: lambda-log-access
+      Roles:
+
+            - {Ref: LambdaRole}
+    Type: AWS::IAM::Policy
+  LambdaRole:
+    Condition:
+       LambdaAssumeRoleNotSpecified
+    Properties:
+      AssumeRolePolicyDocument:
+
+              Statement:
+        - Action: ['sts:AssumeRole']
+          Effect:
+       Allow
+          Principal:
+            Service: [lambda.amazonaws.com]
+
+              Version: '2012-10-17'
+      ManagedPolicyArns:
+      - {'Fn::Sub':
+       'arn:${AWS::Partition}:iam::aws:policy/AWSCloudFormationReadOnlyAccess'}
+
+            - {'Fn::Sub': 'arn:${AWS::Partition}:iam::aws:policy/AWSLambdaExecute'}
+
+            - {'Fn::Sub': 'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMFullAccess'}
+
+            - {'Fn::Sub': 'arn:${AWS::Partition}:iam::aws:policy/IAMFullAccess'}
+
+            - {'Fn::Sub': 'arn:${AWS::Partition}:iam::aws:policy/AmazonEC2FullAccess'}
+
+            Path: /
+    Type: AWS::IAM::Role
+  SecurityGroupLambda:
+    Properties:
+
+            Code: {ZipFile: "import boto3
+import traceback
+import cfnresponse
+      n
+
+def
+           find_security_groups(ec2, vpc_id, group_name):
+      ntsecurity_groups = ec2.describe_security_groups(Filters=[
+
+        
+        tt{"Name": "group-name", "Values": [group_name]},
+      ntt{"Name"
+          : "vpc-id", "Values": [vpc_id]}
+      nt])["SecurityGroups"]
+tfor security_group
+           in security_groups:
+      nttif security_group["GroupName"] == group_name
+           and
+       security_group["VpcId"] == vpc_id:
+tttreturn security_group
+      n
+          treturn None
+
+
+def handler_create(event, context):
+      ntgroup_name = event["
+          ResourceProperties"].get("GroupName
+      ", None)
+tcidr = event["ResourceProperties"
+          ].get(
+      "AccessCidr", "")
+tvpc_id = event["ResourceProperties"].get(
+      "
+          VpcId", None)
+tplatform = event["ResourceProperties
+      "].get("Platform"
+          , None)
+
+tec2 = boto3.client('ec2')
+      ntsecurity_group_id = None
+ttry:
+
+          ttsecurity_group
+       = find_security_groups(ec2, vpc_id, group_name)
+tt
+          if security_group
+       is not None:
+tttdata = {"SecurityGroupId": security_group[
+      "
+          GroupId"]}
+tttcfnresponse.send(event, context, cfnresponse.SUCCESS,
+      
+           data, "existing:{}:{}".format(vpc_id, group_name))
+
+      tttreturn
+
+
+          ttresponse = ec2.create_security_group(
+      ntttGroupName=group_name,
+
+          tttDescription='Security
+       Group created from Lambda',
+tttVpcId=vpc_id)
+
+          t
+      tsecurity_group_id = response['GroupId']
+
+ttif len(cidr) > 0:
+t
+      
+          ttif platform == 'windows':
+ttttdata = ec2.authorize_security_group_ingress(
+      n
+          tttttGroupId=security_group_id,
+tttttIpPermissions=[
+      ntttt
+          tt{'IpProtocol': 'tcp',
+tttttt
+       'FromPort': 3389,
+tttttt
+           'ToPort': 3389,
+
+      tttttt 'IpRanges': [{'CidrIp': cidr}]}
+tttt
+        
+        t])
+ttttprint('Ingress Successfully Set %s' % data)
+tt
+      telse:
+
+          ttttdata = ec2.authorize_security_group_ingress(
+      ntttttGroupId=security_group_id,
+
+          tttttIpPermissions=[
+      ntttttt{'IpProtocol': 'tcp',
+ttttt
+          t
+       'FromPort': 22,
+tttttt 'ToPort': 22,
+tttttt 'IpRanges':
+      
+           [{'CidrIp': cidr}]}
+ttttt])
+ttttprint('Ingress
+       Successfully
+           Set %s' % data)
+
+ttdata = {"SecurityGroupId
+      ": security_group_id}
+
+          ttcfnresponse.send(event, context,
+       cfnresponse.SUCCESS, data, "created:{}:{}"
+          .format(vpc_id,
+       security_group_id))
+texcept Exception as e:
+ttprint(str(e))
+
+      
+          tttraceback.print_exc()
+ttdelete_all(ec2, vpc_id, security_group_id)
+      n
+          ttcfnresponse.send(event, context, cfnresponse.FAILED, {},
+       "created:{}:{}"
+          .format(vpc_id, security_group_id))
+
+      n
+def handler_update(event, context):
+
+          tcfnresponse.send(event,
+       context, cfnresponse.FAILED, {}, event["PhysicalResourceId"
+    
+            ])
+
+
+def handler_delete(event, context):
+tcf = boto3.client(
+      "cloudformation"
+          )
+tstack = cf.describe_stacks(StackName=event[
+      "StackId"])["Stacks"
+          ][0]
+tresource_id = event[
+      "PhysicalResourceId"]
+tif resource_id.startswith("
+          existing:
+      ") or stack["StackStatus"] == "DELETE_IN_PROGRESS":
+tt
+
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, event[
+      "PhysicalResourceId"
+          ])
+ttreturn
+t_, vpc_id, group_id
+       = event["PhysicalResourceId"].split("
+          :")
+
+
+      ttry:
+ttdelete_all(boto3.client('ec2'), vpc_id, group_id)
+
+
+  
+              ttcfnresponse.send(event, context, cfnresponse.SUCCESS, {}, resource_id)
+      n
+          texcept Exception as e:
+ttprint(str(e))
+ttcfnresponse.send(event,
+      
+           context, cfnresponse.FAILED, {}, resource_id)
+
+
+def delete_all(ec2,
+      
+           vpc_id, group_id):
+tif group_id is not None:
+tttry:
+      ntttec2.delete_security_group(GroupId=group_id)
+
+          t
+      texcept Exception as e:
+tttstr(e)
+
+
+def handler(event, context):
+      n
+          tif event["RequestType"] == "Create":
+tthandler_create(event,
+       context)
+
+          telif event["RequestType"] == "Update
+      ":
+tthandler_update(event,
+           context)
+telse:
+t
+      thandler_delete(event, context)
+"}
+      Handler: index.handler
+      MemorySize:
+       128
+      Role:
+        Fn::If:
+        - LambdaAssumeRoleNotSpecified
+
+              - Fn::GetAtt: [LambdaRole, Arn]
+        - {Ref: LambdaRoleArn}
+ 
+           Runtime: python3.7
+      Timeout: 60
+    Type: AWS::Lambda::Function
+"
+    TimeoutInMinutes: 30
+- name: "deleteManagedInstanceStack"
+  action: "aws:deleteStack"
+  maxAttempts: 1
+  onFailure: "Abort"
+  inputs:
+    StackName: "{{StackName}}"

@@ -1,0 +1,270 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+  ## Intent
+  'Test that the application automatically recovers in case of a maz failover'
+
+  ## Type
+  Test
+
+  ## Risk
+  Small
+
+  ## Requirements
+    * RDS aurora cluster
+    * There is a canary alarm setup for application
+
+  ## Permissions required for AutomationAssumeRole
+    * rds:DescribeDBClusters
+    * rds:FailoverDBCluster
+    * cloudwatch:DescribeAlarms
+
+  ## Supports Rollback
+  No.
+
+  ## Cancellation behavior
+  Abort.
+
+  ## Inputs
+  ### (Required) AutomationAssumeRole:
+    * type: String
+    * description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf
+
+  ### (Required) ClusterId:
+    * type: String
+    * description: (Required) Identifies the aurora db cluster subject to action.
+
+  ### (Required) CanaryAlarmName:
+    * type: String
+    * description: (Required) Canary Alarm which should be green within recovery time.
+
+  ### (Optional) InstanceId:
+    * type: String
+    * description: (Optional) The DB instance to promote to the primary instance.
+
+  ## Details
+    * Failover rds cluster.
+    * Assert canary alarm to be green within expected recovery time.
+
+  ## Steps executed when Instance Id is provided flow
+    * AssertAlarmToBeGreenBeforeTest
+    * WaitForAvailableStateBeforeFailover
+    * GetClusterWriterId
+    * PrimaryInstanceSelector
+    * FailoverClusterWithPrimary
+    * WaitClusterFailoverCompleted
+    * AssertAlarmToBeGreen
+
+  ## Steps executed when Instance Id is not provided flow
+    * AssertAlarmToBeGreenBeforeTest
+    * WaitForAvailableStateBeforeFailover
+    * GetClusterWriterId
+    * PrimaryInstanceSelector
+    * FailoverClusterDefault
+    * WaitClusterFailoverCompleted
+    * AssertAlarmToBeGreen
+
+  ## Outputs
+  None
+
+schemaVersion: '0.3'
+assumeRole: '{{ AutomationAssumeRole }}'
+parameters:
+  ClusterId:
+    type: String
+    description: (Required) Identifies the Aurora cluster subject to action.
+  InstanceId:
+    type: String
+    description: (Optional) The DB instance to promote to the primary instance.
+    default: ''
+  CanaryAlarmName:
+    type: String
+    description: (Required) Alarm which should be green after test.
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+mainSteps:
+  - name: AssertAlarmToBeGreenBeforeTest
+    description: Ensure alarm is green before starting test. Fail if alarm is not green within expected time.
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 300
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{CanaryAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: ["OK"]
+  - name: WaitForAvailableStateBeforeFailover
+    description: Wait for cluster to be in available state before test.
+    action: 'aws:waitForAwsResourceProperty'
+    maxAttempts: 10
+    timeoutSeconds: 600
+    onFailure: Abort
+    inputs:
+      Service: rds
+      Api: DescribeDBClusters
+      DBClusterIdentifier: '{{ClusterId}}'
+      PropertySelector: '$.DBClusters[0].Status'
+      DesiredValues:
+        - available
+  - name: GetClusterWriterId
+    description: Get cluster writer id.
+    action: 'aws:executeScript'
+    onFailure: Abort
+    outputs:
+      - Name: WriterId
+        Selector: $.Payload.WriterId
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: get_cluster_writer_id
+      InputPayload:
+        ClusterId: '{{ClusterId}}'
+      Script: |-
+        import logging
+        from datetime import datetime, timezone
+        import boto3
+        import time
+        import random
+        import botocore
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        valid_capacity_PostgreSQL = [2, 4, 8, 16, 32, 64]
+        
+        
+
+
+        def get_cluster_writer_id(events, context):
+            if 'ClusterId' not in events:
+                raise KeyError('Requires ClusterId in events')
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            rds = boto3.client('rds', config=config)
+            clusters = rds.describe_db_clusters(DBClusterIdentifier=events['ClusterId'])
+            return {'WriterId': _parse_writer_id(clusters)}
+        
+        
+
+        def _parse_writer_id(clusters):
+            for member in clusters['DBClusters'][0]['DBClusterMembers']:
+                if member['IsClusterWriter'] is True:
+                    return member['DBInstanceIdentifier']
+        
+        
+
+  - name: PrimaryInstanceSelector
+    description: Select primary instance branch based on InstanceId parameter.
+    action: 'aws:branch'
+    inputs:
+      Choices:
+        - NextStep: FailoverClusterDefault
+          Variable: '{{InstanceId}}'
+          StringEquals: ''
+      Default: FailoverClusterWithPrimary
+  - name: FailoverClusterWithPrimary
+    description: Failover cluster specifying which instance to promote to primary.
+    action: 'aws:executeAwsApi'
+    inputs:
+      Service: rds
+      Api: FailoverDBCluster
+      DBClusterIdentifier: '{{ClusterId}}'
+      TargetDBInstanceIdentifier: '{{InstanceId}}'
+    nextStep: WaitClusterFailoverCompleted
+  - name: FailoverClusterDefault
+    description: Failover cluster without specifying primary instance id.
+    action: 'aws:executeAwsApi'
+    inputs:
+      Service: rds
+      Api: FailoverDBCluster
+      DBClusterIdentifier: '{{ClusterId}}'
+  - name: WaitClusterFailoverCompleted
+    description: Wait for cluster failover to be completed
+    action: 'aws:executeScript'
+    onFailure: Abort
+    maxAttempts: 10
+    timeoutSeconds: 600
+    inputs:
+      Runtime: python3.8
+      Handler: wait_cluster_failover_completed
+      InputPayload:
+        ClusterId: '{{ClusterId}}'
+        WriterId: '{{GetClusterWriterId.WriterId}}'
+      Script: |-
+        import logging
+        from datetime import datetime, timezone
+        import boto3
+        import time
+        import random
+        import botocore
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        valid_capacity_PostgreSQL = [2, 4, 8, 16, 32, 64]
+        
+        
+
+
+        def wait_cluster_failover_completed(events, context):
+            '''
+            Failover times are typically 60–120 seconds, should not be a problem for lambda
+            (Lambda is used for execution SSM scripts):
+            https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZ.html
+            '''
+            if 'ClusterId' not in events or 'WriterId' not in events:
+                raise KeyError('Requires ClusterId, WriterId in events')
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            rds = boto3.client('rds', config=config)
+            clusters = rds.describe_db_clusters(DBClusterIdentifier=events['ClusterId'])
+            current_writer_id = _parse_writer_id(clusters)
+            status = clusters['DBClusters'][0]['Status']
+            while current_writer_id == events['WriterId'] or status != 'available':
+                time.sleep(5)
+                clusters = rds.describe_db_clusters(DBClusterIdentifier=events['ClusterId'])
+                current_writer_id = _parse_writer_id(clusters)
+                status = clusters['DBClusters'][0]['Status']
+        
+        
+
+        def _parse_writer_id(clusters):
+            for member in clusters['DBClusters'][0]['DBClusterMembers']:
+                if member['IsClusterWriter'] is True:
+                    return member['DBInstanceIdentifier']
+        
+        
+
+  - name: AssertAlarmToBeGreen
+    description: Wait for the alarm to be green after test is complete.
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 10
+    timeoutSeconds: 600
+    onFailure: Abort
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+      - "{{CanaryAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: ["OK"]
+    isEnd: true
