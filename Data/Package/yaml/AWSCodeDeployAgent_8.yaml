@@ -1,0 +1,33 @@
+---
+schemaVersion: "2.0"
+version: "1.3.2"
+publisher: "AWSCodeDeploy"
+description: "Description"
+packages:
+  windows:
+    _any:
+      _any:
+        file: "AWSCodeDeployAgent_WINDOWS.zip"
+  amazon:
+    _any:
+      _any:
+        file: "AWSCodeDeployAgent_LINUX.zip"
+  ubuntu:
+    _any:
+      x86_64:
+        file: "AWSCodeDeployAgent_UBUNTU.zip"
+  redhat:
+    _any:
+      x86_64:
+        file: "AWSCodeDeployAgent_LINUX.zip"
+files:
+  AWSCodeDeployAgent_WINDOWS.zip:
+    checksums:
+      sha256: "9d3d90771abea0493e6ac21640c5a1760d01f9d437ef3f9d98a34e9f22cef98d"
+  AWSCodeDeployAgent_LINUX.zip:
+    checksums:
+      sha256: "2f2df8a6662795cca95479c6b21e0c8b53c96372cb527ec3f12e9db77a580699"
+  AWSCodeDeployAgent_UBUNTU.zip:
+    checksums:
+      sha256: "ff1b1fc08b58c27c7b3892caf49e67b09166f128bc02b9b9e7e054751a7b2ca8"
+

@@ -1,0 +1,186 @@
+#
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+  ## Document Name - AWS-RestrictIncomingTraffic
+
+  ## What does this document do?
+  This document restricts incoming TCP traffic to EC2 security groups on specified ports.
+  The incoming traffic is restricted by removing the ingress rule that allows unrestricted incoming traffic from anywhere ('0.0.0.0/0' and '::/0') to the specified ports.
+
+  ## Notes
+  This document will successfully execute even if restricting the traffic fails for one or more security groups.
+  Please check the execution output for complete information on successes and failures.
+
+  ## Input Parameters
+  * SecurityGroupIds: (Required) A comma separated list of security group IDs to restrict traffic for.
+  * Ports: (Required) A comma separated list of ports to restrict incoming traffic for.
+  * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  * RestrictIncomingTraffic.RestrictedSecurityGroupIds: A list of the security groups which were successfully restricted.
+  * RestrictIncomingTraffic.UnrestrictedSecurityGroupIds: A maplist of the security groups which were not successfully restricted and the ports it failed for.
+
+  ## Minimum Permissions Required
+  * `ec2:DescribeSecurityGroups` and `ec2:RevokeSecurityGroupIngress` on the targeted security groups.
+
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  SecurityGroupIds:
+    type: StringList
+    description: (Required) A comma separated list of security group IDs to restrict traffic for.
+    allowedPattern: '^sg-[a-z0-9]{8,17}$'
+  Ports:
+    type: StringList
+    description: (Required) A comma separated list of ports to restrict incoming traffic for.
+    allowedPattern: '^[0-9]*$'
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: '^arn:aws(-cn|-us-gov)?:iam::\d{12}:role\/[\w+=,.@_\/-]+|^$'
+outputs:
+  - RestrictIncomingTraffic.RestrictedSecurityGroupIds
+  - RestrictIncomingTraffic.UnrestrictedSecurityGroupIds
+mainSteps:
+- name: RestrictIncomingTraffic
+  action: aws:executeScript
+  onFailure: Abort
+  isCritical: true
+  isEnd: true
+  timeoutSeconds: 600
+  description: |
+    ## RestrictIncomingTraffic
+    Restricts ingress to the targeted security groups and ports.
+    ## Inputs
+    * SecurityGroupIds: The list of security groups to restrict incoming traffic for.
+    * Ports: The list of ports to restrict incoming traffic for.
+    ## Outputs
+    * RestrictedSecurityGroupIds: A list of the security groups which were successfully restricted.
+    * UnrestrictedSecurityGroupIds: A maplist of the security groups which were not successfully restricted and the ports it failed for.
+  inputs:
+    Runtime: python3.7
+    Handler: restrict_incoming_traffic
+    InputPayload:
+      SecurityGroupIds: '{{SecurityGroupIds}}'
+      Ports: '{{Ports}}'
+    Script: |
+      import boto3
+
+      TCP = 'tcp'
+      PUBLIC_IPV4_CIDR = '0.0.0.0/0'
+      PUBLIC_IPV6_CIDR = '::/0'
+      ec2_resource = boto3.resource("ec2")
+      ec2_client = boto3.client("ec2")
+
+      def is_sg_open_port_ipv4(port, sg_description):
+          port = int(port)
+          for rule in sg_description["SecurityGroups"][0]["IpPermissions"]:
+              if "FromPort" in rule and rule['FromPort'] == port and rule['ToPort'] == port:
+                  for ip_range in rule['IpRanges']:
+                      if ip_range['CidrIp'] == PUBLIC_IPV4_CIDR:
+                          return True, rule
+          return False, "None"
+
+      def is_sg_open_port_ipv6(port, sg_description):
+          port = int(port)
+          for rule in sg_description["SecurityGroups"][0]["IpPermissions"]:
+              if "FromPort" in rule and rule['FromPort'] == port and rule['ToPort'] == port:
+                  for ip_range in rule['Ipv6Ranges']:
+                      if ip_range['CidrIpv6'] == PUBLIC_IPV6_CIDR:
+                          return True, rule
+          return False, "None"
+
+      def restrict_incoming_traffic(event, context):
+          sg_ids = event["SecurityGroupIds"]
+          ports = event["Ports"]
+          Restricted_sg_ids = []
+          UnRestricted_sg_ids = []
+          errorMsg = "N/A"
+          try:
+              for sg_id in sg_ids:
+                  isSuccessful = False
+                  try:
+                      sg_description = ec2_client.describe_security_groups(GroupIds = [sg_id])
+                      sg_resource = ec2_resource.SecurityGroup(sg_id)
+                      for port in ports:
+                          openv4, rule = is_sg_open_port_ipv4(port, sg_description)
+                          if openv4:
+                              response = sg_resource.revoke_ingress(
+                                  GroupId = sg_id,
+                                  IpPermissions = [{
+                                      'FromPort': int(port),
+                                      'IpProtocol': TCP,
+                                      'ToPort': int(port),
+                                      'IpRanges': [{'CidrIp': PUBLIC_IPV4_CIDR}]
+                                  }],
+                                  DryRun = False
+                              )
+                              if response:
+                                  if "Return" in response:
+                                      if response["Return"]:
+                                          isSuccessful = True
+                              if not isSuccessful:
+                                  errorMsg = "Request revoke_ingress on port {} for security group '{}' failed for IPv4.".format(port, sg_id)
+
+                          openv6, rule = is_sg_open_port_ipv6(port,sg_description)
+                          if openv6:
+                              response = sg_resource.revoke_ingress(
+                                  GroupId = sg_id,
+                                  IpPermissions = [{
+                                      'FromPort': int(port),
+                                      'IpProtocol': TCP,
+                                      'ToPort': int(port),
+                                      'Ipv6Ranges': [{'CidrIpv6': PUBLIC_IPV6_CIDR}]
+                                  }],
+                                  DryRun = False
+                              )
+                              if response:
+                                  if "Return" in response:
+                                      if response["Return"] == True:
+                                          isSuccessful = True
+                              if isSuccessful:
+                                  errorMsg = "Request revoke_ingress on port {} for security group '{}' failed for IPv6.".format(port, sg_id)
+
+                          if not openv6 and not openv4:
+                              isSuccessful = True
+
+                  except Exception as e:
+                      isSuccessful = False
+                      errorMsg = str(e)
+
+                  if isSuccessful:
+                      Restricted_sg_ids.append(sg_id)
+                  else:
+                      UnRestricted_sg_ids.append({"groupId": sg_id, "error": errorMsg})
+
+          except Exception as e:
+              isSuccessful = False
+              errorMsg = str(e)
+
+          return {
+              "RestrictedSecurityGroupIds": Restricted_sg_ids,
+              "UnrestrictedSecurityGroupIds": UnRestricted_sg_ids
+          }
+  outputs:
+    - Name: RestrictedSecurityGroupIds
+      Selector: $.Payload.RestrictedSecurityGroupIds
+      Type: StringList
+    - Name: UnrestrictedSecurityGroupIds
+      Selector: $.Payload.UnrestrictedSecurityGroupIds
+      Type: MapList
+

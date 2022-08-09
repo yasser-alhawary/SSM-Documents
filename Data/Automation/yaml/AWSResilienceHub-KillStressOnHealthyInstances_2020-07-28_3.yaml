@@ -1,0 +1,111 @@
+#
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+schemaVersion: '0.3'
+description: Tarminates stress command on healthy EC2 instances
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf
+  AutoScalingGroupName:
+    type: String
+    description: (Required) Name of auto scaling group
+  InstanceIds:
+    type: StringList
+    description: (Otional) Instances on which command will be executed, if healthy
+mainSteps:
+  - name: FilterHealthyAsgInstances
+    action: 'aws:executeScript'
+    onFailure: Abort
+    outputs:
+      - Name: InstanceIds
+        Selector: $.Payload.InstanceIds
+        Type: StringList
+      - Name: Count
+        Selector: $.Payload.Count
+        Type: Integer
+    inputs:
+      Runtime: python3.8
+      Handler: filter_healthy_instance_ids_in_asg
+      InputPayload:
+        InstanceIds: '{{InstanceIds}}'
+        AutoScalingGroupName: '{{AutoScalingGroupName}}'
+      Script: |-
+        import logging
+        import random
+        import time
+        from math import ceil
+        
+        import boto3
+        from botocore.config import Config
+        
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        
+        
+
+
+        def filter_healthy_instance_ids_in_asg(events, context):
+            if 'AutoScalingGroupName' not in events or 'InstanceIds' not in events:
+                raise KeyError('Requires AutoScalingGroupName, InsatnceIds in events')
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            autoscaling = boto3.client('autoscaling', config=config)
+        
+            auto_scaling_groups = autoscaling.describe_auto_scaling_groups(
+                AutoScalingGroupNames=[
+                    events['AutoScalingGroupName']
+                ]
+            )
+        
+            # Take all healthy ASG EC2 instances
+            asg_healthy_instances = []
+            for instance in auto_scaling_groups['AutoScalingGroups'][0]['Instances']:
+                if instance['HealthStatus'] == 'Healthy' and instance['LifecycleState'] == 'InService':
+                    asg_healthy_instances.append(instance['InstanceId'])
+        
+            output = {}
+            output['InstanceIds'] = []
+            given_instance_ids = events['InstanceIds']
+            # Take only healthy given EC2 instances
+            for instance_id in given_instance_ids:
+                if instance_id in asg_healthy_instances:
+                    output['InstanceIds'].append(instance_id)
+            output['Count'] = len(output['InstanceIds'])
+            return output
+        
+        
+
+  - name: CheckInstancesExist
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: ExecutingCommand
+          Variable: '{{FilterHealthyAsgInstances.Count}}'
+          NumericGreater: 0
+    isEnd: True
+  - name: ExecutingCommand
+    action: aws:runCommand
+    maxAttempts: 3
+    onFailure: Abort
+    inputs:
+      DocumentName: AWSResilienceHub-KillStressCommand_2020-07-28
+      InstanceIds:
+        - '{{ FilterHealthyAsgInstances.InstanceIds }}'
+
+
+

@@ -1,0 +1,1 @@
+{"schemaVersion": "2.0", "publisher": "Amazon Web Services", "files": {"AWSSAP-Backint.zip": {"checksums": {"sha256": "ef6c71e4db9a6aef6d7f3e48461474257adcc5c5b4c9f11bfc01c8a4f03e6d4f"}}}, "packages": {"_any": {"_any": {"x86_64": {"file": "AWSSAP-Backint.zip"}}}}, "version": "1.05.4"}

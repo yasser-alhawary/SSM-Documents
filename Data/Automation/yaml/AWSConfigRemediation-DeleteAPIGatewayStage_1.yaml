@@ -1,0 +1,88 @@
+schemaVersion: "0.3"
+description: |
+  ### Document name - AWSConfigRemediation-DeleteAPIGatewayStage
+
+  ## What does this document do?
+  This document deletes an Amazon API Gateway Stage using the [DeleteStage](https://docs.aws.amazon.com/apigateway/api-reference/link-relation/stage-delete/) API.
+
+  ## Input Parameters
+  * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+  * StageId: (Required) The Amazon API Gateway Stage resource Id to be deleted.
+
+  ## Output Parameters
+  * DeleteStageAndVerify.Output: The standard HTTP response from the DeleteStage API.
+
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:iam::\d{12}:role/[\w+=,.@/-]+$
+  StageArn:
+    type: String
+    description: (Required) The Amazon API Gateway Stage resource Id (stage ARN) to be deleted.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:apigateway:[a-z0-9-]+::/restapis/[a-z0-9]+/stages/[\w]+
+outputs:
+  - DeleteStageAndVerify.Output
+mainSteps:
+  - name: DeleteStageAndVerify
+    action: "aws:executeScript"
+    timeoutSeconds: 600
+    isEnd: true
+    description: |
+      ## DeleteStageAndVerify
+      Deletes the given Amazon API Gateway stage and verifies.
+    inputs:
+      Runtime: python3.7
+      Handler: handler
+      InputPayload:
+        StageArn: "{{ StageArn }}"
+
+      Script: |-
+        import boto3
+        import botocore
+        import re
+
+        def is_stage_present(apigateway_client, rest_api_id, stage_name):
+            try:
+                apigateway_client.get_stage(restApiId=rest_api_id, stageName=stage_name)
+                return True
+            except apigateway_client.exceptions.NotFoundException:
+                return False
+
+        def handler(event, context):
+            config_client = boto3.client('config')
+            apigateway_client = boto3.client('apigateway')
+            stage_arn = event['StageArn']
+            rest_api_id = ''
+
+            stage_response = config_client.get_resource_config_history(resourceType='AWS::ApiGateway::Stage',
+                                                                       resourceId=stage_arn, limit=1)
+            stage_name = stage_response['configurationItems'][0]['resourceName']
+            rest_api_arn = stage_response['configurationItems'][0]['relationships'][0]['resourceId']
+            rest_api_arn_pattern = "^arn:.*:/restapis/(.*)"
+            rest_api_match = re.match(rest_api_arn_pattern, rest_api_arn)
+            if not rest_api_match:
+                raise Exception("GIVEN AMAZON API GATEWAY STAGE ID IS NOT ASSOCIATED WITH ANY REST API ID.")
+
+            rest_api_id = rest_api_match.groups()[0]
+            # Deletes the given Amazon API Gateway stage.
+            delete_stage_response = apigateway_client.delete_stage(stageName=stage_name, restApiId=rest_api_id)
+
+            # Verifies that the stage has deleted.
+            stage_response = is_stage_present(apigateway_client, rest_api_id, stage_name)
+            if not stage_response:
+                return {
+                          "output": {
+                              "Message": "Verification of 'DeleteStage' is successful.",
+                              "HTTPResponse": delete_stage_response["ResponseMetadata"]
+                          }
+                        }
+            error_message = f"VERIFICATION FAILED. API GATEWAY STAGE {stage_name} NOT DELETED."
+            raise Exception(error_message)
+
+    outputs:
+      - Name: Output
+        Selector: $.Payload.output
+        Type: StringMap
+

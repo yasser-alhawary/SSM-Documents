@@ -1,0 +1,109 @@
+#
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+    ### Document Name - AWS-CloseSecurityGroup
+
+    ## What does this document do?
+    This document closes traffic to and from a security group by removing any ingress and egress rules from it.
+
+    ## Input Parameters
+    * SecurityGroupId: (Required) Security group id, This security group will be closed by removing any ingress or egress rules.
+    * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+    ## Output Parameters
+    This document has no outputs.
+
+    ## Minimum Permissions Required
+    * `ec2:RevokeSecurityGroupIngress`
+    * `ec2:RevokeSecurityGroupEgress`
+    * `ec2:DescribeSecurityGroups`
+
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  SecurityGroupId:
+    type: String
+    description: (Required) The security group ID.
+    allowedPattern: '^(sg-)([0-9a-f]){1,}$'
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::\d{12}:role\/[\w+=,.@_\/-]+|^$'
+mainSteps:
+- name: CloseSecurityGroup
+  action: aws:executeScript
+  onFailure: Abort
+  isCritical: true
+  isEnd: true
+  timeoutSeconds: 600
+  description: |
+    ## CloseSecurityGroup
+    Removes any ingress and egress rules from the security group.
+    ## Inputs
+    * SecurityGroupId: The security group ID.
+    ## Outputs
+    This step has no outputs.
+  inputs:
+    Runtime: python3.7
+    Handler: close_security_group_handler
+    InputPayload:
+        SecurityGroupId: '{{SecurityGroupId}}'
+    Script: |
+        import boto3
+
+        ec2_resource = boto3.resource("ec2")
+        ec2_client = boto3.client("ec2")
+
+        def close_security_group_handler(event, context):
+            sg_id = event["SecurityGroupId"]
+            sg_resource = ec2_resource.SecurityGroup(sg_id)
+            successful = True
+            errorMsg = ""
+            try:
+                sg_description = ec2_client.describe_security_groups(GroupIds = [sg_id])
+                ip_permissions = sg_description["SecurityGroups"][0]["IpPermissions"]
+                ip_permissions_egress = sg_description["SecurityGroups"][0]["IpPermissionsEgress"]
+
+                if ip_permissions:
+                    revoke_response = sg_resource.revoke_ingress(
+                            GroupId = sg_id,
+                            IpPermissions = ip_permissions,
+                            DryRun = False
+                    )
+                    if not revoke_response.get("Return"):
+                        successful = False
+
+                if ip_permissions_egress:
+                    revoke_egress_response = sg_resource.revoke_egress(
+                            GroupId = sg_id,
+                            IpPermissions = ip_permissions_egress,
+                            DryRun = False
+                    )
+                    if not revoke_egress_response.get("Return"):
+                        successful = False
+
+            except Exception as e:
+                errorMsg = str(e)
+                successful = False
+                if "InvalidGroup.NotFound" in errorMsg or "InvalidGroupId.Malformed" in errorMsg:
+                    errorMsg = "The security group '{}' does not exist".format(sg_id)
+
+            if not successful:
+                raise Exception("Unable to close the security group '{}'. error: '{}'.".format(sg_id, errorMsg))
+

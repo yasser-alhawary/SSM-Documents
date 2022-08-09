@@ -1,0 +1,158 @@
+#
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+schemaVersion: '0.3'
+description: |-
+  ## Intent
+  'Test app can recover if given process dies.'
+
+  ## Type
+  Test
+
+  ## Risk
+  Small
+
+  ## Requirements
+    * EC2 instance with Linux OS
+    * There is a canary alarm setup for application
+
+  ## Permissions required for AutomationAssumeRole
+    * ssm:SendCommand
+    * ssm:ListCommands
+    * ssm:ListCommandInvocations
+    * ssm:DescribeInstanceInformation
+    * cloudwatch:DescribeAlarms
+
+  ## Supports Rollback
+  No.
+
+  ## Cancellation behavior
+  Abort.
+
+  ## Inputs
+  ### (Required) AutomationAssumeRole:
+    * type: String
+    * description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf
+
+  ### (Required) InstanceId:
+    * type: String
+    * description: (Required) EC2 instance id
+
+  ### (Required) ProcessName:
+    * type: String
+    * description: (Required) Process name to be killed.
+
+  ### (Required) CanaryAlarmName:
+    * type: String
+    * description: (Required) Canary Alarm which should be green within recovery time.
+
+  ### (Optional) Signal:
+    * type: String
+    * description: (Optional) The SIGNAL to be sent along with the kill command (default: SIGTERM).
+    * default: SIGTERM
+    * allowedValues: SIGTERM, SIGKILL
+
+  ### (Optional) ExpectedRecoveryTimeInSeconds
+    * type: String
+    * description: (Optional) The expected recovery time after process dies (default 300)
+    * default: "300"
+
+  ## Details
+    * Use FIS command document to kill process on ec2 instance.
+    * Assert alarm to be green after expected recovery time.
+
+  ## Steps executed in normal flow
+    * AssertAlarmToBeGreenBeforeTest
+    * KillProcess
+    * WaitForRecoveryTime
+    * AssertAlarmToBeGreen
+
+  ## Outputs
+  None
+
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf
+  InstanceId:
+    type: String
+    description: (Required) EC2 instance id
+  ProcessName:
+    type: String
+    description: (Required) Process name to be killed
+  Signal:
+    type: String
+    description: |
+      (Optional) The SIGNAL to be sent along with the kill command (default: SIGTERM).
+      The allowed values are:
+      * SIGTERM: Signal used for graceful process termination. Can be referred as soft kill, because the receiver may choose to ignore it.
+      * SIGKILL: Signal used for immediate process termination. Cannot be caught, ignored or blocked. Child processes are killed as well.
+    default: SIGTERM
+    allowedValues:
+      - SIGTERM
+      - SIGKILL
+  CanaryAlarmName:
+    type: String
+    description: (Required) Synthetic Alarm which should be green within recovery time.
+  ExpectedRecoveryTimeInSeconds:
+    type: String
+    description: (Optional) The expected recovery time after process dies (default 300)
+    default: '300'
+mainSteps:
+  - name: AssertAlarmToBeGreenBeforeTest
+    description: Ensure alarm is green before starting test. Fail if alarm is not green within expected time.
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 300
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{CanaryAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: ["OK"]
+  - name: KillProcess
+    description: Run FIS command document to kill process
+    action: aws:runCommand
+    maxAttempts: 3
+    inputs:
+      DocumentName: AWSFIS-Run-Kill-Process
+      InstanceIds:
+        - '{{InstanceId}}'
+      Parameters:
+        ProcessName: '{{ProcessName}}'
+        Signal: '{{Signal}}'
+  - name: WaitForRecoveryTime
+    description: Wait for recovery time.
+    action: 'aws:sleep'
+    inputs:
+      Duration: 'PT{{ExpectedRecoveryTimeInSeconds}}S'
+  - name: AssertAlarmToBeGreen
+    description: Wait for the alarm to be green after test is complete.
+    action: aws:assertAwsResourceProperty
+    maxAttempts: 10
+    timeoutSeconds: 600
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{CanaryAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: ["OK"]
+    isEnd: true
+

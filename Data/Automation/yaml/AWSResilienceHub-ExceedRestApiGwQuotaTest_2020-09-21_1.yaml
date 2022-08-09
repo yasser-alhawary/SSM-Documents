@@ -1,0 +1,930 @@
+#
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-ExceedRestApiGwQuotaTest_2020-09-21
+
+            ## Intent
+            Test REST API Gateway behavior when hitting quota threshold
+
+            ## Type
+            TEST
+
+            ## Risk
+            High
+
+            ## Requirements
+              * REST API Gateway
+              * Alarm for metric [4XXError](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-metrics-and-dimensions.html) setup for the specified API Gateway
+              * There is constant traffic on API Gateway during test
+
+            ## Permissions required for AutomationAssumeRole
+              * apigateway:GET
+              * apigateway:PATCH
+              * servicequotas:GetServiceQuota
+              * cloudwatch:DescribeAlarms
+              * ssm:GetAutomationExecution
+              * ssm:StartAutomationExecution
+              * ssm:GetParameters
+              * iam:PassRole
+
+            ##### Permissions required to log output to CloudWatch
+              * logs:PutLogEvents
+              * logs:DescribeLogGroups
+              * logs:DescribeLogStreams
+
+            ## Supports Rollback
+            Yes, restore original quota limit
+
+            ## Cancellation behavior
+            Restore original quota limit
+
+            ## Inputs
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: ARN of the IAM role with permissions listed above
+
+            ### (Required) RestApiGwUsagePlanId
+              * type: String
+              * description: The ID of REST API Gateway usage plan to be modified
+
+            ### (Required) ApiGw4xxAlarmName
+              * type: String
+              * description: Alarm for metric [4XXError](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-metrics-and-dimensions.html) setup for the specified API Gateway
+
+            ### (Optional) RestApiGwQuotaLimit
+              * type: Integer
+              * description: The value of quota (requests per period)
+              * default: 1
+
+            ### (Optional) RestApiGwQuotaPeriod
+              * type: String
+              * description: The value of quota period. Possible values are DAY, WEEK, MONTH
+              * default: 'DAY'
+
+            ### (Optional) IsRollback
+              * type: String
+              * description: Run the rollback steps of the document. True or False. If True, the parameter PreviousExecutionId should also be specified
+              * default: false
+
+            ### (Optional) PreviousExecutionId
+              * type: String
+              * description: SSM execution ID of the previous execution of this document for which resources need to be cleaned up
+
+            ## Details
+            The document injects failure by setting REST API Gateway quota limit to 1 request per day (or to the specified value). Alarm for metric [4XXError](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-metrics-and-dimensions.html) should be trigger by traffic on the gateway. In case of issues users should manually restore original quota limit from backup.
+
+            ## Steps executed in normal flow
+              * CheckIsRollback
+              * AssertAlarmToBeGreenBeforeTest
+              * BackupQuotaConfiguration
+              * SetQuotaConfiguration
+              * AssertAlarmToBeRed
+              * RollbackCurrentExecution
+              * AssertAlarmToBeGreen
+
+            ## Steps executed in rollback flow
+              * CheckIsRollback
+              * GetInputsFromPreviousExecution
+              * AssertRestApiGwUsagePlanId
+              * PrepareRollbackOfPreviousExecution
+              * RollbackPreviousExecution
+
+            ## Outputs
+            None
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  RestApiGwUsagePlanId:
+    type: String
+    description: (Required) The ID of REST API Gateway usage plan.
+  ApiGw4xxAlarmName:
+    type: String
+    description: (Required) Alarm for metric `4XXError` setup for the specified
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+  RestApiGwQuotaLimit:
+    type: Integer
+    description: (Optional) The value of quota (requests per period).
+    default: 1
+  RestApiGwQuotaPeriod:
+    type: String
+    description: (Optional) The value of quota period. Possible values are DAY, WEEK, MONTH.
+    default: 'DAY'
+  IsRollback:
+    type: String
+    description: >-
+      (Optional) Run rollback step of the given previous execution (parameter `PreviousExecutionId`). Can be either true or false.
+    default: 'false'
+  PreviousExecutionId:
+    type: String
+    description: >-
+      (Optional) Previous execution id for which resources need to be cleaned up.
+    default: ''
+mainSteps:
+  - name: CheckIsRollback
+    description: Check if document should be executed in rollback mode
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: GetInputsFromPreviousExecution
+          Variable: '{{ IsRollback }}'
+          EqualsIgnoreCase: 'true'
+      Default: AssertAlarmToBeGreenBeforeTest
+
+  - name: GetInputsFromPreviousExecution
+    description: Get input from previous execution. This will be used to validate that rollback is executed with the same input
+    action: aws:executeScript
+    outputs:
+      - Name: RestApiGwUsagePlanId
+        Selector: '$.Payload.RestApiGwUsagePlanId[0]'
+        Type: String
+    inputs:
+      Runtime: python3.7
+      Handler: get_inputs_from_ssm_execution
+      InputPayload:
+        ExecutionId: '{{ PreviousExecutionId }}'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def get_inputs_from_ssm_execution(events, context):
+            output = {}
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events:
+                raise KeyError('Requires ExecutionId')
+        
+            if not events['ExecutionId']:
+                raise KeyError('Requires not empty ExecutionId')
+        
+            response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+            response_parameters = response['AutomationExecution']['Parameters']
+            # TODO DIG-853
+            for parameter in response_parameters:
+                output[parameter] = response_parameters[parameter]
+        
+            return output
+        
+        
+
+
+  - name: AssertRestApiGwUsagePlanId
+    description: Validate that rollback is executed with the same input
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: PrepareRollbackOfPreviousExecution
+          Variable: '{{ GetInputsFromPreviousExecution.RestApiGwUsagePlanId }}'
+          StringEquals: '{{ RestApiGwUsagePlanId }}'
+    isEnd: true
+
+  - name: PrepareRollbackOfPreviousExecution
+    description: Get original quota limit value and period for rollback
+    action: aws:executeScript
+    outputs:
+      - Name: RestApiGwQuotaLimitOriginalValue
+        Selector: $.Payload.RestApiGwQuotaLimitOriginalValue[0]
+        Type: String
+      - Name: RestApiGwQuotaPeriodOriginalValue
+        Selector: $.Payload.RestApiGwQuotaPeriodOriginalValue[0]
+        Type: String
+    inputs:
+      Runtime: python3.7
+      Handler: get_output_from_ssm_step_execution
+      InputPayload:
+        ExecutionId: '{{ PreviousExecutionId }}'
+        StepName: 'BackupQuotaConfiguration'
+        ResponseField: 'RestApiGwQuotaLimitOriginalValue,RestApiGwQuotaPeriodOriginalValue'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def get_output_from_ssm_step_execution(events, context):
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events or 'StepName' not in events or 'ResponseField' not in events:
+                raise KeyError('Requires ExecutionId, StepName and ResponseField in events')
+        
+            ssm_response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+            for step in ssm_response['AutomationExecution']['StepExecutions']:
+                if step['StepName'] == events['StepName']:
+                    response_fields = events['ResponseField'].split(',')
+                    output = {}
+                    for response_field in response_fields:
+                        if response_field in step['Outputs']:
+                            output[response_field] = step['Outputs'][response_field]
+                        else:
+                            """
+                            By default SSM ignores empty values when encodes API outputs to JSON. It may result in
+                            a situation when an empty value is a valid value but step output completely misses it.
+                            Usually happens with SQS queue policies, default policy is returned by API as an empty value
+                            and executeApi step output ignores it. As a result, further steps in rollback execution will fail.
+                            Instead of ignoring this value we should use a default empty value in rollback, i.e. empty string
+                            represents a default sqs policy
+                            """
+                            output[response_field] = ['']
+                    return output
+        
+            # Could not find step name
+            raise Exception('Can not find step name % in ssm execution response', events['StepName'])
+        
+        
+
+
+  - name: RollbackPreviousExecution
+    description: Restore original quota limit value and period of the specified Usage Plan from the previous execution
+    action: aws:executeScript
+    outputs:
+      - Name: RestApiGwQuotaLimitRestoredValue
+        Selector: '$.Payload.Limit'
+        Type: Integer
+      - Name: RestApiGwQuotaPeriodRestoredValue
+        Selector: '$.Payload.Period'
+        Type: String
+    inputs:
+      Runtime: python3.7
+      Handler: set_limit_and_period
+      InputPayload:
+        RestApiGwUsagePlanId: '{{ GetInputsFromPreviousExecution.RestApiGwUsagePlanId }}'
+        RestApiGwQuotaLimit: '{{ PrepareRollbackOfPreviousExecution.RestApiGwQuotaLimitOriginalValue }}'
+        RestApiGwQuotaPeriod: '{{ PrepareRollbackOfPreviousExecution.RestApiGwQuotaPeriodOriginalValue }}'
+      Script: |-
+        import json
+        import logging
+        import time
+        from random import uniform
+        from typing import Any, Callable
+        
+        import boto3
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+        
+        log = logging.getLogger()
+        log.setLevel(logging.INFO)
+        
+        
+
+        def assert_https_status_code_200(response: dict, error_message: str) -> None:
+            if response['ResponseMetadata']['HTTPStatusCode'] != 200:
+                raise ValueError(f'{error_message} Response is: {response}')
+        
+        
+
+        def get_throttling_config(events: dict, context: dict) -> dict:
+            if 'RestApiGwUsagePlanId' not in events:
+                raise KeyError('Requires RestApiGwUsagePlanId in events')
+        
+            if 'RestApiGwStageName' in events and events['RestApiGwStageName']:
+                if 'RestApiGwId' not in events:
+                    raise KeyError('Requires RestApiGwId in events')
+                if not events['RestApiGwId']:
+                    raise KeyError('RestApiGwId should not be empty')
+        
+            usage_plan_id: str = events['RestApiGwUsagePlanId']
+            gateway_id: str = events.get('RestApiGwId')
+            stage_name: str = events.get('RestApiGwStageName')
+            resource_path: str = events.get('RestApiGwResourcePath', '*')
+            http_method: str = events.get('RestApiGwHttpMethod', '*')
+        
+            # Need to have it here for rollback case to overcame issue DIG-853 with get_inputs_from_ssm_execution
+            if (stage_name and stage_name.startswith('{{')) and (gateway_id and gateway_id.startswith('{{')):
+                gateway_id = stage_name = None
+            resource_path = '*' if resource_path.startswith('{{') else resource_path
+            http_method = '*' if http_method.startswith('{{') else http_method
+        
+            config: object = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            client = boto3.client('apigateway', config=config)
+            usage_plan = client.get_usage_plan(usagePlanId=usage_plan_id)
+            assert_https_status_code_200(usage_plan, f'Failed to get usage plan with id {usage_plan_id}')
+        
+            if stage_name:
+                stage_found = False
+                for stage in usage_plan['apiStages']:
+                    if stage['apiId'] == gateway_id and stage['stage'] == stage_name:
+                        stage_found = True
+                        if 'throttle' in stage and f'{resource_path}/{http_method}' in stage['throttle']:
+                            rate_limit: float = stage['throttle'][f'{resource_path}/{http_method}']['rateLimit']
+                            burst_limit: int = stage['throttle'][f'{resource_path}/{http_method}']['burstLimit']
+                        else:
+                            rate_limit: float = usage_plan['throttle']['rateLimit']
+                            burst_limit: int = usage_plan['throttle']['burstLimit']
+                if not stage_found:
+                    raise KeyError(f'Stage name {stage_name} not found in get_usage_plan response: {usage_plan}')
+            else:
+                rate_limit: float = usage_plan['throttle']['rateLimit']
+                burst_limit: int = usage_plan['throttle']['burstLimit']
+        
+            return {'RateLimit': int(rate_limit),
+                    'BurstLimit': burst_limit,
+                    'QuotaLimit': usage_plan['quota']['limit'],
+                    'QuotaPeriod': usage_plan['quota']['period']}
+        
+        
+
+        def wait_limit_and_period_updated(events, context):
+            expected_quota_limit: int = int(events['RestApiGwQuotaLimit'])
+            expected_quota_period: str = events['RestApiGwQuotaPeriod']
+            max_retries: int = events.get('MaxRetries', 40)
+            timeout: int = events.get('Timeout', 15)
+            max_timeout = max_retries * timeout
+            while max_retries > 0:
+                actual_throttling_config = get_throttling_config(events, None)
+                actual_quota_limit = actual_throttling_config['QuotaLimit']
+                actual_quota_period = actual_throttling_config['QuotaPeriod']
+                if actual_quota_limit == expected_quota_limit and actual_quota_period == expected_quota_period:
+                    log.info('Quota limit and period updated')
+                    return
+                log.info(f'Waiting for expected values: '
+                         f'[QuotaLimit: {expected_quota_limit}, QuotaPeriod: {expected_quota_period}], '
+                         f'actual values: [QuotaLimit: {actual_quota_limit}, QuotaPeriod: {actual_quota_period}]')
+                max_retries -= 1
+                time.sleep(timeout)
+        
+            raise TimeoutError(f'Error to wait for updated values of QuotaLimit and QuotaPeriod. '
+                               f'Expected values: [QuotaLimit: {expected_quota_limit}, QuotaPeriod: {expected_quota_period}]. '
+                               f'Actual values: [QuotaLimit: {actual_quota_limit}, QuotaPeriod: {actual_quota_period}] '
+                               f'Maximum timeout {max_timeout} seconds exceeded!')
+        
+        
+
+        def set_limit_and_period(events, context):
+            """
+            Set usage plan limit and period
+            :return: New limit and period
+            """
+            if 'RestApiGwUsagePlanId' not in events:
+                raise KeyError('Requires RestApiGwUsagePlanId  in events')
+            if 'RestApiGwQuotaLimit' not in events:
+                raise KeyError('Requires RestApiGwQuotaLimit  in events')
+            if 'RestApiGwQuotaPeriod' not in events:
+                raise KeyError('Requires RestApiGwQuotaPeriod  in events')
+        
+            usage_plan_id = events['RestApiGwUsagePlanId']
+            new_usage_plan_limit = events['RestApiGwQuotaLimit']
+            new_usage_plan_period = events['RestApiGwQuotaPeriod']
+        
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            apigw_client = boto3.client('apigateway', config=config)
+        
+            apigw_usage_plan = apigw_client.update_usage_plan(
+                usagePlanId=usage_plan_id,
+                patchOperations=[
+                    {
+                        'op': 'replace',
+                        'path': '/quota/limit',
+                        'value': str(new_usage_plan_limit)
+                    },
+                    {
+                        'op': 'replace',
+                        'path': '/quota/period',
+                        'value': new_usage_plan_period
+                    }
+                ])
+            log.debug(f'The response from the API : {apigw_usage_plan}')
+            if apigw_usage_plan['ResponseMetadata']['HTTPStatusCode'] != 200:
+                log.error(f'Failed to update usage plan with id {usage_plan_id}, response is {apigw_usage_plan}')
+                raise ValueError('Failed to update usage plan limit and period')
+        
+            wait_limit_and_period_updated(events, None)
+        
+            return {"Limit": apigw_usage_plan["quota"]["limit"],
+                    "Period": apigw_usage_plan["quota"]["period"]}
+        
+        
+
+    isEnd: true
+
+  - name: AssertAlarmToBeGreenBeforeTest
+    description: Ensure alarm is green before starting test. Fail if alarm is not green within expected time.
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 1200
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - '{{ ApiGw4xxAlarmName }}'
+      PropertySelector: '$.MetricAlarms[0].StateValue'
+      DesiredValues: [ "OK" ]
+
+  - name: BackupQuotaConfiguration
+    description: Backup quota configuration of the specified Usage Plan for rollback
+    action: aws:executeScript
+    outputs:
+      - Name: RestApiGwQuotaLimitOriginalValue
+        Selector: '$.Payload.QuotaLimit'
+        Type: Integer
+      - Name: RestApiGwQuotaPeriodOriginalValue
+        Selector: '$.Payload.QuotaPeriod'
+        Type: String
+    inputs:
+      Runtime: python3.7
+      Handler: get_throttling_config
+      InputPayload:
+        RestApiGwUsagePlanId: '{{ RestApiGwUsagePlanId }}'
+      Script: |-
+        import json
+        import logging
+        import time
+        from random import uniform
+        from typing import Any, Callable
+        
+        import boto3
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+        
+        log = logging.getLogger()
+        log.setLevel(logging.INFO)
+        
+        
+
+        def assert_https_status_code_200(response: dict, error_message: str) -> None:
+            if response['ResponseMetadata']['HTTPStatusCode'] != 200:
+                raise ValueError(f'{error_message} Response is: {response}')
+        
+        
+
+        def get_throttling_config(events: dict, context: dict) -> dict:
+            if 'RestApiGwUsagePlanId' not in events:
+                raise KeyError('Requires RestApiGwUsagePlanId in events')
+        
+            if 'RestApiGwStageName' in events and events['RestApiGwStageName']:
+                if 'RestApiGwId' not in events:
+                    raise KeyError('Requires RestApiGwId in events')
+                if not events['RestApiGwId']:
+                    raise KeyError('RestApiGwId should not be empty')
+        
+            usage_plan_id: str = events['RestApiGwUsagePlanId']
+            gateway_id: str = events.get('RestApiGwId')
+            stage_name: str = events.get('RestApiGwStageName')
+            resource_path: str = events.get('RestApiGwResourcePath', '*')
+            http_method: str = events.get('RestApiGwHttpMethod', '*')
+        
+            # Need to have it here for rollback case to overcame issue DIG-853 with get_inputs_from_ssm_execution
+            if (stage_name and stage_name.startswith('{{')) and (gateway_id and gateway_id.startswith('{{')):
+                gateway_id = stage_name = None
+            resource_path = '*' if resource_path.startswith('{{') else resource_path
+            http_method = '*' if http_method.startswith('{{') else http_method
+        
+            config: object = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            client = boto3.client('apigateway', config=config)
+            usage_plan = client.get_usage_plan(usagePlanId=usage_plan_id)
+            assert_https_status_code_200(usage_plan, f'Failed to get usage plan with id {usage_plan_id}')
+        
+            if stage_name:
+                stage_found = False
+                for stage in usage_plan['apiStages']:
+                    if stage['apiId'] == gateway_id and stage['stage'] == stage_name:
+                        stage_found = True
+                        if 'throttle' in stage and f'{resource_path}/{http_method}' in stage['throttle']:
+                            rate_limit: float = stage['throttle'][f'{resource_path}/{http_method}']['rateLimit']
+                            burst_limit: int = stage['throttle'][f'{resource_path}/{http_method}']['burstLimit']
+                        else:
+                            rate_limit: float = usage_plan['throttle']['rateLimit']
+                            burst_limit: int = usage_plan['throttle']['burstLimit']
+                if not stage_found:
+                    raise KeyError(f'Stage name {stage_name} not found in get_usage_plan response: {usage_plan}')
+            else:
+                rate_limit: float = usage_plan['throttle']['rateLimit']
+                burst_limit: int = usage_plan['throttle']['burstLimit']
+        
+            return {'RateLimit': int(rate_limit),
+                    'BurstLimit': burst_limit,
+                    'QuotaLimit': usage_plan['quota']['limit'],
+                    'QuotaPeriod': usage_plan['quota']['period']}
+        
+        
+
+
+  - name: SetQuotaConfiguration
+    description: Inject failure by setting the quota limit to 1 request per day (or to the specified value)
+    onFailure: step:RollbackCurrentExecution
+    onCancel: step:TriggerRollback
+    action: aws:executeScript
+    outputs:
+      - Name: RestApiGwQuotaLimitNewValue
+        Selector: '$.Payload.Limit'
+        Type: Integer
+      - Name: RestApiGwQuotaPeriodNewValue
+        Selector: '$.Payload.Period'
+        Type: String
+    inputs:
+      Runtime: python3.7
+      Handler: set_limit_and_period
+      InputPayload:
+        RestApiGwUsagePlanId: '{{ RestApiGwUsagePlanId }}'
+        RestApiGwQuotaLimit: '{{ RestApiGwQuotaLimit }}'
+        RestApiGwQuotaPeriod: '{{ RestApiGwQuotaPeriod }}'
+      Script: |-
+        import json
+        import logging
+        import time
+        from random import uniform
+        from typing import Any, Callable
+        
+        import boto3
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+        
+        log = logging.getLogger()
+        log.setLevel(logging.INFO)
+        
+        
+
+        def assert_https_status_code_200(response: dict, error_message: str) -> None:
+            if response['ResponseMetadata']['HTTPStatusCode'] != 200:
+                raise ValueError(f'{error_message} Response is: {response}')
+        
+        
+
+        def get_throttling_config(events: dict, context: dict) -> dict:
+            if 'RestApiGwUsagePlanId' not in events:
+                raise KeyError('Requires RestApiGwUsagePlanId in events')
+        
+            if 'RestApiGwStageName' in events and events['RestApiGwStageName']:
+                if 'RestApiGwId' not in events:
+                    raise KeyError('Requires RestApiGwId in events')
+                if not events['RestApiGwId']:
+                    raise KeyError('RestApiGwId should not be empty')
+        
+            usage_plan_id: str = events['RestApiGwUsagePlanId']
+            gateway_id: str = events.get('RestApiGwId')
+            stage_name: str = events.get('RestApiGwStageName')
+            resource_path: str = events.get('RestApiGwResourcePath', '*')
+            http_method: str = events.get('RestApiGwHttpMethod', '*')
+        
+            # Need to have it here for rollback case to overcame issue DIG-853 with get_inputs_from_ssm_execution
+            if (stage_name and stage_name.startswith('{{')) and (gateway_id and gateway_id.startswith('{{')):
+                gateway_id = stage_name = None
+            resource_path = '*' if resource_path.startswith('{{') else resource_path
+            http_method = '*' if http_method.startswith('{{') else http_method
+        
+            config: object = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            client = boto3.client('apigateway', config=config)
+            usage_plan = client.get_usage_plan(usagePlanId=usage_plan_id)
+            assert_https_status_code_200(usage_plan, f'Failed to get usage plan with id {usage_plan_id}')
+        
+            if stage_name:
+                stage_found = False
+                for stage in usage_plan['apiStages']:
+                    if stage['apiId'] == gateway_id and stage['stage'] == stage_name:
+                        stage_found = True
+                        if 'throttle' in stage and f'{resource_path}/{http_method}' in stage['throttle']:
+                            rate_limit: float = stage['throttle'][f'{resource_path}/{http_method}']['rateLimit']
+                            burst_limit: int = stage['throttle'][f'{resource_path}/{http_method}']['burstLimit']
+                        else:
+                            rate_limit: float = usage_plan['throttle']['rateLimit']
+                            burst_limit: int = usage_plan['throttle']['burstLimit']
+                if not stage_found:
+                    raise KeyError(f'Stage name {stage_name} not found in get_usage_plan response: {usage_plan}')
+            else:
+                rate_limit: float = usage_plan['throttle']['rateLimit']
+                burst_limit: int = usage_plan['throttle']['burstLimit']
+        
+            return {'RateLimit': int(rate_limit),
+                    'BurstLimit': burst_limit,
+                    'QuotaLimit': usage_plan['quota']['limit'],
+                    'QuotaPeriod': usage_plan['quota']['period']}
+        
+        
+
+        def wait_limit_and_period_updated(events, context):
+            expected_quota_limit: int = int(events['RestApiGwQuotaLimit'])
+            expected_quota_period: str = events['RestApiGwQuotaPeriod']
+            max_retries: int = events.get('MaxRetries', 40)
+            timeout: int = events.get('Timeout', 15)
+            max_timeout = max_retries * timeout
+            while max_retries > 0:
+                actual_throttling_config = get_throttling_config(events, None)
+                actual_quota_limit = actual_throttling_config['QuotaLimit']
+                actual_quota_period = actual_throttling_config['QuotaPeriod']
+                if actual_quota_limit == expected_quota_limit and actual_quota_period == expected_quota_period:
+                    log.info('Quota limit and period updated')
+                    return
+                log.info(f'Waiting for expected values: '
+                         f'[QuotaLimit: {expected_quota_limit}, QuotaPeriod: {expected_quota_period}], '
+                         f'actual values: [QuotaLimit: {actual_quota_limit}, QuotaPeriod: {actual_quota_period}]')
+                max_retries -= 1
+                time.sleep(timeout)
+        
+            raise TimeoutError(f'Error to wait for updated values of QuotaLimit and QuotaPeriod. '
+                               f'Expected values: [QuotaLimit: {expected_quota_limit}, QuotaPeriod: {expected_quota_period}]. '
+                               f'Actual values: [QuotaLimit: {actual_quota_limit}, QuotaPeriod: {actual_quota_period}] '
+                               f'Maximum timeout {max_timeout} seconds exceeded!')
+        
+        
+
+        def set_limit_and_period(events, context):
+            """
+            Set usage plan limit and period
+            :return: New limit and period
+            """
+            if 'RestApiGwUsagePlanId' not in events:
+                raise KeyError('Requires RestApiGwUsagePlanId  in events')
+            if 'RestApiGwQuotaLimit' not in events:
+                raise KeyError('Requires RestApiGwQuotaLimit  in events')
+            if 'RestApiGwQuotaPeriod' not in events:
+                raise KeyError('Requires RestApiGwQuotaPeriod  in events')
+        
+            usage_plan_id = events['RestApiGwUsagePlanId']
+            new_usage_plan_limit = events['RestApiGwQuotaLimit']
+            new_usage_plan_period = events['RestApiGwQuotaPeriod']
+        
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            apigw_client = boto3.client('apigateway', config=config)
+        
+            apigw_usage_plan = apigw_client.update_usage_plan(
+                usagePlanId=usage_plan_id,
+                patchOperations=[
+                    {
+                        'op': 'replace',
+                        'path': '/quota/limit',
+                        'value': str(new_usage_plan_limit)
+                    },
+                    {
+                        'op': 'replace',
+                        'path': '/quota/period',
+                        'value': new_usage_plan_period
+                    }
+                ])
+            log.debug(f'The response from the API : {apigw_usage_plan}')
+            if apigw_usage_plan['ResponseMetadata']['HTTPStatusCode'] != 200:
+                log.error(f'Failed to update usage plan with id {usage_plan_id}, response is {apigw_usage_plan}')
+                raise ValueError('Failed to update usage plan limit and period')
+        
+            wait_limit_and_period_updated(events, None)
+        
+            return {"Limit": apigw_usage_plan["quota"]["limit"],
+                    "Period": apigw_usage_plan["quota"]["period"]}
+        
+        
+
+
+  - name: AssertAlarmToBeRed
+    description: Wait for expected alarm to be red after failure is injected
+    onFailure: step:RollbackCurrentExecution
+    onCancel: step:TriggerRollback
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 1200
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - '{{ApiGw4xxAlarmName}}'
+      PropertySelector: '$.MetricAlarms[0].StateValue'
+      DesiredValues: [ "ALARM" ]
+
+  - name: RollbackCurrentExecution
+    description: Restore quota configuration of the given Usage Plan
+    onCancel: step:TriggerRollback
+    action: aws:executeScript
+    maxAttempts: 5
+    outputs:
+      - Name: RestApiGwQuotaLimitRestoredValue
+        Selector: '$.Payload.Limit'
+        Type: Integer
+      - Name: RestApiGwQuotaPeriodRestoredValue
+        Selector: '$.Payload.Period'
+        Type: String
+    inputs:
+      Runtime: python3.7
+      Handler: set_limit_and_period
+      InputPayload:
+        RestApiGwUsagePlanId: '{{ RestApiGwUsagePlanId }}'
+        RestApiGwQuotaLimit: '{{ BackupQuotaConfiguration.RestApiGwQuotaLimitOriginalValue }}'
+        RestApiGwQuotaPeriod: '{{ BackupQuotaConfiguration.RestApiGwQuotaPeriodOriginalValue }}'
+      Script: |-
+        import json
+        import logging
+        import time
+        from random import uniform
+        from typing import Any, Callable
+        
+        import boto3
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+        
+        log = logging.getLogger()
+        log.setLevel(logging.INFO)
+        
+        
+
+        def assert_https_status_code_200(response: dict, error_message: str) -> None:
+            if response['ResponseMetadata']['HTTPStatusCode'] != 200:
+                raise ValueError(f'{error_message} Response is: {response}')
+        
+        
+
+        def get_throttling_config(events: dict, context: dict) -> dict:
+            if 'RestApiGwUsagePlanId' not in events:
+                raise KeyError('Requires RestApiGwUsagePlanId in events')
+        
+            if 'RestApiGwStageName' in events and events['RestApiGwStageName']:
+                if 'RestApiGwId' not in events:
+                    raise KeyError('Requires RestApiGwId in events')
+                if not events['RestApiGwId']:
+                    raise KeyError('RestApiGwId should not be empty')
+        
+            usage_plan_id: str = events['RestApiGwUsagePlanId']
+            gateway_id: str = events.get('RestApiGwId')
+            stage_name: str = events.get('RestApiGwStageName')
+            resource_path: str = events.get('RestApiGwResourcePath', '*')
+            http_method: str = events.get('RestApiGwHttpMethod', '*')
+        
+            # Need to have it here for rollback case to overcame issue DIG-853 with get_inputs_from_ssm_execution
+            if (stage_name and stage_name.startswith('{{')) and (gateway_id and gateway_id.startswith('{{')):
+                gateway_id = stage_name = None
+            resource_path = '*' if resource_path.startswith('{{') else resource_path
+            http_method = '*' if http_method.startswith('{{') else http_method
+        
+            config: object = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            client = boto3.client('apigateway', config=config)
+            usage_plan = client.get_usage_plan(usagePlanId=usage_plan_id)
+            assert_https_status_code_200(usage_plan, f'Failed to get usage plan with id {usage_plan_id}')
+        
+            if stage_name:
+                stage_found = False
+                for stage in usage_plan['apiStages']:
+                    if stage['apiId'] == gateway_id and stage['stage'] == stage_name:
+                        stage_found = True
+                        if 'throttle' in stage and f'{resource_path}/{http_method}' in stage['throttle']:
+                            rate_limit: float = stage['throttle'][f'{resource_path}/{http_method}']['rateLimit']
+                            burst_limit: int = stage['throttle'][f'{resource_path}/{http_method}']['burstLimit']
+                        else:
+                            rate_limit: float = usage_plan['throttle']['rateLimit']
+                            burst_limit: int = usage_plan['throttle']['burstLimit']
+                if not stage_found:
+                    raise KeyError(f'Stage name {stage_name} not found in get_usage_plan response: {usage_plan}')
+            else:
+                rate_limit: float = usage_plan['throttle']['rateLimit']
+                burst_limit: int = usage_plan['throttle']['burstLimit']
+        
+            return {'RateLimit': int(rate_limit),
+                    'BurstLimit': burst_limit,
+                    'QuotaLimit': usage_plan['quota']['limit'],
+                    'QuotaPeriod': usage_plan['quota']['period']}
+        
+        
+
+        def wait_limit_and_period_updated(events, context):
+            expected_quota_limit: int = int(events['RestApiGwQuotaLimit'])
+            expected_quota_period: str = events['RestApiGwQuotaPeriod']
+            max_retries: int = events.get('MaxRetries', 40)
+            timeout: int = events.get('Timeout', 15)
+            max_timeout = max_retries * timeout
+            while max_retries > 0:
+                actual_throttling_config = get_throttling_config(events, None)
+                actual_quota_limit = actual_throttling_config['QuotaLimit']
+                actual_quota_period = actual_throttling_config['QuotaPeriod']
+                if actual_quota_limit == expected_quota_limit and actual_quota_period == expected_quota_period:
+                    log.info('Quota limit and period updated')
+                    return
+                log.info(f'Waiting for expected values: '
+                         f'[QuotaLimit: {expected_quota_limit}, QuotaPeriod: {expected_quota_period}], '
+                         f'actual values: [QuotaLimit: {actual_quota_limit}, QuotaPeriod: {actual_quota_period}]')
+                max_retries -= 1
+                time.sleep(timeout)
+        
+            raise TimeoutError(f'Error to wait for updated values of QuotaLimit and QuotaPeriod. '
+                               f'Expected values: [QuotaLimit: {expected_quota_limit}, QuotaPeriod: {expected_quota_period}]. '
+                               f'Actual values: [QuotaLimit: {actual_quota_limit}, QuotaPeriod: {actual_quota_period}] '
+                               f'Maximum timeout {max_timeout} seconds exceeded!')
+        
+        
+
+        def set_limit_and_period(events, context):
+            """
+            Set usage plan limit and period
+            :return: New limit and period
+            """
+            if 'RestApiGwUsagePlanId' not in events:
+                raise KeyError('Requires RestApiGwUsagePlanId  in events')
+            if 'RestApiGwQuotaLimit' not in events:
+                raise KeyError('Requires RestApiGwQuotaLimit  in events')
+            if 'RestApiGwQuotaPeriod' not in events:
+                raise KeyError('Requires RestApiGwQuotaPeriod  in events')
+        
+            usage_plan_id = events['RestApiGwUsagePlanId']
+            new_usage_plan_limit = events['RestApiGwQuotaLimit']
+            new_usage_plan_period = events['RestApiGwQuotaPeriod']
+        
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            apigw_client = boto3.client('apigateway', config=config)
+        
+            apigw_usage_plan = apigw_client.update_usage_plan(
+                usagePlanId=usage_plan_id,
+                patchOperations=[
+                    {
+                        'op': 'replace',
+                        'path': '/quota/limit',
+                        'value': str(new_usage_plan_limit)
+                    },
+                    {
+                        'op': 'replace',
+                        'path': '/quota/period',
+                        'value': new_usage_plan_period
+                    }
+                ])
+            log.debug(f'The response from the API : {apigw_usage_plan}')
+            if apigw_usage_plan['ResponseMetadata']['HTTPStatusCode'] != 200:
+                log.error(f'Failed to update usage plan with id {usage_plan_id}, response is {apigw_usage_plan}')
+                raise ValueError('Failed to update usage plan limit and period')
+        
+            wait_limit_and_period_updated(events, None)
+        
+            return {"Limit": apigw_usage_plan["quota"]["limit"],
+                    "Period": apigw_usage_plan["quota"]["period"]}
+        
+        
+
+
+  - name: AssertAlarmToBeGreen
+    description: Wait for the alarm to be green after test is complete
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 1200
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - '{{ApiGw4xxAlarmName}}'
+      PropertySelector: '$.MetricAlarms[0].StateValue'
+      DesiredValues: [ "OK" ]
+    isEnd: true
+
+  - name: TriggerRollback
+    description: This step is executed when ssm document is cancelled while it was in progress. This step starts a new execution of document in rollback mode to rollback the changes made as part of normal execution
+    action: 'aws:executeScript'
+    onFailure: Abort
+    outputs:
+      - Name: RollbackExecutionId
+        Selector: $.Payload.RollbackExecutionId
+        Type: String
+    inputs:
+      Runtime: python3.6
+      Handler: start_rollback_execution
+      InputPayload:
+        ExecutionId: '{{automation:EXECUTION_ID}}'
+      Script: |-
+        import json
+        import boto3
+        from botocore.config import Config
+        
+        
+
+
+        def start_rollback_execution(events, context):
+            output = {}
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            ssm = boto3.client('ssm', config=config)
+        
+            if 'ExecutionId' not in events or not events['ExecutionId']:
+                raise KeyError('Requires not empty ExecutionId')
+        
+            response = ssm.get_automation_execution(AutomationExecutionId=events['ExecutionId'])
+        
+            # Get parameters for current execution and add IsRollback and PreviousExecutionId
+            response_parameters = response['AutomationExecution']['Parameters']
+            response_parameters['IsRollback'] = ['true']
+            response_parameters['PreviousExecutionId'] = [events['ExecutionId']]
+        
+            rollback_execution_response = ssm.start_automation_execution(
+                DocumentName=response['AutomationExecution']['DocumentName'],
+                DocumentVersion=response['AutomationExecution']['DocumentVersion'],
+                Parameters=response_parameters
+            )
+            output['RollbackExecutionId'] = rollback_execution_response['AutomationExecutionId']
+            return output
+        
+        
+
+    isEnd: true
+

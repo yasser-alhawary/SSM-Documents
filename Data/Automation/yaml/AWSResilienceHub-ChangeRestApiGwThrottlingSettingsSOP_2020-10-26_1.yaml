@@ -1,0 +1,617 @@
+#
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-ChangeRestApiGwThrottlingSettingsSOP_2020-10-26
+
+            ## Intent
+            Change throttling settings of the REST API Gateway
+
+            ## Type
+            SOP
+
+            ## Risk
+            Medium
+
+            ## Requirements
+              * REST API Gateway
+
+            ## Permissions required for AutomationAssumeRole
+              * apigateway:GET
+              * apigateway:PATCH
+              * servicequotas:GetServiceQuota
+
+            ## Supports Rollback
+            No
+
+            ## Cancellation behavior
+            Fail
+
+            ## Inputs
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: ARN of the IAM role with permissions listed above
+
+            ### (Required) RestApiGwUsagePlanId
+              * type: String
+              * description: The ID of REST API Gateway usage plan to be modified
+
+            ### (Required) RestApiGwThrottlingRate
+              * type: String
+              * description: New throttling rate value in requests per second
+
+            ### (Required) RestApiGwThrottlingBurst
+              * type: String
+              * description: New throttling burst value in requests per second
+
+            ### (Optional) RestApiGwStageName
+              * type: String
+              * description: The name of the Stage for which throttling settings should be updated. If not set, settings will be updated on the Usage Plan level
+              * default: ''
+
+            ### (Optional) RestApiGwId
+              * type: String
+              * description: The ID of the REST API Gateway. Required if Stage name is provided. Otherwise, it will be ignored
+              * default: ''
+
+            ### (Optional) RestApiGwResourcePath
+              * type: String
+              * description: The Resource Path for which throttling settings should be updated (e.g. /Customers/Accounts/). Can be set to "*" (all resources). If `RestApiGwStageName` is not provided, this parameter is ignored
+              * default: '*'
+
+            ### (Optional) RestApiGwHttpMethod
+              * type: String
+              * description: The HTTP method for which throttling settings should be updated (e.g. GET, POST, PUT, and etc.). Can be set to "*" (all http methods). If `RestApiGwStageName` is not provided, this parameter is ignored
+              * default: '*'
+
+            ### (Required) ForceExecution
+              * type: Boolean
+              * description: By default the document raises error if the throttling settings are changed by more than 50%. If this option is True, skips this check. True of false
+
+            ## Details
+            The document changes throttling settings of the REST API Gateway. It also validates the requested values
+            and raises error if throttling settings are going to be increased/decreased by more than 50%. Users have
+            an option to skip this validation using `ForceExecution` parameter or execute the current SOP several times
+            with smaller increments.
+
+            ## Steps executed in normal flow
+              * RecordStartTime
+              * CheckIfForceExecutionIsSet
+              * ValidateInputs
+              * SetThrottlingConfiguration
+              * OutputRecoveryTime
+
+            ## Outputs
+            ### SetThrottlingConfiguration.RestApiGwThrottlingRateNewValue
+              * type: String
+              * description: Throttling rate after update
+
+            ### SetThrottlingConfiguration.RestApiGwThrottlingBurstNewValue
+              * type: String
+              * description: Throttling burst after update
+
+            ### ValidateInputs.RestApiGwThrottlingRateOriginalValue
+              * type: String
+              * description: Throttling rate before update
+
+            ### ValidateInputs.RestApiGwThrottlingBurstOriginalValue
+              * type: String
+              * description: Throttling burst before update
+
+            ### OutputRecoveryTime.RecoveryTime
+              * type: Integer
+              * description: SOP execution time in seconds
+
+schemaVersion: "0.3"
+assumeRole: "{{AutomationAssumeRole}}"
+parameters:
+  RestApiGwUsagePlanId:
+    type: String
+    description: (Required) The ID of REST API Gateway usage plan to be modified
+  RestApiGwThrottlingRate:
+    type: String
+    description: (Required) New throttling rate value in requests per second
+  RestApiGwThrottlingBurst:
+    type: String
+    description: (Required) New throttling burst value in requests per second
+  RestApiGwStageName:
+    type: String
+    description: (Optional) The name of the Stage for which throttling settings should be updated. If not set, settings will be updated on the Usage Plan level
+    default: ''
+  RestApiGwId:
+    type: String
+    description: (Optional) The ID of REST API Gateway. Required if Stage name is provided. Otherwise, it will be ignored
+    default: ''
+  RestApiGwResourcePath:
+    type: String
+    description: (Optional) The Resource Path for which throttling settings should be updated (e.g. /Customers/Accounts/). Can be set to "*" (all resources). If `RestApiGwStageName` is not provided, this parameter is ignored
+    default: '*'
+  RestApiGwHttpMethod:
+    type: String
+    description: (Optional) The HTTP method for which throttling settings should be updated (e.g. GET, POST, PUT, and etc.). Can be set to "*" (all http methods). If `RestApiGwStageName` is not provided, this parameter is ignored
+    default: '*'
+  ForceExecution:
+    type: Boolean
+    description: (Optional) By default the document raises error if the throttling settings are changed by more than 50%. If this option is True, skips this check. True of false
+    default: false
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+outputs:
+  - "SetThrottlingConfiguration.RestApiGwThrottlingRateNewValue"
+  - "SetThrottlingConfiguration.RestApiGwThrottlingBurstNewValue"
+  - "ValidateInputs.RestApiGwThrottlingRateOriginalValue"
+  - "ValidateInputs.RestApiGwThrottlingBurstOriginalValue"
+  - "OutputRecoveryTime.RecoveryTime"
+mainSteps:
+  - name: RecordStartTime
+    description: Start recording execution time
+    action: aws:executeScript
+    outputs:
+      - Name: StartTime
+        Selector: '$.Payload'
+        Type: String
+    inputs:
+      Runtime: python3.7
+      Handler: start_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def start_time(events, context):
+            return datetime.now(timezone.utc).isoformat()
+        
+        
+
+
+  - name: CheckIfForceExecutionIsSet
+    description: Check if `ForceExecution` option is true and changes by more than 50% are allowed
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: SetThrottlingConfiguration
+          Variable: '{{ ForceExecution }}'
+          BooleanEquals: true
+        - NextStep: ValidateInputs
+          Variable: '{{ ForceExecution }}'
+          BooleanEquals: false
+      Default:
+        ValidateInputs
+
+  - name: ValidateInputs
+    description: |-
+      Get current throttling settings for the specified REST API Gateway Usage Plan, Stage or path/method and raise
+      error if requested increase/decrease is by more than 50% of original values
+    action: aws:executeScript
+    outputs:
+      - Name: RestApiGwThrottlingRateOriginalValue
+        Selector: '$.Payload.OriginalRateLimit'
+        Type: Integer
+      - Name: RestApiGwThrottlingBurstOriginalValue
+        Selector: '$.Payload.OriginalBurstLimit'
+        Type: Integer
+    inputs:
+      Runtime: python3.7
+      Handler: validate_throttling_config
+      InputPayload:
+        RestApiGwUsagePlanId: '{{ RestApiGwUsagePlanId }}'
+        RestApiGwId: '{{ RestApiGwId }}'
+        RestApiGwStageName: '{{ RestApiGwStageName }}'
+        RestApiGwResourcePath: '{{ RestApiGwResourcePath }}'
+        RestApiGwHttpMethod: '{{ RestApiGwHttpMethod }}'
+        RestApiGwThrottlingRate: '{{ RestApiGwThrottlingRate }}'
+        RestApiGwThrottlingBurst: '{{ RestApiGwThrottlingBurst }}'
+      Script: |-
+        import json
+        import logging
+        import time
+        from random import uniform
+        from typing import Any, Callable
+        
+        import boto3
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+        
+        log = logging.getLogger()
+        log.setLevel(logging.INFO)
+        
+        
+
+        def assert_https_status_code_200(response: dict, error_message: str) -> None:
+            if response['ResponseMetadata']['HTTPStatusCode'] != 200:
+                raise ValueError(f'{error_message} Response is: {response}')
+        
+        
+
+        def get_throttling_config(events: dict, context: dict) -> dict:
+            if 'RestApiGwUsagePlanId' not in events:
+                raise KeyError('Requires RestApiGwUsagePlanId in events')
+        
+            if 'RestApiGwStageName' in events and events['RestApiGwStageName']:
+                if 'RestApiGwId' not in events:
+                    raise KeyError('Requires RestApiGwId in events')
+                if not events['RestApiGwId']:
+                    raise KeyError('RestApiGwId should not be empty')
+        
+            usage_plan_id: str = events['RestApiGwUsagePlanId']
+            gateway_id: str = events.get('RestApiGwId')
+            stage_name: str = events.get('RestApiGwStageName')
+            resource_path: str = events.get('RestApiGwResourcePath', '*')
+            http_method: str = events.get('RestApiGwHttpMethod', '*')
+        
+            # Need to have it here for rollback case to overcame issue DIG-853 with get_inputs_from_ssm_execution
+            if (stage_name and stage_name.startswith('{{')) and (gateway_id and gateway_id.startswith('{{')):
+                gateway_id = stage_name = None
+            resource_path = '*' if resource_path.startswith('{{') else resource_path
+            http_method = '*' if http_method.startswith('{{') else http_method
+        
+            config: object = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            client = boto3.client('apigateway', config=config)
+            usage_plan = client.get_usage_plan(usagePlanId=usage_plan_id)
+            assert_https_status_code_200(usage_plan, f'Failed to get usage plan with id {usage_plan_id}')
+        
+            if stage_name:
+                stage_found = False
+                for stage in usage_plan['apiStages']:
+                    if stage['apiId'] == gateway_id and stage['stage'] == stage_name:
+                        stage_found = True
+                        if 'throttle' in stage and f'{resource_path}/{http_method}' in stage['throttle']:
+                            rate_limit: float = stage['throttle'][f'{resource_path}/{http_method}']['rateLimit']
+                            burst_limit: int = stage['throttle'][f'{resource_path}/{http_method}']['burstLimit']
+                        else:
+                            rate_limit: float = usage_plan['throttle']['rateLimit']
+                            burst_limit: int = usage_plan['throttle']['burstLimit']
+                if not stage_found:
+                    raise KeyError(f'Stage name {stage_name} not found in get_usage_plan response: {usage_plan}')
+            else:
+                rate_limit: float = usage_plan['throttle']['rateLimit']
+                burst_limit: int = usage_plan['throttle']['burstLimit']
+        
+            return {'RateLimit': int(rate_limit),
+                    'BurstLimit': burst_limit,
+                    'QuotaLimit': usage_plan['quota']['limit'],
+                    'QuotaPeriod': usage_plan['quota']['period']}
+        
+        
+
+        def validate_throttling_config(events: dict, context: dict) -> dict:
+            if 'RestApiGwThrottlingRate' not in events:
+                raise KeyError('Requires RestApiGwThrottlingRate in events')
+        
+            if 'RestApiGwThrottlingBurst' not in events:
+                raise KeyError('Requires RestApiGwThrottlingBurst in events')
+        
+            new_rate_limit: int = int(events['RestApiGwThrottlingRate'])
+            new_burst_limit: int = int(events['RestApiGwThrottlingBurst'])
+        
+            usage_plan: dict = get_throttling_config(events, None)
+            original_rate_limit: int = usage_plan['RateLimit']
+            original_burst_limit: int = usage_plan['BurstLimit']
+        
+            if original_burst_limit and abs(new_burst_limit - original_burst_limit) > original_burst_limit * 0.5:
+                raise ValueError('Burst rate limit is going to be changed more than 50%, please use smaller increments or use '
+                                 'ForceExecution parameter to disable validation')
+        
+            if original_rate_limit and abs(new_rate_limit - original_rate_limit) > original_rate_limit * 0.5:
+                raise ValueError('Rate limit is going to be changed more than 50%, please use smaller increments or use '
+                                 'ForceExecution parameter to disable validation')
+        
+            return {'OriginalRateLimit': original_rate_limit,
+                    'OriginalBurstLimit': original_burst_limit}
+        
+        
+
+
+  - name: SetThrottlingConfiguration
+    description: Update throttling settings for the REST API Gateway, raise error if values exceed service quota
+    action: aws:executeScript
+    outputs:
+      - Name: RestApiGwThrottlingRateNewValue
+        Selector: '$.Payload.RateLimit'
+        Type: Integer
+      - Name: RestApiGwThrottlingBurstNewValue
+        Selector: '$.Payload.BurstLimit'
+        Type: Integer
+    inputs:
+      Runtime: python3.7
+      Handler: set_throttling_config
+      InputPayload:
+        RestApiGwUsagePlanId: '{{ RestApiGwUsagePlanId }}'
+        RestApiGwId: '{{ RestApiGwId }}'
+        RestApiGwStageName: '{{ RestApiGwStageName }}'
+        RestApiGwResourcePath: '{{ RestApiGwResourcePath }}'
+        RestApiGwHttpMethod: '{{ RestApiGwHttpMethod }}'
+        RestApiGwThrottlingRate: '{{ RestApiGwThrottlingRate }}'
+        RestApiGwThrottlingBurst: '{{ RestApiGwThrottlingBurst }}'
+      Script: |-
+        import json
+        import logging
+        import time
+        from random import uniform
+        from typing import Any, Callable
+        
+        import boto3
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+        
+        log = logging.getLogger()
+        log.setLevel(logging.INFO)
+        
+        
+
+        def assert_https_status_code_200(response: dict, error_message: str) -> None:
+            if response['ResponseMetadata']['HTTPStatusCode'] != 200:
+                raise ValueError(f'{error_message} Response is: {response}')
+        
+        
+
+        def execute_boto3_with_backoff(delegate: Callable[[Any], dict], **kwargs) -> dict:
+            """
+            Executes the given delegate with apigateway client parameter, handles TooManyRequestsException using
+            exponential backoff algorithm with random jitter
+            :param delegate: The delegate to execute (with boto3 function)
+            :keyword args:
+                retries: Number of maximum backoff retries
+                max_interval: Maximum backoff interval in seconds
+                base_time: Backoff base time
+            :return: The output of the given function
+            """
+            backoff_retries: int = kwargs.get('retries', 15)
+            backoff_max_interval: int = kwargs.get('max_interval', 64)
+            backoff_base_time: int = kwargs.get('base_time', 2)
+            apigw_client = boto3.client('apigateway')
+        
+            count = 1
+            while count <= backoff_retries:
+                try:
+                    log.debug(f'Making an API call, attempt: {count} ...')
+                    response = delegate(apigw_client)
+                    assert_https_status_code_200(response, 'Failed to perform API call')
+                    log.debug('API call performed successfully.')
+                    return response
+                except ClientError as error:
+                    if error.response['Error']['Code'] == 'TooManyRequestsException':
+                        interval: float = min(backoff_base_time * 2 ** count + round(uniform(-2, 2), 2), backoff_max_interval)
+                        log.warning(f'TooManyRequestsException, slow it down with delay {interval} seconds ...')
+                        time.sleep(interval)
+                        count += 1
+                    else:
+                        log.error(error)
+                        raise error
+        
+            raise Exception(f'Failed to perform API call successfully for {count - 1} times.')
+        
+        
+
+        def get_service_quota(config: object, service_code: str, quota_code: str) -> dict:
+            client = boto3.client('service-quotas', config=config)
+            response = client.get_service_quota(ServiceCode=service_code, QuotaCode=quota_code)
+            assert_https_status_code_200(response, f'Failed to perform get_service_quota with '
+                                                   f'ServiceCode: {service_code} and QuotaCode: {quota_code}')
+            return response
+        
+        
+
+        def update_usage_plan(usage_plan_id: str, patch_operations: list, retries: int = 15) -> dict:
+            return execute_boto3_with_backoff(
+                delegate=lambda x: x.update_usage_plan(
+                    usagePlanId=usage_plan_id,
+                    patchOperations=patch_operations
+                ),
+                retries=retries
+            )
+        
+        
+
+        def wait_throttling_config_updated(events: dict, context: dict) -> None:
+            expected_rate_limit: int = int(events['RestApiGwThrottlingRate'])
+            expected_burst_limit: int = int(events['RestApiGwThrottlingBurst'])
+            max_retries: int = events.get('MaxRetries', 40)
+            timeout: int = events.get('Timeout', 15)
+            while max_retries > 0:
+                actual_throttling_config = get_throttling_config(events, None)
+                actual_rate_limit = actual_throttling_config['RateLimit']
+                actual_burst_limit = actual_throttling_config['BurstLimit']
+                if actual_rate_limit == expected_rate_limit and actual_burst_limit == expected_burst_limit:
+                    return
+                log.info(f'Waiting for expected values: [RateLimit: {expected_rate_limit}, BurstLimit: {expected_burst_limit}],'
+                         f' actual values: [RateLimit: {actual_rate_limit}, BurstLimit: {actual_burst_limit}]')
+                max_retries -= 1
+                time.sleep(timeout)
+        
+            raise TimeoutError('Error to wait for throttling config update. Maximum timeout exceeded!')
+        
+        
+
+        def get_throttling_config(events: dict, context: dict) -> dict:
+            if 'RestApiGwUsagePlanId' not in events:
+                raise KeyError('Requires RestApiGwUsagePlanId in events')
+        
+            if 'RestApiGwStageName' in events and events['RestApiGwStageName']:
+                if 'RestApiGwId' not in events:
+                    raise KeyError('Requires RestApiGwId in events')
+                if not events['RestApiGwId']:
+                    raise KeyError('RestApiGwId should not be empty')
+        
+            usage_plan_id: str = events['RestApiGwUsagePlanId']
+            gateway_id: str = events.get('RestApiGwId')
+            stage_name: str = events.get('RestApiGwStageName')
+            resource_path: str = events.get('RestApiGwResourcePath', '*')
+            http_method: str = events.get('RestApiGwHttpMethod', '*')
+        
+            # Need to have it here for rollback case to overcame issue DIG-853 with get_inputs_from_ssm_execution
+            if (stage_name and stage_name.startswith('{{')) and (gateway_id and gateway_id.startswith('{{')):
+                gateway_id = stage_name = None
+            resource_path = '*' if resource_path.startswith('{{') else resource_path
+            http_method = '*' if http_method.startswith('{{') else http_method
+        
+            config: object = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            client = boto3.client('apigateway', config=config)
+            usage_plan = client.get_usage_plan(usagePlanId=usage_plan_id)
+            assert_https_status_code_200(usage_plan, f'Failed to get usage plan with id {usage_plan_id}')
+        
+            if stage_name:
+                stage_found = False
+                for stage in usage_plan['apiStages']:
+                    if stage['apiId'] == gateway_id and stage['stage'] == stage_name:
+                        stage_found = True
+                        if 'throttle' in stage and f'{resource_path}/{http_method}' in stage['throttle']:
+                            rate_limit: float = stage['throttle'][f'{resource_path}/{http_method}']['rateLimit']
+                            burst_limit: int = stage['throttle'][f'{resource_path}/{http_method}']['burstLimit']
+                        else:
+                            rate_limit: float = usage_plan['throttle']['rateLimit']
+                            burst_limit: int = usage_plan['throttle']['burstLimit']
+                if not stage_found:
+                    raise KeyError(f'Stage name {stage_name} not found in get_usage_plan response: {usage_plan}')
+            else:
+                rate_limit: float = usage_plan['throttle']['rateLimit']
+                burst_limit: int = usage_plan['throttle']['burstLimit']
+        
+            return {'RateLimit': int(rate_limit),
+                    'BurstLimit': burst_limit,
+                    'QuotaLimit': usage_plan['quota']['limit'],
+                    'QuotaPeriod': usage_plan['quota']['period']}
+        
+        
+
+        def set_throttling_config(events: dict, context: dict) -> dict:
+            if 'RestApiGwUsagePlanId' not in events:
+                raise KeyError('Requires RestApiGwUsagePlanId in events')
+        
+            if 'RestApiGwThrottlingRate' not in events:
+                raise KeyError('Requires RestApiGwThrottlingRate in events')
+        
+            if 'RestApiGwThrottlingBurst' not in events:
+                raise KeyError('Requires RestApiGwThrottlingBurst in events')
+        
+            if 'RestApiGwStageName' in events and events['RestApiGwStageName']:
+                if 'RestApiGwId' not in events:
+                    raise KeyError('Requires RestApiGwId in events')
+                if not events['RestApiGwId']:
+                    raise KeyError('RestApiGwId should not be empty')
+        
+            usage_plan_id: str = events['RestApiGwUsagePlanId']
+            new_rate_limit: float = float(events['RestApiGwThrottlingRate'])
+            new_burst_limit: int = int(events['RestApiGwThrottlingBurst'])
+            gateway_id: str = events.get('RestApiGwId')
+            stage_name: str = events.get('RestApiGwStageName')
+            resource_path: str = events.get('RestApiGwResourcePath', '*')
+            http_method: str = events.get('RestApiGwHttpMethod', '*')
+            validate_quota_limits: bool = events.get('ValidateQuotaLimits', True)
+        
+            output: dict = {}
+            quota_rate_limit_code: str = 'L-8A5B8E43'
+            quota_burst_limit_code: str = 'L-CDF5615A'
+            patch_operations: list = [
+                {
+                    'op': 'replace',
+                    'path': '/throttle/rateLimit',
+                    'value': str(new_rate_limit)
+                },
+                {
+                    'op': 'replace',
+                    'path': '/throttle/burstLimit',
+                    'value': str(new_burst_limit)
+                }
+            ]
+        
+            # Need to have it here for rollback case to overcame issue DIG-853 with get_inputs_from_ssm_execution
+            if (stage_name and stage_name.startswith('{{')) and (gateway_id and gateway_id.startswith('{{')):
+                gateway_id = stage_name = None
+            resource_path = '*' if resource_path.startswith('{{') else resource_path
+            http_method = '*' if http_method.startswith('{{') else http_method
+        
+            boto3_config: object = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+        
+            if validate_quota_limits:
+                quota_rate_limit: float = get_service_quota(
+                    boto3_config, 'apigateway', quota_rate_limit_code)['Quota']['Value']
+                quota_burst_limit: float = get_service_quota(
+                    boto3_config, 'apigateway', quota_burst_limit_code)['Quota']['Value']
+        
+                if new_rate_limit > quota_rate_limit:
+                    raise ValueError(f'Given value of RestApiGwThrottlingRate: {new_rate_limit}, can not be more than '
+                                     f'service quota Throttle rate: {quota_rate_limit}')
+        
+                if new_burst_limit > quota_burst_limit:
+                    raise ValueError(f'Given value of RestApiGwThrottlingBurst: {new_burst_limit}, can not be more than '
+                                     f'service quota Throttle burst rate: {quota_burst_limit}')
+            if stage_name:
+                path: str = f'/apiStages/{gateway_id}:{stage_name}/throttle/{resource_path}/{http_method}'
+                patch_operations[0]['path'], patch_operations[1]['path'] = f'{path}/rateLimit', f'{path}/burstLimit'
+                updated_usage_plan = update_usage_plan(usage_plan_id, patch_operations)
+        
+                for stage in updated_usage_plan['apiStages']:
+                    if stage['apiId'] == gateway_id and stage['stage'] == stage_name:
+                        output['RateLimit'] = stage['throttle'][f'{resource_path}/{http_method}']['rateLimit']
+                        output['BurstLimit'] = stage['throttle'][f'{resource_path}/{http_method}']['burstLimit']
+            else:
+                updated_usage_plan = update_usage_plan(usage_plan_id, patch_operations)
+                output['RateLimit'] = updated_usage_plan['throttle']['rateLimit']
+                output['BurstLimit'] = updated_usage_plan['throttle']['burstLimit']
+        
+            output['RateLimit'] = int(output['RateLimit'])
+            wait_throttling_config_updated(events, None)
+        
+            return output
+        
+        
+
+
+  - name: OutputRecoveryTime
+    description: Calculate execution time
+    action: aws:executeScript
+    outputs:
+      - Name: RecoveryTime
+        Selector: '$.Payload'
+        Type: Integer
+    inputs:
+      Runtime: python3.7
+      Handler: recovery_time
+      InputPayload:
+        StartTime: '{{ RecordStartTime.StartTime }}'
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def recovery_time(events, context):
+            return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds
+        
+        
+
+

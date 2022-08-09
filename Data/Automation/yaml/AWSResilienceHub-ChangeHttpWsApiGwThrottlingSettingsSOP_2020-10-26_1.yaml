@@ -1,0 +1,431 @@
+#
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-ChangeHttpWsApiGwThrottlingSettingsSOP_2020-10-26
+
+            ## Intent
+            Change throttling settings for HTTP or WebSocket types of API Gateway
+
+            ## Type
+            SOP
+
+            ## Risk
+            Medium
+
+            ## Requirements
+              * HTTP or WebSocket API Gateway
+
+            ## Permissions required for AutomationAssumeRole
+              * apigateway:GET
+              * apigateway:PATCH
+              * servicequotas:GetServiceQuota
+
+            ## Supports Rollback
+            No
+
+            ## Cancellation behavior
+            Fail
+
+            ## Inputs
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: ARN of the IAM role with permissions listed above
+
+            ### (Required) HttpWsApiGwId
+              * type: String
+              * description: The ID of the HTTP or WS API Gateway
+
+            ### (Required) HttpWsThrottlingRate
+              * type: String
+              * description: The value of throttling rate (requests per second)
+
+            ### (Required) HttpWsThrottlingBurst
+              * type: String
+              * description: The value of throttling burst rate (requests per second)
+
+            ### (Required) HttpWsStageName
+              * type: String
+              * description: The stage name of the HTTP or WS API Gateway
+
+            ### (Optional) HttpWsRouteKey
+              * type: String
+              * description: The route key for the Route to which throttling settings should be applied to. Can be set to "*" for default routes
+              * default: '*'
+
+            ### (Required) ForceExecution
+              * type: Boolean
+              * description: By default the document raises error if the throttling settings are changed by more than 50%. If this option is True, skips this check. True of false
+
+            ## Details
+            The document changes throttling settings of the HTTP or WebSocket API Gateway. It also validates the requested values and raises error if throttling settings are going to be increased/decreased by more than 50%. Users have an option to skip this validation using `ForceExecution` parameter or execute the current SOP several times with smaller increments.
+
+            ## Steps executed in normal flow
+              * RecordStartTime
+              * CheckIfForceExecutionIsSet
+              * ValidateInputs
+              * SetThrottlingConfiguration
+              * OutputRecoveryTime
+
+            ## Outputs
+            ### SetThrottlingConfiguration.HttpWsThrottlingRateNewValue
+              * type: String
+              * description: Throttling rate after update
+
+            ### SetThrottlingConfiguration.HttpWsThrottlingBurstNewValue
+              * type: String
+              * description: Throttling burst after update
+
+            ### ValidateInputs.HttpWsThrottlingRateOriginalValue
+              * type: String
+              * description: Throttling rate before update
+
+            ### ValidateInputs.HttpWsThrottlingBurstOriginalValue
+              * type: String
+              * description: Throttling burst before update
+
+            ### OutputRecoveryTime.RecoveryTime
+              * type: Integer
+              * description: SOP execution time in seconds
+
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+outputs:
+  - ValidateInputs.HttpWsThrottlingRateOriginalValue
+  - ValidateInputs.HttpWsThrottlingBurstOriginalValue
+  - SetThrottlingConfiguration.HttpWsThrottlingRateNewValue
+  - SetThrottlingConfiguration.HttpWsThrottlingBurstNewValue
+  - OutputRecoveryTime.RecoveryTime
+  
+parameters:
+  HttpWsApiGwId:
+    type: String
+    description: (Required) The ID of the HTTP or WS API Gateway
+  HttpWsStageName:
+    type: String
+    description: (Required) The stage name of the HTTP or WS API Gateway
+  HttpWsThrottlingRate:
+    type: String
+    description: (Required) The value of throttling rate (requests per second)
+  HttpWsThrottlingBurst:
+    type: String
+    description: (Required) The value of throttling burst rate (requests per second)
+  HttpWsRouteKey:
+    type: String
+    description: (Optional) The route key for the Route to which throttling settings should be applied to. Can be set to "*" for default routes
+    default: '*'
+  ForceExecution:
+    type: Boolean
+    description: (Optional) By default the document raises error if the throttling settings are changed by more than 50%. If this option is True, skips this check. True of false
+    default: false
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+mainSteps:
+  - name: RecordStartTime
+    description: Start recording execution time
+    action: 'aws:executeScript'
+    outputs:
+      - Name: StartTime
+        Selector: $.Payload
+        Type: String
+    inputs:
+      Runtime: python3.7
+      Handler: start_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def start_time(events, context):
+            return datetime.now(timezone.utc).isoformat()
+        
+        
+
+
+  - name: CheckIfForceExecutionIsSet
+    description: Check if `ForceExecution` option is true and changes by more than 50% are allowed
+    action: aws:branch
+    inputs:
+      Choices:
+        - NextStep: SetThrottlingConfiguration
+          Variable: '{{ ForceExecution }}'
+          BooleanEquals: true
+        - NextStep: ValidateInputs
+          Variable: '{{ ForceExecution }}'
+          BooleanEquals: false
+      Default:
+        ValidateInputs
+
+  - name: ValidateInputs
+    description: |-
+      Get current throttling settings for the specified HTTP or WebSocket API Gateway Stage or Route and raise
+      error if requested increase/decrease is by more than 50% of original values
+    action: aws:executeScript
+    outputs:
+      - Name: HttpWsThrottlingRateOriginalValue
+        Selector: '$.Payload.OriginalRateLimit'
+        Type: Integer
+      - Name: HttpWsThrottlingBurstOriginalValue
+        Selector: '$.Payload.OriginalBurstLimit'
+        Type: Integer
+    inputs:
+      Runtime: python3.7
+      Handler: validate_throttling_config
+      InputPayload:
+        HttpWsApiGwId: '{{ HttpWsApiGwId }}'
+        HttpWsStageName: '{{ HttpWsStageName }}'
+        HttpWsRouteKey: '{{ HttpWsRouteKey }}'
+        HttpWsThrottlingRate: '{{ HttpWsThrottlingRate }}'
+        HttpWsThrottlingBurst: '{{ HttpWsThrottlingBurst }}'
+      Script: |-
+        import logging
+        
+        import boto3
+        from botocore.config import Config
+        
+        log = logging.getLogger()
+        log.setLevel(logging.DEBUG)
+        
+        
+
+        def assert_https_status_code_200(response: dict, error_message: str) -> None:
+            if not response['ResponseMetadata']['HTTPStatusCode'] == 200:
+                raise ValueError(f'{error_message} Response is: {response}')
+        
+        
+
+        def get_stage(gateway_id: str, stage_name: str) -> dict:
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            client = boto3.client('apigatewayv2', config=config)
+            response = client.get_stage(ApiId=gateway_id, StageName=stage_name)
+            assert_https_status_code_200(response, f'Failed to perform get_stage with '
+                                                   f'ApiId: {gateway_id} and StageName: {stage_name}')
+            return response
+        
+        
+
+        def validate_throttling_config(events: dict, context: dict) -> dict:
+            if 'HttpWsThrottlingRate' not in events:
+                raise KeyError('Requires HttpWsThrottlingRate in events')
+        
+            if 'HttpWsThrottlingBurst' not in events:
+                raise KeyError('Requires HttpWsThrottlingBurst in events')
+        
+            if 'HttpWsApiGwId' not in events:
+                raise KeyError('Requires HttpWsApiGwId in events')
+        
+            if 'HttpWsStageName' not in events:
+                raise KeyError('Requires HttpWsStageName in events')
+        
+            new_rate_limit: float = float(events['HttpWsThrottlingRate'])
+            new_burst_limit: int = int(events['HttpWsThrottlingBurst'])
+            gateway_id: str = events.get('HttpWsApiGwId')
+            stage_name: str = events.get('HttpWsStageName')
+            route_key: str = events.get('HttpWsRouteKey', '*')
+        
+            stage = get_stage(gateway_id, stage_name)
+            if route_key != '*':
+                if route_key in stage['RouteSettings']:
+                    original_rate_limit: float = stage['RouteSettings'][route_key].get('ThrottlingRateLimit', 0.0)
+                    original_burst_limit: int = stage['RouteSettings'][route_key].get('ThrottlingBurstLimit', 0)
+                else:
+                    original_rate_limit: float = 0.0
+                    original_burst_limit: int = 0
+            else:
+                original_rate_limit: float = stage['DefaultRouteSettings'].get('ThrottlingRateLimit', 0.0)
+                original_burst_limit: int = stage['DefaultRouteSettings'].get('ThrottlingBurstLimit', 0)
+        
+            if original_burst_limit and abs(new_burst_limit - original_burst_limit) > original_burst_limit * 0.5:
+                raise ValueError('Burst rate limit is going to be changed more than 50%, please use smaller increments or use '
+                                 'ForceExecution parameter to disable validation')
+        
+            if original_rate_limit and abs(new_rate_limit - original_rate_limit) > original_rate_limit * 0.5:
+                raise ValueError('Rate limit is going to be changed more than 50%, please use smaller increments or use '
+                                 'ForceExecution parameter to disable validation')
+        
+            original_rate_limit = int(original_rate_limit)
+        
+            return {'OriginalRateLimit': original_rate_limit,
+                    'OriginalBurstLimit': original_burst_limit}
+        
+        
+
+
+  - name: SetThrottlingConfiguration
+    description: Update throttling settings for the HTTP or WS API Gateway, raise error if values exceed service quota
+    action: aws:executeScript
+    outputs:
+      - Name: HttpWsThrottlingRateNewValue
+        Selector: '$.Payload.RateLimit'
+        Type: Integer
+      - Name: HttpWsThrottlingBurstNewValue
+        Selector: '$.Payload.BurstLimit'
+        Type: Integer
+    inputs:
+      Runtime: python3.7
+      Handler: set_throttling_config
+      InputPayload:
+        HttpWsApiGwId: '{{ HttpWsApiGwId }}'
+        HttpWsStageName: '{{ HttpWsStageName }}'
+        HttpWsRouteKey: '{{ HttpWsRouteKey }}'
+        HttpWsThrottlingRate: '{{ HttpWsThrottlingRate }}'
+        HttpWsThrottlingBurst: '{{ HttpWsThrottlingBurst }}'
+      Script: |-
+        import logging
+        
+        import boto3
+        from botocore.config import Config
+        
+        log = logging.getLogger()
+        log.setLevel(logging.DEBUG)
+        
+        
+
+        def assert_https_status_code_200(response: dict, error_message: str) -> None:
+            if not response['ResponseMetadata']['HTTPStatusCode'] == 200:
+                raise ValueError(f'{error_message} Response is: {response}')
+        
+        
+
+        def get_service_quota(config: object, service_code: str, quota_code: str) -> dict:
+            client = boto3.client('service-quotas', config=config)
+            response = client.get_service_quota(ServiceCode=service_code, QuotaCode=quota_code)
+            assert_https_status_code_200(response, f'Failed to perform get_service_quota with '
+                                                   f'ServiceCode: {service_code} and QuotaCode: {quota_code}')
+            return response
+        
+        
+
+        def get_stage(gateway_id: str, stage_name: str) -> dict:
+            config = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            client = boto3.client('apigatewayv2', config=config)
+            response = client.get_stage(ApiId=gateway_id, StageName=stage_name)
+            assert_https_status_code_200(response, f'Failed to perform get_stage with '
+                                                   f'ApiId: {gateway_id} and StageName: {stage_name}')
+            return response
+        
+        
+
+        def set_throttling_config(events: dict, context: dict) -> dict:
+            if 'HttpWsApiGwId' not in events:
+                raise KeyError('Requires HttpWsApiGwId in events')
+        
+            if 'HttpWsThrottlingRate' not in events:
+                raise KeyError('Requires HttpWsThrottlingRate in events')
+        
+            if 'HttpWsThrottlingBurst' not in events:
+                raise KeyError('Requires HttpWsThrottlingBurst in events')
+        
+            if 'HttpWsStageName' not in events:
+                raise KeyError('Requires HttpWsStageName in events')
+        
+            new_rate_limit: float = float(events['HttpWsThrottlingRate'])
+            new_burst_limit: int = int(events['HttpWsThrottlingBurst'])
+            gateway_id: str = events.get('HttpWsApiGwId')
+            stage_name: str = events.get('HttpWsStageName')
+            route_key: str = events.get('HttpWsRouteKey', '*')
+        
+            output: dict = {}
+            quota_rate_limit_code: str = 'L-8A5B8E43'
+            quota_burst_limit_code: str = 'L-CDF5615A'
+        
+            boto3_config: object = Config(retries={'max_attempts': 20, 'mode': 'standard'})
+            apigw2_client = boto3.client('apigatewayv2', config=boto3_config)
+            quota_rate_limit: float = get_service_quota(boto3_config, 'apigateway', quota_rate_limit_code)['Quota']['Value']
+            quota_burst_limit: float = get_service_quota(boto3_config, 'apigateway', quota_burst_limit_code)['Quota']['Value']
+        
+            if new_rate_limit > quota_rate_limit:
+                raise ValueError(f'Given value of HttpWsThrottlingRate: {new_rate_limit}, can not be more than '
+                                 f'service quota Throttle rate: {quota_rate_limit}')
+        
+            if new_burst_limit > quota_burst_limit:
+                raise ValueError(f'Given value of HttpWsThrottlingBurst: {new_burst_limit}, can not be more than '
+                                 f'service quota Throttle burst rate: {quota_burst_limit}')
+        
+            stage = get_stage(gateway_id, stage_name)
+        
+            if route_key != '*':
+                stage_route_settings = stage['RouteSettings']
+                if route_key not in stage_route_settings:
+                    stage_route_settings[route_key] = {}
+                stage_route_settings[route_key]['ThrottlingRateLimit'] = new_rate_limit
+                stage_route_settings[route_key]['ThrottlingBurstLimit'] = new_burst_limit
+        
+                response = apigw2_client.update_stage(
+                    ApiId=gateway_id, StageName=stage_name, RouteSettings=stage_route_settings
+                )
+                output['RateLimit'] = response['RouteSettings'][route_key]['ThrottlingRateLimit']
+                output['BurstLimit'] = response['RouteSettings'][route_key]['ThrottlingBurstLimit']
+        
+            else:
+                default_route_settings = {
+                    'ThrottlingRateLimit': new_rate_limit,
+                    'ThrottlingBurstLimit': new_burst_limit
+                }
+                response = apigw2_client.update_stage(
+                    ApiId=gateway_id, StageName=stage_name, DefaultRouteSettings=default_route_settings
+                )
+                output['RateLimit'] = response['DefaultRouteSettings']['ThrottlingRateLimit']
+                output['BurstLimit'] = response['DefaultRouteSettings']['ThrottlingBurstLimit']
+        
+            output['RateLimit'] = int(output['RateLimit'])
+            return output
+
+
+  - name: OutputRecoveryTime
+    description: Calculate execution time
+    action: 'aws:executeScript'
+    outputs:
+      - Name: RecoveryTime
+        Selector: $.Payload
+        Type: Integer
+    inputs:
+      Runtime: python3.7
+      Handler: recovery_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def recovery_time(events, context):
+            return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds
+        
+        
+
+      InputPayload:
+        StartTime: '{{ RecordStartTime.StartTime }}'
+

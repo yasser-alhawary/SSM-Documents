@@ -1,0 +1,340 @@
+---
+schemaVersion: '1.0'
+description: Creates a local user account.
+sessionType: InteractiveCommands
+parameters:
+  UserName:
+    type: String
+    description: The user to be created.
+    allowedPattern: ^[^"'\/\\\[\]:;|=,+*?<>@\r\n]+$
+    maxChars: 32
+  SetPassword:
+    type: String
+    description: (Optional) Set this to 'Yes' to configure the user's password.
+    default: 'No'
+    allowedValues:
+      - 'No'
+      - 'Yes'
+  Description:
+    type: String
+    description: (Optional) The user's description.
+    default: ' '
+    allowedPattern: ^[^"'\/\\\[\]:;|=,+*?<>@\r\n]+$
+    maxChars: 48
+  CreateHomeDir:
+    type: String
+    description: (Optional) Set this to 'Yes' to create of user's home directory on linux systems.
+    default: 'No'
+    allowedValues:
+      - 'No'
+      - 'Yes'
+  PerformAction:
+    type: String
+    description: (Optional) Set this to 'Yes' to perform the action.
+    default: 'No'
+    allowedValues:
+      - 'No'
+      - 'Yes'
+properties:
+  windows:
+    commands: |
+        $ErrorActionPreference = 'Stop'
+        
+        Function ParseInputParameter {
+            param (
+                [string]$Name,
+                [string]$Value,
+                [string]$Regex
+            )
+        
+            $ValidParameterRegex = '^--%[ +{|{].*}( +)?$'
+            if ($Value -notmatch $ValidParameterRegex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            }
+            $parameterValue = $Value.Substring(3)
+        
+            $trimmedParameterValue = $parameterValue.TrimStart().TrimEnd()
+            $trimmedParameterValue = $trimmedParameterValue.Substring(1)
+            $trimmedParameterValue = $trimmedParameterValue.Substring(0, $trimmedParameterValue.Length - 1)
+        
+            if ($Regex -and $trimmedParameterValue -notmatch $Regex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            } else {
+                $trimmedParameterValue
+            }
+        }
+        
+        function ExitWithFailureMessage {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PrintJson) {ConvertTo-Json -InputObject @{error = $errorMessage} -Compress}
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit(1)
+        }
+        
+        function ExitWithFailureMessageAndExitCode {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [int]$ExitCode,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PSBoundParameters.ContainsKey('ExitCode') -eq $true) {
+                $exitCode = $ExitCode
+            } else {
+                $exitCode = 1
+            }
+            if ($PrintJson) {
+                $ErrorObject = @{
+                    error = $errorMessage
+                    exitCode = $exitCode
+                }
+                ConvertTo-Json -InputObject $ErrorObject -Compress
+            }
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit($exitCode)
+        }
+        
+        function ExitWithSuccessMessage {
+            param (
+                [string]$Message
+            )
+            Write-Host $Message
+            [System.Environment]::Exit(0)
+        }
+        
+        function WriteStandardError {
+            param (
+                [string]$Message
+            )
+            $Host.UI.WriteErrorLine($Message)
+        }
+
+        function TestPerformAction {
+            param ( [string]$PerformAction )
+            if ($PerformAction -ne 'Yes') {
+                ExitWithFailureMessage -Message "No action was taken because the PerformAction parameter is set to $PerformAction. To make the desired change, set this parameter to Yes."
+            }
+        }
+
+        $UserName = Write-Output --%{{{ UserName }}}
+        $UserName = ParseInputParameter -Name 'UserName' -Value $UserName
+        
+        $Description = Write-Output --%{{{ Description }}}
+        $Description = ParseInputParameter -Name 'Description' -Value $Description
+        
+        $SetPassword = Write-Output --%{{{ SetPassword }}}
+        $SetPassword = ParseInputParameter -Name 'SetPassword' -Value $SetPassword
+        
+        $PerformAction = Write-Output --%{{{ PerformAction }}}
+        $PerformAction = ParseInputParameter -Name 'PerformAction' -Value $PerformAction -Regex '(Yes|No)'
+        TestPerformAction -PerformAction $PerformAction
+        
+        function TestLocalUserExists {
+            param (
+                [string]$UserName
+            )
+            $getCimInstance = @{
+                Class = 'Win32_UserAccount'
+                Filter = 'LocalAccount=True'
+            }
+            if (Get-CimInstance @getCimInstance | Where-Object {$_.Name -eq $Username}) {
+                return $true
+            } else {
+                return $false
+            }
+        }
+        
+        if (TestLocalUserExists -UserName $UserName) {
+            Write-Host ''
+            Write-Host ''
+            ExitWithFailureMessage -Message 'The specified user already exists.'
+        }
+        
+        $adsiString = 'WinNT://{0}' -f $env:COMPUTERNAME
+        $objUser = ([ADSI]$adsiString).Create('User', $UserName)
+        
+        if ($SetPassword -eq 'Yes') {
+            $passwordConfigured = $false
+            $attempts = 0
+            $maxAttempts = 5
+            do {
+                Write-Host ''
+                Write-Host ''
+                $password1 = New-Object -TypeName 'System.Management.Automation.PSCredential' -ArgumentList @(
+                    'name',
+                    (Read-Host -Prompt 'Enter a password for the user.........' -AsSecureString)
+                )
+                $password2 = New-Object -TypeName 'System.Management.Automation.PSCredential' -ArgumentList @(
+                    'name',
+                    (Read-Host -Prompt 'Enter the password again to confirm...' -AsSecureString)
+                )
+        
+                if ($password1.GetNetworkCredential().Password -eq $password2.GetNetworkCredential().Password) {
+                    try {
+                        $objUser.SetPassword($password1.GetNetworkCredential().Password)
+                        $objUser.SetInfo()
+                        $passwordConfigured = $true
+                        break
+                    } catch {
+                        Write-Host ''
+                        Write-Host $_.Exception.InnerException.Message
+                    }
+                } else {
+                    Write-Host ''
+                    Write-Host 'The passwords do not match. Please try again.'
+                }
+                $attempts++
+            }
+            while ($attempts -lt $maxAttempts)
+        
+            if ($passwordConfigured -eq $false) {
+                Write-Host ''
+                ExitWithFailureMessage -Message ('Failed to create the user {0}.' -f $UserName)
+            }
+        }
+        
+        if (-not([string]::IsNullOrWhiteSpace($Description))) {
+            try {
+                $objUser.SetInfo()
+            } catch {
+                Write-Host ''
+                ExitWithFailureMessage -Message $_.Exception.InnerException.Message
+            }
+        
+            try {
+                $objUser.Description = $Description
+                $objUser.SetInfo()
+            } catch {
+                Write-Host ''
+                ExitWithFailureMessage -Message $_.Exception.InnerException.Message
+            }
+        }
+        
+        Write-Host ''
+        Write-Host ''
+        Write-Host ('The user {0} has been created.' -f $UserName)
+        Write-Host ''
+        Write-Host ''
+    runAsElevated: true
+  linux:
+    commands: |
+        #!/bin/bash
+        set -e
+        
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release
+            OS_RELEASE="$ID${VERSION_ID:+.${VERSION_ID}}"
+        elif [ -f /etc/centos-release ]; then
+            OS_RELEASE="centos.$(awk '{print $3}' /etc/centos-release)"
+        elif [ -f /etc/redhat-release ]; then
+            OS_RELEASE="rhel.$(lsb_release -r | awk '{print $2}')"
+        fi
+        
+        case "$OS_RELEASE" in
+            amzn.2|centos.7*|centos.8*|fedora.*|rhel.7*|rhel.8*|sles*)
+                command_path='/usr/bin/'
+                ;;
+            amzn.2018.03|centos.6*|debian.*|rhel.6*|ubuntu.16*|ubuntu.18*|ubuntu.20*)
+                command_path='/bin/'
+                ;;
+            *)
+                # Catch all without the full path for untested platforms
+                command_path=''
+        esac
+        
+        ExitWithFailureMessage() {
+            MESSAGE="$1"
+            JSON="$2"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{\"error\":\"$MESSAGE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit 1
+        }
+        
+        # exit codes. 0-100 are reserved exit codes. 101-150 codes are for linux, 151-200 are for macos and 200 onwards codes are for windows.
+        ExitWithFailureMessageAndExitCode() {
+            MESSAGE="$1"
+            EXITCODE="$2"
+            JSON="$3"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{\"error\":\"$MESSAGE\",\"exitCode\":\"$EXITCODE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit "$EXITCODE"
+        }
+        
+        ExitWithSuccessMessage() {
+            "${command_path}echo" "$1"
+            exit 0
+        }
+        
+        WriteStandardError() {
+            MESSAGE="$1"
+            (>&2 "${command_path}echo" "$MESSAGE")
+        }
+
+        TestPerformAction() {
+            if [[ "$1" != "Yes" ]]; then
+                ExitWithFailureMessage "No action was taken because the PerformAction parameter is set to $1. To make the desired change, set this parameter to Yes."
+            fi
+        }
+
+        User='{{ UserName }}'
+        SetPassword='{{ SetPassword }}'
+        Description='{{ Description }}'
+        CreateHomeDir='{{ CreateHomeDir }}'
+        
+        PERFORMACTION='{{ PerformAction }}'
+        TestPerformAction "$PERFORMACTION"
+        
+        CREATE_HOME_ARGUMENT='--no-create-home'
+        if "${command_path}grep" -q "^$User:" /etc/passwd; then
+            "${command_path}echo" ''
+            ExitWithFailureMessage 'The specified user already exists.'
+        fi
+        
+        if [ -f /usr/sbin/useradd ]; then
+            COMMAND='/usr/sbin/useradd'
+            if [ "$CreateHomeDir" = 'Yes' ]; then
+                CREATE_HOME_ARGUMENT='--create-home'
+            fi
+        elif [ -f /usr/sbin/adduser ]; then
+            COMMAND='/usr/sbin/adduser'
+            if [ "$CreateHomeDir" = 'Yes' ]; then
+                CREATE_HOME_ARGUMENT=''
+            fi
+        else
+            ExitWithFailureMessage 'Neither of the required commands adduser or useradd exist.'
+        fi
+        
+        $COMMAND "$User" --comment "$Description" "$CREATE_HOME_ARGUMENT" || ExitWithFailureMessage 'Failed to create the specified user.'
+        "${command_path}echo" ''
+        "${command_path}echo" ''
+        "${command_path}echo" "The user $User has been created."
+        "${command_path}echo" ''
+        "${command_path}echo" ''
+        if [ "$SetPassword" = 'Yes' ]; then
+            /usr/bin/passwd "$User" || {
+                "${command_path}echo" ''
+                "${command_path}echo" "Note: The user has been created and still exists on the system."
+                "${command_path}echo" "To continue setting a password, please delete and try creating the user again, or try using the reset password feature."
+                "${command_path}echo" ''
+            }
+        fi
+    runAsElevated: true
+

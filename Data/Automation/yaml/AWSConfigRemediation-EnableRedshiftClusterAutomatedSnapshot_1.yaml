@@ -1,0 +1,109 @@
+description: |
+  ### Document Name - AWSConfigRemediation-EnableRedshiftClusterAutomatedSnapshot
+
+  ## What does this document do?
+  This document enables automated snapshots for a given Amazon Redshift using the [ModifyCluster](https://docs.aws.amazon.com/redshift/latest/APIReference/API_ModifyCluster.html) API.
+
+  ## Input Parameters
+  * ClusterIdentifier: (Required) The unique identifier of the Amazon Redshift cluster to be modified.
+  * AutomatedSnapshotRetentionPeriod: (Required) The number of days that automated snapshots are retained. Valid values are 1 to 35.
+  * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  * UpdateAutomatedSnapshotRetentionPeriod.ModifyClusterAPIResponse - The standard HTTP response from the ModifyCluster API.
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:iam::\d{12}:role/[\w+=,.@-]+
+  ClusterIdentifier:
+    type: String
+    description: (Required) The unique identifier of the Amazon Redshift cluster to be modified.
+    allowedPattern: "[a-z]{1}[a-z0-9_.-]{0,62}"
+  AutomatedSnapshotRetentionPeriod:
+    type: Integer
+    description: (Required) The number of days that automated snapshots are retained. Valid values are 1 to 35.
+    allowedPattern: ^[0]?[1-9]$|^[1-2][0-9]?$|^3[0-5]$
+outputs:
+  - UpdateAutomatedSnapshotRetentionPeriod.ModifyClusterAPIResponse
+mainSteps:
+  - name: UpdateAutomatedSnapshotRetentionPeriod
+    action: "aws:executeAwsApi"
+    description: |
+      ## UpdateAutomatedSnapshotRetentionPeriod
+      Updates the "AutomatedSnapshotRetentionPeriod" attribute of the given Amazon Redshift Cluster.
+      ## Outputs
+      * ModifyClusterAPIResponse: The standard HTTP response from the ModifyCluster API.
+    timeoutSeconds: 600
+    isEnd: false
+    inputs:
+      Service: redshift
+      Api: ModifyCluster
+      ClusterIdentifier: "{{ ClusterIdentifier }}"
+      AutomatedSnapshotRetentionPeriod: "{{ AutomatedSnapshotRetentionPeriod }}"
+    outputs:
+      - Name: ModifyClusterAPIResponse
+        Selector: $
+        Type: StringMap
+  - name: WaitForRedshiftClusterAvailability
+    action: aws:waitForAwsResourceProperty
+    description: |
+      ## WaitForRedshiftClusterAvailability
+      Waits for the Amazon Redshift cluster status to be "available".
+    timeoutSeconds: 600
+    isEnd: false
+    inputs:
+      Service: redshift
+      Api: DescribeClusters
+      ClusterIdentifier: "{{ ClusterIdentifier }}"
+      PropertySelector: $.Clusters[0].ClusterStatus
+      DesiredValues:
+        - "available"
+  - name: VerifyRedshiftClusterAutomatedSnapshotRetentionPeriod
+    action: "aws:executeScript"
+    description: |
+      ## VerifyRedshiftClusterAutomatedSnapshotRetentionPeriod
+      Verifies that the "AutomatedSnapshotRetentionPeriod" attribute was updated correctly for the given Amazon Redshift cluster.
+      ## Outputs
+      * Output: The standard HTTP response from the DescribeClusters API.
+    isEnd: true
+    timeoutSeconds: 600
+    inputs:
+      Runtime: python3.6
+      Handler: handler
+      InputPayload:
+        AutomatedSnapshotRetentionPeriod: "{{ AutomatedSnapshotRetentionPeriod }}"
+        ClusterIdentifier: "{{ ClusterIdentifier }}"
+      Script: |-
+        import boto3
+
+        def verify_automatedsnapshot_retentionperiod(redshift_client, cluster_identifier, input_automated_snapshot_retention_period):
+            describe_clusters_response = redshift_client.describe_clusters(
+                ClusterIdentifier=cluster_identifier
+            )
+            if describe_clusters_response["Clusters"][0]["AutomatedSnapshotRetentionPeriod"] == input_automated_snapshot_retention_period:
+              return True
+            return False
+
+        def handler(event, context):
+            redshift_client = boto3.client("redshift")
+            redshift_cluster_identifier = event["ClusterIdentifier"]
+            input_automated_snapshot_retention_period = event["AutomatedSnapshotRetentionPeriod"]
+            if verify_automatedsnapshot_retentionperiod(redshift_client, redshift_cluster_identifier, input_automated_snapshot_retention_period):
+                return {
+                    "output": {
+                        "message": "Verification of AutomatedSnapshotRetentionPeriod for Amazon Redshift cluster is successful."
+                    }
+                  }
+            raise Exception(
+                "VERIFICATION FAILED. AutomatedSnapshotRetentionPeriod ATTRIBUTE VALUE {} DOES NOT MATCH WITH DESIRED VALUE {}".format(
+                  redshift_automated_snapshot_retention_period, 
+                  input_automated_snapshot_retention_period
+                )
+            )
+    outputs:
+      - Name: Output
+        Selector: $.Payload.output
+        Type: StringMap

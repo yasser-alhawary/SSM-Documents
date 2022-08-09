@@ -1,0 +1,103 @@
+description: |
+  ### Document name - AWSConfigRemediation-EnforceSSLOnlyConnectionsToRedshiftCluster 
+
+  ## What does this document do?
+  This automation document enables the `require_ssl` parameter in the Amazon Redshift Parameter Group for a Amazon Redshift cluster using the [ModifyClusterParameterGroup](https://docs.aws.amazon.com/redshift/latest/APIReference/API_ModifyClusterParameterGroup.html) API.
+
+  ## Input Parameters
+  * ClusterIdentifier: (Required) The unique identifier of the cluster on which logging to be started.
+  * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  * ModifyClusterParameterGroup.ModifyClusterParameterGroupResponse: Standard HTTP response of the ModifyClusterParameterGroup API.
+  * ValidateRequireSSLParameter.Response: JSON object representing required_ssl parameter.
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+outputs:
+  - ModifyClusterParameterGroup.ModifyClusterParameterGroupResponse
+  - ValidateRequireSSLParameter.Response
+parameters:
+  ClusterIdentifier:
+    type: String
+    description: The unique identifier of the cluster on which the require_ssl parameter to be enabled.
+    allowedPattern: ^(?!-)(?!.*--)([a-z][a-z0-9-]{0,62})(?<!-)$
+  AutomationAssumeRole:
+    type: String
+    description: The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:iam::\d{12}:role/[\w+=,.@-]+
+mainSteps:
+  - name: DescribeCluster
+    description: |
+      ## DescribeCluster
+      Obtain the details of the given Amazon Redshift cluster to identify the parameter group.
+      ## Outputs
+      * ParameterGroupName: Parameter group name obtained from DescriClusters API. 
+    action: "aws:executeAwsApi"
+    inputs:
+      Service: redshift
+      Api: DescribeClusters
+      ClusterIdentifier: "{{ ClusterIdentifier }}"
+    outputs:
+      - Name: ParameterGroupName
+        Selector: "$.Clusters[0].ClusterParameterGroups[0].ParameterGroupName"
+        Type: String
+  - name: ModifyClusterParameterGroup
+    description: |
+      ## ModifyClusterParameterGroup
+      Modifies the parameter group obtained from the previous step to enable the `require_SSL` parameter.
+      ## Outputs
+      * ModifyClusterParameterGroupResponse: The standard HTTP response from the ModifyClusterParameterGroup API call. 
+    action: "aws:executeAwsApi"
+    inputs:
+      Service: redshift
+      Api: ModifyClusterParameterGroup
+      Parameters:
+        - ParameterValue: "true"
+          ParameterName: require_ssl
+      ParameterGroupName: "{{ DescribeCluster.ParameterGroupName }}"
+    outputs:
+      - Name: ModifyClusterParameterGroupResponse
+        Selector: $
+        Type: StringMap
+  - name: ValidateRequireSSLParameter
+    description: |
+      ## ValidateRequireSSLParameter
+      Checks whether require_ssl parameter is set to "true" for the cluster parameter group obtained from the DescribeCluster step.
+      ## Outputs
+      * Response: StringMap representing the require_ssl status.
+    action: "aws:executeScript"
+    timeoutSeconds: 600
+    inputs:
+      Runtime: python3.6
+      Handler: handler
+      InputPayload:
+        ParameterGroupName: "{{ DescribeCluster.ParameterGroupName }}"
+      Script: |-
+        import boto3
+        def handler(event,context):
+              redshift_client = boto3.client("redshift")
+              cluster_parameter_group = event["ParameterGroupName"]
+              cluster_parameters=redshift_client.describe_cluster_parameters(ParameterGroupName=cluster_parameter_group)
+              parameter_list=cluster_parameters.get("Parameters")
+              for parameter in parameter_list:
+                  if parameter.get("ParameterName")=="require_ssl" and parameter.get("ParameterValue")=="true":
+                     return {"Output":{"require_ssl":"true"}}
+              raise Exception("REQUIRE_SSL PARAMETER IS FALSE")
+    outputs:
+      - Name: Response
+        Selector: $.Payload.Output
+        Type: StringMap
+  - name: VerifyParameterGroupChange
+    description: |
+      ## VerifyParameterGroupChange
+      Verifies whether the parameter group is transitioned to "applying" state.
+    action: "aws:assertAwsResourceProperty"
+    inputs:
+      Service: redshift
+      Api: DescribeClusters
+      ClusterIdentifier: "{{ ClusterIdentifier }}"
+      PropertySelector: "$.Clusters[0].ClusterParameterGroups[0].ParameterApplyStatus"
+      DesiredValues:
+        - applying
+
+

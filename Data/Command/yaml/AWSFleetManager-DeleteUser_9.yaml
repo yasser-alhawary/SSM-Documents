@@ -1,0 +1,243 @@
+---
+schemaVersion: '2.2'
+description: Deletes a local user account
+parameters:
+  UserName:
+    type: String
+    description: The user to be deleted
+    allowedPattern: ^[^"'\/\\\[\]:;|=,+*?<>@\r\n]+$
+    maxChars: 32
+  PerformAction:
+    type: String
+    description: (Optional) Set this to 'Yes' to perform the action.
+    default: 'No'
+    allowedValues:
+      - 'No'
+      - 'Yes'
+mainSteps:
+- precondition:
+    StringEquals:
+      - platformType
+      - Windows
+  action: aws:runPowerShellScript
+  name: InvokeWindowsScript
+  inputs:
+    runCommand:
+      - |
+        $ErrorActionPreference = 'Stop'
+        
+        Function ParseInputParameter {
+            param (
+                [string]$Name,
+                [string]$Value,
+                [string]$Regex
+            )
+        
+            $ValidParameterRegex = '^--%[ +{|{].*}( +)?$'
+            if ($Value -notmatch $ValidParameterRegex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            }
+            $parameterValue = $Value.Substring(3)
+        
+            $trimmedParameterValue = $parameterValue.TrimStart().TrimEnd()
+            $trimmedParameterValue = $trimmedParameterValue.Substring(1)
+            $trimmedParameterValue = $trimmedParameterValue.Substring(0, $trimmedParameterValue.Length - 1)
+        
+            if ($Regex -and $trimmedParameterValue -notmatch $Regex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            } else {
+                $trimmedParameterValue
+            }
+        }
+        
+        function ExitWithFailureMessage {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PrintJson) {ConvertTo-Json -InputObject @{error = $errorMessage} -Compress}
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit(1)
+        }
+        
+        function ExitWithFailureMessageAndExitCode {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [int]$ExitCode,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PSBoundParameters.ContainsKey('ExitCode') -eq $true) {
+                $exitCode = $ExitCode
+            } else {
+                $exitCode = 1
+            }
+            if ($PrintJson) {
+                $ErrorObject = @{
+                    error = $errorMessage
+                    exitCode = $exitCode
+                }
+                ConvertTo-Json -InputObject $ErrorObject -Compress
+            }
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit($exitCode)
+        }
+        
+        function ExitWithSuccessMessage {
+            param (
+                [string]$Message
+            )
+            Write-Host $Message
+            [System.Environment]::Exit(0)
+        }
+        
+        function WriteStandardError {
+            param (
+                [string]$Message
+            )
+            $Host.UI.WriteErrorLine($Message)
+        }
+
+        function TestPerformAction {
+            param ( [string]$PerformAction )
+            if ($PerformAction -ne 'Yes') {
+                ExitWithFailureMessage -Message "No action was taken because the PerformAction parameter is set to $PerformAction. To make the desired change, set this parameter to Yes."
+            }
+        }
+
+        $UserName = Write-Output --%{{{ UserName }}}
+        $UserName = ParseInputParameter -Name 'UserName' -Value $UserName
+        
+        $PerformAction = Write-Output --%{{{ PerformAction }}}
+        $PerformAction = ParseInputParameter -Name 'PerformAction' -Value $PerformAction -Regex '(Yes|No)'
+        TestPerformAction -PerformAction $PerformAction
+        
+        function TestLocalUserExists {
+            param (
+                [string]$Name
+            )
+            $getCimInstance = @{
+                Class = 'Win32_UserAccount'
+                Filter = 'LocalAccount=True'
+            }
+            if (Get-CimInstance @getCimInstance | Where-Object {$_.Name -eq $Name}) {
+                $true
+            } else {
+                $false
+            }
+        }
+        
+        if (TestLocalUserExists -Name $UserName) {
+            try {
+                ([adsi]"WinNT://$env:COMPUTERNAME").Delete('User', $UserName)
+                ExitWithSuccessMessage 'The specified user has been deleted.'
+            } catch {
+                ExitWithFailureMessage -Message 'Failed to delete the specified user.' -PrintJson
+            }
+        } else {
+            ExitWithFailureMessage 'The specified user does not exist.' -PrintJson
+        }
+- precondition:
+    StringEquals:
+      - platformType
+      - Linux
+  action: aws:runShellScript
+  name: InvokeLinuxScript
+  inputs:
+    runCommand:
+      - |
+        #!/bin/bash
+        set -e
+        
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release
+            OS_RELEASE="$ID${VERSION_ID:+.${VERSION_ID}}"
+        elif [ -f /etc/centos-release ]; then
+            OS_RELEASE="centos.$(awk '{print $3}' /etc/centos-release)"
+        elif [ -f /etc/redhat-release ]; then
+            OS_RELEASE="rhel.$(lsb_release -r | awk '{print $2}')"
+        fi
+        
+        case "$OS_RELEASE" in
+            amzn.2|centos.7*|centos.8*|fedora.*|rhel.7*|rhel.8*|sles*)
+                command_path='/usr/bin/'
+                ;;
+            amzn.2018.03|centos.6*|debian.*|rhel.6*|ubuntu.16*|ubuntu.18*|ubuntu.20*)
+                command_path='/bin/'
+                ;;
+            *)
+                # Catch all without the full path for untested platforms
+                command_path=''
+        esac
+        
+        ExitWithFailureMessage() {
+            MESSAGE="$1"
+            JSON="$2"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{\"error\":\"$MESSAGE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit 1
+        }
+        
+        # exit codes. 0-100 are reserved exit codes. 101-150 codes are for linux, 151-200 are for macos and 200 onwards codes are for windows.
+        ExitWithFailureMessageAndExitCode() {
+            MESSAGE="$1"
+            EXITCODE="$2"
+            JSON="$3"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{\"error\":\"$MESSAGE\",\"exitCode\":\"$EXITCODE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit "$EXITCODE"
+        }
+        
+        ExitWithSuccessMessage() {
+            "${command_path}echo" "$1"
+            exit 0
+        }
+        
+        WriteStandardError() {
+            MESSAGE="$1"
+            (>&2 "${command_path}echo" "$MESSAGE")
+        }
+
+        TestPerformAction() {
+            if [[ "$1" != "Yes" ]]; then
+                ExitWithFailureMessage "No action was taken because the PerformAction parameter is set to $1. To make the desired change, set this parameter to Yes."
+            fi
+        }
+
+        UserName='{{ UserName }}'
+        
+        PERFORMACTION='{{ PerformAction }}'
+        TestPerformAction "$PERFORMACTION"
+        
+        if ! "${command_path}grep" -q "^$UserName:" /etc/passwd; then
+            ExitWithFailureMessage 'The specified user does not exist.' 'PRINT_JSON'
+        fi
+        
+        if [ -f /usr/sbin/userdel ]; then
+            COMMAND='/usr/sbin/userdel'
+            ARGUMENT='--remove'
+        elif [ -f /usr/sbin/deluser ]; then
+            COMMAND='/usr/sbin/deluser'
+            ARGUMENT='--remove-home'
+        else
+            ExitWithFailureMessage 'Neither of the required commands deluser or userdel exist.' 'PRINT_JSON'
+        fi
+        
+        $COMMAND "$ARGUMENT" "$UserName" || ExitWithFailureMessage 'Failed to delete the specified user'
+        ExitWithSuccessMessage 'The specified user has been deleted.'
+

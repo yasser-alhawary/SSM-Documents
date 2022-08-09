@@ -1,0 +1,739 @@
+#
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+---
+description: |
+    #### Document name  AWS-UpdateAmazonECSAgent
+    ## What does this document do?
+    Automation document to update the Amazon ECS container agent to pick up bug fixes and new features. Updating the Amazon ECS container agent does not interrupt running tasks or services on the container instance. The process for updating the agent differs depending on whether your container instance was launched with the Amazon ECS-optimized AMI or another operating system
+
+    ## Notes
+    - Agent updates do not apply to Windows container instances. We recommend that you launch new container instances to update the agent version in your Windows clusters.
+
+    - This document follows the steps described in this link [Updating the Amazon ECS Container Agent](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-agent-update.html).
+
+    ## Input Parameters
+    * AutomationAssumeRole: (optional) The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that allows Systems Manager Automation to perform the actions on your behalf. If no role is specified, Systems Manager Automation uses the permissions of the user that runs this document.
+    * ClusterARN: (Required) full Amazon Resource Name (ARN) of the cluster that your container instance is running on.
+
+    ## minimum permissions required
+    * - Action: 
+        - ecs:UpdateContainerAgent
+        - ecs:ListContainerInstances
+        - ecs:DescribeContainerInstances
+        -Resource
+        - arn:aws:ecs:*:<account-id>:cluster/*
+        - arn:aws:ecs:*:<account-id>:container-instance/    
+
+    * - Action: 
+        - ssm:GetCommandInvocation
+        - ecs:DescribeClusters
+        - ec2:DescribeImages
+        - ec2:DescribeInstances
+        - ec2:DescribeInstanceAttribute
+        - Resource: '*'
+    
+    * - Action: 
+        - ssm:SendCommand
+        - Resource: 
+        - "arn:aws:ssm:*::document/*"
+        - !Sub "arn:aws:ssm:*:<account-id>:managed-instance/*"
+        - !Sub "arn:aws:ec2:*:<account-id>:instance/*
+
+    ## Output parameters
+    UpdateAmazonECSAgent.output
+    * UpdatedInstances: 
+        * ECS-optimized: 
+        * ContainerInstanceArn: The Amazon Resource Name (ARN) of the container instance for which the container agent was updated.
+        * InstanceId: The EC2 instance ID of the container instance.
+        * AgentUpdateStatus: Update status based on the ecs agent update output.
+        * StatusDetails: Details of the execution result.
+        * VersionInfo: The version information for the Amazon ECS container agent and Docker daemon running on the container instance
+            * agentVersion: The version number of the Amazon ECS container agent.
+            * agentHash: The Git commit hash for the Amazon ECS container agent build on the amazon-ecs-agent GitHub repository.
+            * dockerVersion: The Docker version running on the container instance.
+        * Non-ECS-optimized:
+        * ContainerInstanceArn:
+        * InstanceId: 
+        * AgentUpdateStatus: 
+        * StatusDetails: 
+        * VersionInfo: 
+            * agentVersion: 
+            * agentHash: 
+            * dockerVersion:
+        * RunCommandId: The Systems Manager run command ID which can be used future references to this request.
+    
+    * FailedInstances
+        * non- ECS-optimized:
+        * ContainerInstanceArn:
+        * InstanceId: 
+        * AgentUpdateStatus: 
+        * StatusDetails: 
+        * VersionInfo: 
+            * agentVersion: 
+            * agentHash: 
+            * dockerVersion: 
+
+        * Non-ECS-optimized:
+        * ContainerInstanceArn:
+        * InstanceId: 
+        * AgentUpdateStatus: 
+        * StatusDetails: 
+        * VersionInfo: 
+            * agentVersion: 
+            * agentHash: 
+            * dockerVersion:
+        * RunCommandId:
+    
+    * InProgressInstances
+        * ContainerInstanceArn:
+        * InstanceId: 
+        * AgentUpdateStatus: 
+        * StatusDetails: 
+        * VersionInfo: 
+            * agentVersion: 
+            * agentHash: 
+            * dockerVersion: 
+            
+        * Non-ECS-optimized:
+        * ContainerInstanceArn:
+        * InstanceId: 
+        * AgentUpdateStatus: 
+        * StatusDetails: 
+        * VersionInfo: 
+            * agentVersion: 
+            * agentHash: 
+            * dockerVersion:
+        * RunCommandId:
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+    ClusterARN:
+        type: String
+        description: (Required) full Amazon Resource Name (ARN) of the cluster that your container instance is running on.
+        minChars: 1
+        allowedPattern: "^arn:aws(-cn|-us-gov)?:ecs:\\S+:\\d+:\\w+\\/\\S+|\\S+|^$"
+    
+    AutomationAssumeRole:
+        type: String
+        description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+        default: ''
+        allowedPattern: "^arn:aws(-cn|-us-gov)?:iam::\\d{12}:role/[\\w+=,.@/-]+|^$"
+
+outputs:
+  - UpdateAmazonECSAgent.output
+mainSteps:
+- name: UpdateAmazonECSAgent
+  action: aws:executeScript
+  onFailure: Abort
+  isCritical: true
+  timeoutSeconds: 600
+  description: |
+    ## UpdateAmazonECSAgent
+    This script updates the Amazon ECS container agent for containers in a targeted ECS Cluster.
+    ## Input Parameters
+    * AutomationAssumeRole: (optional) The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that allows Systems Manager Automation to perform the actions on your behalf. If no role is specified, Systems Manager Automation uses the permissions of the user that runs this document.
+    * ClusterARN: (Required) full Amazon Resource Name (ARN) of the cluster that your container instance is running on.    
+    ## Output parameters
+    * UpdatedInstances: 
+    * FailedInstances: 
+    * InProgressInstances: 
+  outputs:
+    - Name: output
+      Selector: $.Payload.output
+      Type: String
+  inputs:
+    Runtime: python3.7
+    Handler: update_amazon_ecs_agent_handler
+    InputPayload:
+        ClusterARN: '{{ClusterARN}}'
+    Script: |
+        import json
+        import boto3
+        import time
+
+        ssm_client = boto3.client('ssm')
+        ec2_client = boto3.client('ec2')
+        ec2_resource = boto3.resource('ec2')
+        ecs_client = boto3.client('ecs')
+
+        ECS_OPTIMIZED_INDICATOR = "-ecs-"
+        MAX_RETRIALS_NUM = 6
+        command_check_retries_count= 0
+        update_check_retries_count= 0
+        InvocationDoesNotExist_retries = 0
+        LIST_CONTAINERS_MAX_RESULT = 100
+        WAITING_STATUS = ['Pending', 'InProgress', 'Delayed']
+        SUCCESS_STATUS = ['Success']
+        FAILURE_STATUS = ['Failed', 'Terminated',
+                        'TimedOut', 'Cancelled', 'Cancelling']
+        PENDING = 'PENDING'
+        STAGING = 'STAGING'
+        STAGED = 'STAGED'
+        UPDATING = 'UPDATING'
+        UPDATED = 'UPDATED'
+        FAILED = 'FAILED'
+
+        UPDATE_WAITING_STATUS = [PENDING,STAGING,UPDATING,STAGED]
+
+        def update_ecs_agent_ecs_optimized_amis(cluster, container_instance_id):
+            
+            response = ecs_client.update_container_agent(
+                cluster=cluster,
+                containerInstance=container_instance_id
+            )
+
+            if not "containerInstance" in response:
+                raise Exception(
+                    "Error in calling ECS.Client.update_container_agent. Unexpected response.")
+            return
+
+        def update_ecs_agent_non_ecs_optimized_amis(instance_id):
+            
+            response = ssm_client.send_command(
+                InstanceIds=[instance_id],
+                DocumentName="AWS-RunShellScript",
+                TimeoutSeconds=500,
+                Parameters={'commands': ["#!/bin/bash","set -x","","timeout=60 # timeout after ","while ((timeout > 0)) ","do"," if [[ $(sudo docker inspect ecs-agent | grep ECS_DATADIR) ]]; then"," echo \"ecs agent is running..\""," timeout=-1"," else"," echo \"waiting for ecs agent to start..\""," sleep 5"," fi "," ((timeout -= 1))","done","","sudo docker inspect ecs-agent | grep ECS_DATADIR","","if [ $? -ne 0 ]; then"," echo \"You must stop any tasks running on this container instance before updating your agent. Newer agents with the ECS_DATADIR environment variable save their state and you can update them while tasks are running without issues\""," exit 1","fi","","sudo docker stop ecs-agent","sudo docker rm ecs-agent","sleep 2","sudo docker image rm -f amazon/amazon-ecs-agent:latest","sleep 2","sudo docker run --name ecs-agent -detach=true --restart=on-failure:10 --volume=/var/run:/var/run --volume=/var/log/ecs/:/log --volume=/var/lib/ecs/data:/data --volume=/etc/ecs:/etc/ecs --net=host --env-file=/etc/ecs/ecs.config amazon/amazon-ecs-agent:latest","sleep 5","curl -s http://localhost:51678/v1/metadata","","if [ $? -ne 0 ]; then"," exit 1","fi"]},)
+            command_id = response['Command']['CommandId']
+            return command_id
+
+        def is_the_instance_ecs_optimized(instance_id):
+            
+            instance = ec2_resource.Instance(instance_id)
+            # check if the instace exists
+            response = describe_images(instance.image_id)
+            success = False
+            if "Images" in response:
+                if response["Images"]:
+                    if 'Name' in response["Images"][0]: 
+                        image_name = response["Images"][0]['Name']
+                        success = True
+            
+            if not success:
+                raise Exception("Error in calling ec2_client.describe_images. Unexpected response. can't get image name for instance_id='{}'.".format(instance_id))
+
+            if ECS_OPTIMIZED_INDICATOR in image_name.lower():            
+                return True
+
+            return False
+        def describe_images(image_id):
+            response = ec2_client.describe_images(
+                ImageIds=[
+                    image_id,
+                ]
+            )
+            return response
+
+        def is_the_platform_linux(instance_id):
+            
+            instance = ec2_resource.Instance(instance_id)
+            # check if the instace exists        
+            response = describe_images(instance.image_id)
+            success = False
+            platform_details = "unkown"
+            if "Images" in response:
+                if response["Images"]:
+                    if 'PlatformDetails' in response["Images"][0]: 
+                        platform_details = response["Images"][0]['PlatformDetails']
+                        success = True
+
+
+            if not success:
+                raise Exception("Error in calling ec2_client.describe_images. Unexpected response. can't get PlatformDetails for instance_id='{}'.".format(instance_id))
+
+
+            if "linux" in platform_details.lower() or "unix" in platform_details.lower():                
+                return True        
+            return False
+
+        def get_command_status(instance_id, command_id):
+            
+            global InvocationDoesNotExist_retries
+            status = "unknown"
+            details = "unknown"
+            try:
+                response = ssm_client.get_command_invocation(
+                    CommandId=command_id,
+                    InstanceId=instance_id
+                )
+                valid_response = True
+                if "Status" in response:
+                    status = response["Status"]
+                else:
+                    valid_response = False
+                
+                if "StatusDetails" in response:
+                    details = response["StatusDetails"]
+                else:
+                    valid_response = False
+                
+                if not valid_response:
+                    raise Exception("Error in calling ssm_client.get_command_invocation, Invalid Response. InstanceId='{}', CommandId='{}'".format(instance_id,command_id))
+
+            except ssm_client.exceptions.InvocationDoesNotExist as e:
+                if InvocationDoesNotExist_retries < MAX_RETRIALS_NUM:
+                    InvocationDoesNotExist_retries += 1
+                    time.sleep(5)
+                    
+                    status, details = get_command_status(instance_id, command_id)
+                else:
+                    raise Exception(str(e))
+            
+            except Exception as e:
+                if InvocationDoesNotExist_retries < MAX_RETRIALS_NUM:
+                    InvocationDoesNotExist_retries += 1
+                    time.sleep(5)
+                    
+                    status, details = get_command_status(instance_id, command_id)
+                else:
+                    raise Exception(str(e))
+                
+            return status, details
+
+        def get_command_status_with_wait(instance_id, command_id):
+            global command_check_retries_count
+            
+
+            response = ssm_client.get_command_invocation(
+                CommandId=command_id,
+                InstanceId=instance_id
+            )
+            status = response["Status"]
+            details = response["StatusDetails"]
+
+            if status in WAITING_STATUS and command_check_retries_count < MAX_RETRIALS_NUM:
+                command_check_retries_count += 1
+                time.sleep(5)
+                status, details = get_command_status_with_wait(instance_id, command_id)
+
+            return status, details
+
+        def cluster_exists(cluster):
+            
+            response = ecs_client.describe_clusters(
+                clusters=[cluster]
+            )
+
+            if "clusters" in response and response["clusters"]:
+                return True
+            else:
+                return False
+
+        def get_cluster_containers(cluster):
+            containerInstances = []    
+            
+            list_container_instances_response = ecs_client.list_container_instances(
+                cluster=cluster,
+                maxResults=LIST_CONTAINERS_MAX_RESULT,
+                status='ACTIVE'
+            )
+
+            if "containerInstanceArns" in list_container_instances_response and list_container_instances_response["containerInstanceArns"]:
+                describe_container_instances_response = ecs_client.describe_container_instances(
+                    cluster=cluster,
+                    containerInstances=list_container_instances_response["containerInstanceArns"],
+                )
+                for container in describe_container_instances_response["containerInstances"]:
+
+                    container_info = {"containerInstanceArn": container["containerInstanceArn"], "ec2InstanceId": container["ec2InstanceId"],
+                                    "versionInfo": container["versionInfo"], "agentUpdateStatus": "undefined", "statusDetails": "undefined"}
+                    containerInstances.append(container_info)
+
+            while "nextToken" in list_container_instances_response:
+                list_container_instances_response = ecs_client.list_container_instances(
+                    cluster=cluster,
+                    status='ACTIVE',
+                    maxResults=LIST_CONTAINERS_MAX_RESULT,
+                    nextToken=list_container_instances_response["nextToken"]
+                )
+
+                describe_container_instances_response = ecs_client.describe_container_instances(
+                    cluster=cluster,
+                    containerInstances=list_container_instances_response["containerInstanceArns"],
+                )
+                if "containerInstances" in describe_container_instances_response:
+                    for container in describe_container_instances_response["containerInstances"]:
+                        container_info ={"containerInstanceArn": container["containerInstanceArn"], "ec2InstanceId": container["ec2InstanceId"],
+                                        "versionInfo": container["versionInfo"], "agentUpdateStatus": "undefined", "statusDetails": "undefined"}                              
+                        containerInstances.append(container_info)
+                else:
+                    raise Exception("Error in calling ecs_client.describe_container_instances, cluster='{}'".format(cluster))
+
+            return containerInstances
+
+        def separate_container_instances(containerInstances):
+            
+            
+            ecs_optimized_instances = []
+            non_ecs_optimized_instances = []
+
+            for instance in containerInstances:
+                if is_the_instance_ecs_optimized(instance["ec2InstanceId"]):
+                    ecs_optimized_instances.append(instance)
+                else:
+                    non_ecs_optimized_instances.append(instance)
+            
+            
+            return ecs_optimized_instances, non_ecs_optimized_instances
+
+        def separate_supported_instances(containerInstances):
+            
+            
+            supported = []
+            unsupported = []
+
+            for instance in containerInstances:
+                if is_the_platform_linux(instance["ec2InstanceId"]):
+                    supported.append(instance)
+                else:
+                    unsupported.append(instance)
+            
+            return supported, unsupported
+
+        def get_ecs_optimized_instances_update_status(cluster, containerArn):
+            
+            global update_check_retries_count
+
+            describe_container_instances_response = ecs_client.describe_container_instances(
+                cluster=cluster,
+                containerInstances=[containerArn],
+            )
+
+            container = describe_container_instances_response["containerInstances"][0]
+            
+            if not "agentUpdateStatus" in  container:
+                return "undefined"
+
+            status = container["agentUpdateStatus"]
+            version = container["versionInfo"]
+
+            if status in UPDATE_WAITING_STATUS:
+                if update_check_retries_count < MAX_RETRIALS_NUM:
+                    update_check_retries_count+=1
+                    time.sleep(5)
+                    container = get_ecs_optimized_instances_update_status(cluster,containerArn) 
+            
+
+            return container
+
+        def get_container_version(cluster,containerArn):
+
+            describe_container_instances_response = ecs_client.describe_container_instances(
+                cluster=cluster,
+                containerInstances=[containerArn],
+            )
+
+            container = describe_container_instances_response["containerInstances"][0]
+            
+            if not "versionInfo" in  container:
+                return "undefined"
+
+            return container["versionInfo"]
+
+        def cluster_is_active(cluster):
+            response = ecs_client.describe_clusters(
+                clusters=[cluster]
+            )
+
+            if "clusters" in response and response["clusters"]:
+                if "status" in response["clusters"][0]:
+                    return response["clusters"][0]["status"] == "ACTIVE"
+
+            return False
+
+        def update_amazon_ecs_agent_handler(event, context):
+            cluster = event["ClusterARN"]
+            errorMsg = ''
+            ecs_optimized_instances = []
+            non_ecs_optimized_instances = []
+
+            failed_non_ecs_optimized_instances = []
+            successful_non_ecs_optimized_instances = []
+            waiting_non_ecs_optimized_instances = []
+
+            failed_ecs_optimized_instances = []
+            successful_ecs_optimized_instances = []
+            waiting_ecs_optimized_instances = []
+
+            failed_instances = []
+            successful_instances = []
+            waiting_instances = []
+
+            temp_waiting_instances = []
+            
+            out = {
+                'UpdatedInstances': [],
+                'FailedInstances': [],
+                'InProgressInstances': []
+            }
+            remove_containers =[]
+
+        # check if cluster exist
+            if not cluster_exists(cluster):
+                raise Exception(
+                    "Cluster='{}', The specified cluster was not found".format(cluster))
+            # check if cluster is active
+            if not cluster_is_active(cluster):
+                raise Exception(
+                    "Cluster='{}' is not ACTIVE".format(cluster))
+
+        # get all containers
+            containerInstances = get_cluster_containers(cluster)
+
+            if not containerInstances:
+                raise Exception(
+                    "Cluster='{}', Has no container Instances to be updated".format(cluster))
+
+            supported_containerInstances, unsupported_containerInstances = separate_supported_instances(
+                containerInstances)
+
+            for instance in unsupported_containerInstances:
+                instance["agentUpdateStatus"] = FAILED
+                instance["statusDetails"] = "Only Linux container instances are supported. Agent updates do not apply to Windows container instances. We recommend that you launch new container instances to update the agent version in your Windows clusters."
+                
+                failed_non_ecs_optimized_instances.append(instance)        
+
+            ecs_optimized_instances, non_ecs_optimized_instances = separate_container_instances(
+                supported_containerInstances)
+
+        # get latest ecs agent
+            try:
+                tmp_ecs_optimized_instances =[]
+                # update ecs_optimized_instances
+                for instance in ecs_optimized_instances:
+                    try:
+                        response = update_ecs_agent_ecs_optimized_amis(
+                            cluster, instance["containerInstanceArn"])        
+                        tmp_ecs_optimized_instances.append(instance)  
+
+                    except ecs_client.exceptions.NoUpdateAvailableException as e:
+                        
+                        
+                        instance["agentUpdateStatus"] = UPDATED
+                        instance["statusDetails"] = "ECS agent is already running the latest version."
+                        
+                        successful_ecs_optimized_instances.append(instance)
+                        remove_containers.append(instance)
+                        
+
+                    except Exception as e:
+                        
+                        errorMsg = str(e)
+                        instance["agentUpdateStatus"] = FAILED
+                        instance["statusDetails"] = errorMsg
+                        failed_ecs_optimized_instances.append(instance)
+                        remove_containers.append(instance)
+                
+                ecs_optimized_instances = tmp_ecs_optimized_instances
+
+                tmp_non_ecs_optimized_instances =[]
+                
+                for instance in non_ecs_optimized_instances:
+                    command_id = 'N/A'
+                    instance_id = instance["ec2InstanceId"]
+                    try:
+                        command_id = update_ecs_agent_non_ecs_optimized_amis(
+                            instance_id)
+                        instance["RunCommandId"] = command_id
+
+                        tmp_non_ecs_optimized_instances.append(instance)
+
+                    except ssm_client.exceptions.InvalidInstanceId as e:
+                        errorMsg = "The following scenarios can result in this error: 1.Instance does not have the AWS SSM agent installed and running. 2.Instance does not have proper iam role attached, AmazonEC2RoleforSSM policy should be attached to instance's iam role."
+                        instance["agentUpdateStatus"] = FAILED
+                        instance["statusDetails"] = errorMsg
+                        
+                        failed_non_ecs_optimized_instances.append(instance)
+                    except Exception as e:
+                        errorMsg = str(e)
+                        instance["agentUpdateStatus"] = FAILED
+                        instance["statusDetails"] = errorMsg
+                        
+                        failed_non_ecs_optimized_instances.append(instance)
+
+                non_ecs_optimized_instances = tmp_non_ecs_optimized_instances
+                # get update status for ecs_optimized_instances
+                
+
+                for instance in ecs_optimized_instances:
+                    
+                    instance_id = instance["ec2InstanceId"]
+                    container = get_ecs_optimized_instances_update_status(cluster,instance["containerInstanceArn"])
+                    
+                    if container == "undefined":
+                        instance["agentUpdateStatus"] = FAILED
+                    else:
+                        instance["agentUpdateStatus"] = container["agentUpdateStatus"]
+                        instance["versionInfo"] = container["versionInfo"]
+
+                    if instance["agentUpdateStatus"] == UPDATED:
+                        instance["statusDetails"] = UPDATED
+                        successful_ecs_optimized_instances.append(instance)
+
+                    elif instance["agentUpdateStatus"] == FAILED:
+                        instance["statusDetails"] = FAILED
+                        failed_ecs_optimized_instances.append(instance)
+                    
+                    elif instance["agentUpdateStatus"] == PENDING:
+                        
+                        instance["statusDetails"] = "An agent update is available, and the update process has started."
+                        waiting_ecs_optimized_instances.append(instance)
+                    
+                    elif instance["agentUpdateStatus"] == STAGED:
+                        
+                        instance["statusDetails"] = "The agent download has completed and the agent contents have been verified."
+                        waiting_ecs_optimized_instances.append(instance)
+                    
+                    elif instance["agentUpdateStatus"] == STAGING:
+                        
+                        instance["statusDetails"] = "The agent has begun downloading the agent update."
+                        waiting_ecs_optimized_instances.append(instance)
+                    
+                    elif instance["agentUpdateStatus"] == UPDATING:
+                        
+                        instance["statusDetails"] = "The ecs-init service is restarted and it picks up the new agent version."
+                        waiting_ecs_optimized_instances.append(instance)
+
+                    else:
+                        
+                        waiting_ecs_optimized_instances.append(instance)
+
+                # get_command_status for non_ecs_optimized_instances
+                for instance in non_ecs_optimized_instances:
+                    instance_id = instance["ec2InstanceId"]
+                    command_id = instance["RunCommandId"]
+                    try:
+                        status, status_details = get_command_status(
+                            instance_id, command_id)
+
+
+                        instance["RunCommandId"] = command_id
+
+                        instance["versionInfo"] = get_container_version(cluster,instance["containerInstanceArn"])
+                        
+                        if status in SUCCESS_STATUS:
+                            instance["agentUpdateStatus"] = UPDATED
+                            instance["statusDetails"] = status_details
+                            
+                            successful_non_ecs_optimized_instances.append(instance)
+
+                        elif status in FAILURE_STATUS:
+                            
+
+                            instance["agentUpdateStatus"] = FAILED
+                            instance["statusDetails"] = status_details                        
+                            failed_non_ecs_optimized_instances.append(instance)
+
+                        else:
+                            waiting_non_ecs_optimized_instances.append(instance)
+
+                    except Exception as e:
+                        errorMsg = str(e)
+                        
+                        instance["agentUpdateStatus"] = FAILED
+                        instance["statusDetails"] = errorMsg
+                                            
+                        instance["versionInfo"] = get_container_version(cluster,instance["containerInstanceArn"])
+                        failed_non_ecs_optimized_instances.append(instance)
+
+                # retry on the waiting instances
+                for instance in waiting_non_ecs_optimized_instances:
+                    try:
+                        instance_id = instance['ec2InstanceId']
+                        command_id = instance['RunCommandId']
+
+                        status, status_details = get_command_status_with_wait(
+                            instance_id, command_id)
+                        
+                        instance["versionInfo"] = get_container_version(cluster,instance["containerInstanceArn"])
+                        if status in SUCCESS_STATUS:
+                            instance["agentUpdateStatus"] = UPDATED
+                            instance["statusDetails"] = status_details
+                            successful_non_ecs_optimized_instances.append(instance)
+
+                        elif status in FAILURE_STATUS:
+                            instance["agentUpdateStatus"] = FAILED
+                            instance["statusDetails"] = status_details
+                            failed_non_ecs_optimized_instances.append(instance)
+
+                        else:
+                            instance["agentUpdateStatus"] = status
+                            instance["statusDetails"] = status_details
+                            temp_waiting_instances.append(instance)
+
+                    except Exception as e:
+                        errorMsg = str(e)
+                        instance["agentUpdateStatus"] = FAILED
+                        instance["statusDetails"] = errorMsg
+                        failed_non_ecs_optimized_instances.append(instance)
+
+                waiting_non_ecs_optimized_instances = temp_waiting_instances
+
+                for i in range(len(successful_ecs_optimized_instances)):        
+                    successful_ecs_optimized_instances[i]["versionInfo"] = get_container_version(cluster,successful_ecs_optimized_instances[i]["containerInstanceArn"])
+                
+            except Exception as e:
+
+                failed_instances = {
+                "ECS-optimized": failed_ecs_optimized_instances,
+                "Non-ECS-optimized": failed_non_ecs_optimized_instances
+                }
+
+                successful_instances ={
+                    "ECS-optimized": successful_ecs_optimized_instances,
+                    "Non-ECS-optimized": successful_non_ecs_optimized_instances
+                }
+
+                waiting_instances ={
+                    "ECS-optimized": waiting_ecs_optimized_instances,
+                    "Non-ECS-optimized": waiting_non_ecs_optimized_instances
+                }
+
+                out = {
+                    'UpdatedInstances': successful_instances,
+                    'FailedInstances': failed_instances,
+                    'InProgressInstances': waiting_instances
+                }
+
+                errorMsg = str(e)
+                errorMsg = errorMsg + ", output: " + json.dumps(out)
+                raise Exception(
+                    "Unable to install ECS Agent, errorMsg ='{}'".format(errorMsg))
+
+            failed_instances = {
+                    "ECS-optimized": failed_ecs_optimized_instances,
+                    "non-ECS-optimized": failed_non_ecs_optimized_instances
+                }
+
+            successful_instances ={
+                "ECS-optimized": successful_ecs_optimized_instances,
+                "non-ECS-optimized": successful_non_ecs_optimized_instances
+            }
+
+            waiting_instances ={
+                "ECS-optimized": waiting_ecs_optimized_instances,
+                "non-ECS-optimized": waiting_non_ecs_optimized_instances
+            }
+            
+            out = {
+                'UpdatedInstances': successful_instances,
+                'FailedInstances': failed_instances,
+                'InProgressInstances': waiting_instances
+            }        
+
+            return {
+                'output': json.dumps(out)
+            }

@@ -1,0 +1,25 @@
+{
+    "schemaVersion": "2.0",
+    "name": "AWSNVMe",
+    "version": "1.4.1",
+    "packageArn": "arn:aws:ssm:::package/AWSNVMe",
+    "publisher": "Amazon AWS",
+    "url": "https://amazonaws.com",
+    "packages": {
+        "windows": {
+            "_any": {
+                "x86_64": {
+                    "file": "AWSNVMe-1.4.1.zip"
+                }
+            }
+        }
+    },
+    "files": {
+        "AWSNVMe-1.4.1.zip": {
+            "checksums": {
+                "sha256": "b40410d997c2268526becd994cea38ae49292ca65b5596fc86daffe78469e19f"
+            },
+            "downloadLocation": "https://us-east-1-birdwatcher-prod.s3.us-east-1.amazonaws.com/316874961013/AWSNVMe-1.4.1.zip"
+        }
+    }
+}

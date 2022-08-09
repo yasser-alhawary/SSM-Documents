@@ -1,0 +1,195 @@
+#
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+  ### Document name - AWS-AddOpsItemDedupStringToEventBridgeRule
+
+  ## What does this document do?
+  The AWS-AddOpsItemDedupStringToEventBridgeRule Automation document adds a dedup string for all OpsItem targets associated with a given EventBridge rule.
+  This document skips adding a Dedup string if there is already an existing one.
+
+  * If the target uses "Matched Event" then it gets updated to use "Input Transformer"
+     * InputPathsMap is set to:
+  ```
+  {
+    'title': '$.detail-type',
+    'source': '$.source',
+    'resources': '$.resources',
+    'detail': '$.detail'
+  }
+  ```
+     * InputTemplate is set to:
+  ```
+  '{
+    "title": <title>,
+    "description": "This is from CloudWatch Events",
+    "source": <source>,
+    "resources": <resources>,
+    "operationalData": {
+      "/cloudwatchevent/detail": {"type": "String", "value": <detail>}
+    }
+  }'
+  ```
+
+  * Adds dedup string to the OperationalData
+
+  ## Input Parameters
+  * RuleName: (Required) The name of the EventBridge rule for which you want to add a Dedup String.
+  * DedupString: (Required) Specifies the dedup string which gets added to the rule.
+  * AutomationAssumeRole: (Optional) The Amazon Resource Name (ARN) of the role that allows SSM Automation to perform the actions on your behalf.
+
+  ## Output parameters
+  None
+
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  RuleName:
+    type: String
+    description: '(Required) The name of the EventBridge rule for which you want to add a Dedup String.'
+  DedupString:
+    type: String
+    description: '(Required) Specifies the dedup string which gets added to the rule.'
+  AutomationAssumeRole:
+    type: String
+    description: '(Optional) The Amazon Resource Name (ARN) of the role that allows SSM Automation to perform the actions on your behalf.'
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::\d{12}:role\/[\w+=,.@_\/-]+|^$'
+mainSteps:
+  - name: AddDedupString
+    action: 'aws:executeScript'
+    onFailure: Abort
+    isCritical: true
+    isEnd: true
+    timeoutSeconds: 600
+    description: |
+      ## AddDedupString
+      Adds a dedup string for all OpsItem targets associated with a given EventBridge rule.
+      This step skips adding a Dedup string if there is already an existing one.
+
+      * If the target uses "Matched Event" then it gets updated to use "Input Transformer"
+      * InputPathsMap is set to:
+      ```
+      {
+        'title': '$.detail-type',
+        'source': '$.source',
+        'resources': '$.resources',
+        'detail': '$.detail'
+      }
+      ```
+      * InputTemplate is set to:
+      ```
+      '{
+        "title": <title>,
+        "description": "This is from CloudWatch Events",
+        "source": <source>,
+        "resources": <resources>,
+        "operationalData": {
+          "/cloudwatchevent/detail": {"type": "String", "value": <detail>}
+        }
+      }'
+      ```
+
+      * Adds dedup string to the OperationalData
+
+      ## Input Parameters
+      * RuleName: (Required) The name of the EventBridge rule for which you want to add a Dedup String.
+      * DedupString: (Required) Specifies the dedup string which gets added to the rule.
+
+      ## Output parameters
+      None
+    inputs:
+      Runtime: python3.7
+      Handler: add_dedup_string_to_eb_rule_handler
+      InputPayload:
+        RuleName: '{{RuleName}}'
+        DedupString: '{{DedupString}}'
+      Script: |-
+        import boto3
+        import json
+
+        eventbridge_client = boto3.client('events')
+
+        AWS_DEDUP_NAMESPACE = '/aws/dedup'
+        MATCHED_EVENT_RULE_INPUT_PATHS_MAP = {'title': '$.detail-type', 'source': '$.source', 'resources': '$.resources', 'detail': '$.detail'}
+        MATCHED_EVENT_RULE_INPUT_TEMPLATE = '{ "title": <title>, "description": "This is from CloudWatch Events", "source": <source>, "resources": <resources>,' \
+                                            ' "operationalData": { "/cloudwatchevent/detail": {"type": "String", "value": <detail>} } }'
+
+        def add_dedup_string_to_eb_rule_handler(events, context):
+            rule_name = events["RuleName"]
+            dedup_string = events["DedupString"]
+            if not rule_name.strip():
+                raise Exception("Rule name can't be empty")
+            if not dedup_string.strip():
+                raise Exception("Dedup string can't be empty")
+            list_targets_by_rule_response = eventbridge_client.list_targets_by_rule(Rule=rule_name)
+            targets = list_targets_by_rule_response['Targets']
+            # Filter 'OpsItem' targets
+            ops_item_targets = list(filter(lambda target: ('opsitem' in target['Arn']), targets))
+            targets_with_dedup_string = []
+            for target in ops_item_targets:
+                if 'InputTransformer' in target.keys():
+                    targets_with_dedup_string.append(update_ops_item_target_with_dedup_string(target, dedup_string))
+                else:
+                    targets_with_dedup_string.append(update_ops_item_target_for_matched_event_rule(target, dedup_string))
+            for ops_item_target in ops_item_targets:
+                targets.remove(ops_item_target)
+            targets.extend(targets_with_dedup_string)
+            eventbridge_client.put_targets(Rule=rule_name, Targets=targets)
+
+        def update_ops_item_target_for_matched_event_rule(ops_item_target, dedup_string):
+            ops_item_target['InputTransformer'] = {}
+            ops_item_target['InputTransformer']['InputPathsMap'] = MATCHED_EVENT_RULE_INPUT_PATHS_MAP
+            ops_item_target['InputTransformer']['InputTemplate'] = MATCHED_EVENT_RULE_INPUT_TEMPLATE
+            return update_ops_item_target_with_dedup_string(ops_item_target, dedup_string)
+
+        def update_ops_item_target_with_dedup_string(ops_item_target, dedup_string):
+            template = ops_item_target['InputTransformer']['InputTemplate']
+            template_json, is_template_escaped = parse_template_in_json(template)
+            operational_data = template_json['operationalData']
+            if AWS_DEDUP_NAMESPACE in operational_data:
+                # Dedup string is already present in the template so not adding it.
+                return ops_item_target
+            else:
+                # create dedup string
+                aws_dedup_value = "{\"dedupString\":\"" + dedup_string + "\"}"
+                aws_dedup = {
+                    "type": "SearchableString",
+                    "value": aws_dedup_value
+                }
+                operational_data['/aws/dedup'] = aws_dedup
+                template_json['operationalData'] = operational_data
+                template_string = json.dumps(template_json)
+                if is_template_escaped:
+                    template_string = template_string.replace("\"<", "<").replace(">\"", ">")
+                ops_item_target['InputTransformer']['InputTemplate'] = template_string
+                return ops_item_target
+
+        def parse_template_in_json(template):
+            is_template_escaped = False
+            try:
+                template_json = json.loads(template)
+            except:
+                # Adding quotes to template placeholders so we can parse it as JSON.
+                # e.g. "value: <end-time>" will be escaped as "value: \"<end-time>\""
+                escaped_template = template.replace("<", "\"<").replace(">", ">\"")
+                is_template_escaped = True
+                try:
+                    template_json = json.loads(escaped_template)
+                except:
+                    raise Exception("cannot parse template in input_transformer")
+            return template_json, is_template_escaped

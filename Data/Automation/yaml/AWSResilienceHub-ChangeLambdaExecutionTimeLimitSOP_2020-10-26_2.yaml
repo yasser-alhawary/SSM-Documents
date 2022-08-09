@@ -1,0 +1,160 @@
+#
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-ChangeLambdaExecutionTimeLimitSOP_2020-10-26
+
+            ## Intent
+            Change execution time limit of a Lambda function
+
+            ## Type
+            SOP
+
+            ## Risk
+            Medium
+
+            ## Requirements
+              * Lambda Function
+
+            ## Permissions required for AutomationAssumeRole
+              * lambda:UpdateFunctionConfiguration
+
+            ## Cancellation behavior
+            Fail
+
+            ## Inputs
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: ARN of the IAM role with permissions listed above
+
+            ### (Required) LambdaARN
+              * type: String
+              * description: The ARN of the Lambda function
+
+            ### (Required) NewTimeoutValueSeconds
+              * type: Integer
+              * description: New execution time limit for Lambda function in seconds. The maximum allowed value is 900 seconds.
+
+            ## Details
+            The document updates execution time limit value for the specified Lambda function.
+
+            ## Steps executed in normal flow
+              * RecordStartTime
+              * SetTimeout
+              * OutputRecoveryTime
+
+            ## Outputs
+            ### SetTimeout.NewTimeoutValueSeconds
+              * type: Integer
+              * description: Updated execution time limit value
+
+            ### OutputRecoveryTime.RecoveryTime
+              * type: Integer
+              * description: Execution time in seconds
+
+schemaVersion: '0.3'
+assumeRole: '{{ AutomationAssumeRole }}'
+parameters:
+  NewTimeoutValueSeconds:
+    type: Integer
+    description: (Required) New execution time limit for Lambda function in seconds. The maximum allowed value is 900 seconds.
+  LambdaARN:
+    type: String
+    description: (Required) The ARN of the Lambda function
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf
+outputs:
+  - SetTimeout.NewTimeoutValueSeconds
+  - OutputRecoveryTime.RecoveryTime
+mainSteps:
+  - name: RecordStartTime
+    description: Start recording execution time
+    action: 'aws:executeScript'
+    outputs:
+      - Name: StartTime
+        Selector: $.Payload
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: start_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def start_time(events, context):
+            return datetime.now(timezone.utc).isoformat()
+        
+        
+
+
+  - name: SetTimeout
+    description: Update execution time limit for Lambda function with the new one
+    action: aws:executeAwsApi
+    inputs:
+      Service: lambda
+      Api: UpdateFunctionConfiguration
+      FunctionName: '{{ LambdaARN }}'
+      Timeout: '{{ NewTimeoutValueSeconds }}'
+    outputs:
+      - Name: NewTimeoutValueSeconds
+        Selector: '$.Timeout'
+        Type: Integer
+
+  - name: OutputRecoveryTime
+    description: Calculate execution time
+    action: 'aws:executeScript'
+    outputs:
+      - Name: RecoveryTime
+        Selector: $.Payload
+        Type: Integer
+    inputs:
+      Runtime: python3.8
+      Handler: recovery_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def recovery_time(events, context):
+            return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds
+        
+        
+
+      InputPayload:
+        StartTime: '{{ RecordStartTime.StartTime }}'
+

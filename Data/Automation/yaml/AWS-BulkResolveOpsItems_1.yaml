@@ -1,0 +1,299 @@
+#
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+  ### Document name - AWS-BulkResolveOpsItems
+
+  ## What does this document do?
+  This document retrieves the list of OpsItems that matches the filter pattern, resolves them, adds OpsInsightId as a related resource if specified.Writes the result summary to S3. Notifies via SNS when execution completes
+
+
+  ## Input Parameters
+  * Filters: Filters to resolve OpsItems. By default, filters are empty if not provided.
+  * OpsInsightId : OpsInsightId to be added as a related-resource to resolved ops-items
+  * S3BucketName: Amazon S3 bucket where you want to download the output file.
+  * SnsTopicArn: Amazon Simple Notification Service (SNS) topic ARN to notify when the download completes.
+  * AutomationAssumeRoleARN (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output parameters
+  * Status
+  * NumberOfOpsItemsResolved
+  * NumberOfOpsItemsFailedToResolve
+
+  ## Minimum Permissions Required
+  * ssm:UpdateOpsItem
+  * ssm:DescribeOpsItem
+  * s3:PutObject
+  * s3:GetBucketAcl
+  * sns:Publish
+
+schemaVersion: "0.3"
+assumeRole: "{{AutomationAssumeRole}}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The role ARN to assume during automation execution.
+    default: ""
+  Filters:
+    type: String
+    description: (Required) Filters for the DescribeOpsitems request.
+  OpsInsightId:
+    type: String
+    description: (Optional) OpsInsightId to be added as a related resource to resolved ops-items.
+    default: ""
+  S3BucketName:
+    type: String
+    description: (Optional) Amazon S3 bucket where you want to export the result summary.
+    default: ""
+  SnsTopicArn:
+    type: String
+    description: (Optional) Amazon Simple Notification Service (SNS) topic ARN to notify when the download completes.
+    default: ""
+  SnsMessage:
+    type: String
+    description: (Optional) Message to send when execution of AWS-BulkResolveOpsItems runbook completes
+    default: ""
+
+mainSteps:
+  - name: BulkResolveOpsItemsStep
+    action: aws:executeScript
+    description: |
+      ### What does the step do?
+      Retrieves opsItems that matches the crieria and resolves them. Writes output to S3
+
+      ### What is the output of the step?
+      The list of opsitems successfully resolved and list of opsitems failed to resolve as an object in an Amazon S3 bucket. Publish an SNS message and inform success or failure.
+      The output file name along with the s3 bucket name will be included in the message when script finishes successfully.
+    timeoutSeconds: 600
+    inputs:
+      Runtime: python3.7
+      Handler: function_start
+      InputPayload:
+        Filters: "{{Filters}}"
+        OpsInsightId: "{{OpsInsightId}}"
+        S3BucketName: "{{S3BucketName}}"
+      Script: |
+        import boto3
+        import botocore
+        import time
+        import random
+        import json
+        from botocore.config import Config
+        from botocore.exceptions import ClientError
+        from functools import partial, wraps
+        from datetime import datetime
+
+        import os
+        region = os.environ['AWS_REGION']
+        MAXIMUM_OPS_ITEMS = 1000
+        MAX_RESULTS = 50
+        SUCCESS = "success"
+        FAILED = "failed"
+        STATUS = "status"
+
+        config = Config(
+           retries = {
+              'max_attempts': 5,
+              'mode': 'standard'
+           }
+        )
+
+        ssm_client = boto3.client("ssm", region_name=region, config=config)
+
+        def describe_ops_items(filters, next_token):
+            filter_json = json.loads(filters)
+
+            response = {}
+            if next_token is not None:
+                response = ssm_client.describe_ops_items(OpsItemFilters=filter_json,MaxResults=MAX_RESULTS, NextToken=next_token)
+            else:
+                response = ssm_client.describe_ops_items(OpsItemFilters=filter_json, MaxResults=MAX_RESULTS)
+
+            return response
+
+        def update_opsitems(ops_item_id, ops_insight_id):
+            success = True
+            try:
+                if not ops_insight_id:
+                    ssm_client.update_ops_item(OpsItemId=ops_item_id, Status='Resolved')
+                else:
+                    related_ops_items = []
+                    related_ops_item = { 'OpsItemId': ops_insight_id }
+                    related_ops_items.append(related_ops_item)
+                    ssm_client.update_ops_item(OpsItemId=ops_item_id, Status='Resolved', RelatedOpsItems=related_ops_items)
+            except Exception as e:
+                print("Error updating opsItem : %s", e)
+                success = False
+
+            return success
+
+        def get_opsitems_and_update(filters, ops_insight_id):
+            print("Retrieving ops summaries...")
+            next_token = None
+            describe_response = {}
+            ops_items_resolved = []
+            ops_items_failed_to_resolve = []
+            result = {}
+            status = True
+            totalOpsItemsProcessed = 0
+            while True:
+                count_ops_items_processed = 0
+                describe_response = describe_ops_items(filters, next_token)
+                if describe_response["OpsItemSummaries"]:
+                    for ops_item_summary in describe_response["OpsItemSummaries"]:
+                        ops_item_id = ops_item_summary["OpsItemId"]
+                        if ops_item_id in ops_items_resolved or ops_item_id in ops_items_failed_to_resolve:
+                            continue
+                        success = update_opsitems(ops_item_id, ops_insight_id)
+                        count_ops_items_processed += 1
+                        status = status or success
+                        if success:
+                            ops_items_resolved.append(ops_item_id)
+
+                        else:
+                            ops_items_failed_to_resolve.append(ops_item_id)
+
+
+                totalOpsItemsProcessed = totalOpsItemsProcessed + count_ops_items_processed
+                if totalOpsItemsProcessed >= MAXIMUM_OPS_ITEMS or len(describe_response["OpsItemSummaries"]) < MAX_RESULTS:
+                    break;
+            result[SUCCESS] = ops_items_resolved
+            result[FAILED] = ops_items_failed_to_resolve
+            result[STATUS] = status
+            return result
+
+        def function_start(event, context):
+          ops_insight_id = event.get('OpsInsightId')
+          if not ops_insight_id:
+            print("OpsInsightId is empty...")
+
+          filters = event.get('Filters')
+          if not filters:
+            print ("No input filters")
+            raise ValueError('Filters cannot be None')
+
+          s3_bucket_name = event.get('S3BucketName')
+
+          try:
+            response = {}
+             #Get data
+            response = get_opsitems_and_update(filters, ops_insight_id)
+
+            #write to s3
+            write_to_s3(s3_bucket_name, response)
+
+          except Exception as e:
+             print("Bulk resolve OpsItems or write to s3 failed : %s", e)
+             raise Exception(str(e)) from e
+
+          output = {
+                  "status": response[STATUS],
+                  "number_of_opsitems_resolved": len(response[SUCCESS]),
+                  "number_of_opsitems_failed_to_resolve": len(response[FAILED])
+                }
+          return output
+
+        def get_output_filename():
+            output_string = "bulk_resolve_opsitems_summary_"
+            curr_date_time = datetime.now()
+            timestamp_str = curr_date_time.strftime("%Y-%m-%d-%H:%M:%S.%f")
+            return output_string + timestamp_str + ".json"
+
+        def verify_s3_bucket(s3_bucket_name):
+            print('Verifying user can write to S3 Bucket')
+            s3 = boto3.client('s3')
+            try:
+              s3.get_bucket_acl(Bucket=s3_bucket_name)
+            except:
+              print('User does not have permission to write to S3 bucket or the bucket does not exist, stopping execution')
+              raise
+
+        def write_results_to_s3(file_name, bucket_name, data):
+            print("Writing result summary to s3 :" + bucket_name)
+            s3 = boto3.resource('s3')
+            obj = s3.Object(bucket_name, file_name)
+            obj.put(Body=json.dumps(data))
+
+        def write_to_s3(s3_bucket_name, response):
+            if s3_bucket_name:
+                verify_s3_bucket(s3_bucket_name)
+                output_file_name = get_output_filename()
+                data = {}
+                data["opsItemsResolved"] = response[SUCCESS]
+                data["opsItemsFailedToResolve"] = response[FAILED]
+                data["status"] = response[STATUS]
+                write_results_to_s3(output_file_name, s3_bucket_name, data)
+            else:
+                print('S3BucketName is be empty. Skipping publishing resuts to s3')
+
+    outputs:
+      - Name: Status
+        Selector: $.Payload.status
+        Type: Boolean
+      - Name: NumberOfOpsItemsResolved
+        Selector: $.Payload.number_of_opsitems_resolved
+        Type: Integer
+      - Name: NumberOfOpsItemsFailedResolve
+        Selector: $.Payload.number_of_opsitems_failed_to_resolve
+        Type: Integer
+
+  - name: PublishMessageToSNSTopicStep
+    action: aws:executeScript
+    description: |
+      ### What does the step do?
+      Writes results to S3 if bucket name is specified as an input parameter
+
+      ### What is the output of the step?
+      No output
+    inputs:
+      Runtime: python3.7
+      Handler: publish_sns_message
+      InputPayload:
+        SnsMessage: "{{SnsMessage}}"
+        SnsTopicArn: "{{SnsTopicArn}}"
+      Script: |
+        import json
+        import boto3
+        import botocore
+        import json
+        from botocore.exceptions import ClientError
+
+        def publish_sns_message(event, context):
+            sns_topic_arn = event.get('SnsTopicArn')
+            sns_message = event.get('SnsMessage')
+            if sns_topic_arn:
+                if not sns_message:
+                    sns_message = "AWS-ResolveBulkOpsItems runbook execution completed"
+                publish_message(sns_topic_arn, sns_message)
+
+            else:
+                print("SnsTopicArn is empty. Skipping notification to SNS topic")
+
+        def publish_message(sns_topic_arn, sns_message):
+                print('Publishing an sns message to: ' + sns_topic_arn)
+                sns = boto3.client('sns')
+                try:
+                    sns.publish(TopicArn=sns_topic_arn, Message=sns_message)
+                except ClientError as error:
+                    print('Failed to publish the message to: ' + sns_topic_arn)
+                    raise
+    isEnd: true
+
+outputs:
+  - "BulkResolveOpsItemsStep.Status"
+  - "BulkResolveOpsItemsStep.NumberOfOpsItemsResolved"
+  - "BulkResolveOpsItemsStep.NumberOfOpsItemsFailedResolve"

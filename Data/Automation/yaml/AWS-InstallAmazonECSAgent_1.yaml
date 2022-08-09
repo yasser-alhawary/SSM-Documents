@@ -1,0 +1,362 @@
+#
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+---
+description: |
+    #### Document name  AWS-InstallAmazonECSAgent
+    ## What does this document do?
+    Automation document to install Amazon ECS agent on the targeted Amazon Linux / Amazon Linux 2 instances, That's if your container instance was not launched using an Amazon ECS-optimized AMI.The Amazon ECS container agent is included in the Amazon ECS-optimized AMIs and does not require installation. 
+
+    ## Notes
+    - SSM Agent must be installed and running for this document to work.
+    - Targeted instances must be managed by System Manager.
+    - `AmazonEC2RoleforSSM` and `AmazonEC2ContainerServiceforEC2Role` policy must be attached to the instances iam role.
+    - SSM Agent is installed, by default, on Amazon Linux and Amazon Linux 2.
+    - This document follows the steps described in this link [Installing the Amazon ECS Container Agent](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-agent-install.html).
+    - To manually install SSM Agent on EC2 instances for Linux: https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-manual-agent-install.html
+
+    ## To install the Amazon ECS agent on an Amazon Linux 2 / Amazon Linux EC2 instance
+    1. Launch the instance with an IAM role that allows access to Amazon ECS. For more information, see [Amazon ECS Container Instance IAM Role.](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/instance_IAM_role.html)
+    2. Execute the document
+
+
+    ## Input Parameters
+    * AutomationAssumeRole: (optional) The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that allows Systems Manager Automation to perform the actions on your behalf. If no role is specified, Systems Manager Automation uses the permissions of the user that runs this document.
+    * InstanceIds: (Required) The IDs of the Amazon Linux / Amazon Linux 2 EC2 instances you want to install the Amazon ECS agent on.
+
+
+    ## minimum permissions required
+    * - Action: 
+        - ssm:GetCommandInvocation
+        - ec2:DescribeImages
+        - ec2:DescribeInstances
+        - ec2:DescribeInstanceAttribute  
+        - Resource: '*'
+    
+    * - Action: 
+        - ssm:SendCommand
+        - Resource: 
+        - "arn:aws:ssm:\*::document/\*"
+        - !Sub "arn:aws:ssm:\*:${AWS::AccountId}:managed-instance/\*"
+        - !Sub "arn:aws:ec2:\*:${AWS::AccountId}:instance/\*"
+
+    ## Output parameters
+    InstallAmazonECSAgent.output
+    * SuccessfulInstances
+        * InstanceId: The ID of the instance where the installation happened.
+        * RunCommandId: The Systems Manager run command ID which can be used future references to this request.
+        * Status: Installation status based on the ecs agent installation output.
+        * StatusDetails: Details of the execution result.
+    * FailedInstances
+        * InstanceId: The ID of the instance where the installation happened.
+        * RunCommandId: The Systems Manager run command ID which can be used future references to this request.
+        * Status: Installation status based on the ecs agent installation output.
+        * StatusDetails: Details of the execution result.
+    * InProgressInstances
+        * InstanceId: The ID of the instance where the installation happened.
+        * RunCommandId: The Systems Manager run command ID which can be used future references to this request.
+        * Status: Installation status based on the ecs agent installation output.
+        * StatusDetails: Details of the execution result.
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+    InstanceIds:
+        type: StringList
+        description: (Required) The IDs of the Amazon Linux / Amazon Linux 2 EC2 instances to install ECS Agent.
+        minItems: 1
+        displayType: textarea
+        allowedPattern: "^i-[0-9a-z,-]*$"
+    AutomationAssumeRole:
+        type: String
+        description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+        default: ''
+        allowedPattern: "^arn:aws(-cn|-us-gov)?:iam::\\d{12}:role/[\\w+=,.@/-]+|^$"
+outputs:
+  - InstallAmazonECSAgent.output
+mainSteps:
+- name: InstallAmazonECSAgent
+  action: aws:executeScript
+  onFailure: Abort
+  isCritical: true
+  timeoutSeconds: 600
+  description: |
+    ## UpdateAmazonECSAgent
+    This script installs the Amazon ECS container agent on the targeted Amazon Linux / Amazon Linux 2 EC2 instances.
+    ## Input Parameters
+    * AutomationAssumeRole: (optional) The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that allows Systems Manager Automation to perform the actions on your behalf. If no role is specified, Systems Manager Automation uses the permissions of the user that runs this document.
+    * InstanceIds: (Required) The IDs of the Amazon Linux / Amazon Linux 2 EC2 instances you want to install the Amazon ECS agent on.
+    ## Output parameters
+    * UpdatedInstances: 
+    * FailedInstances: 
+    * InProgressInstances: 
+  inputs:
+    Runtime: python3.7
+    Handler: install_amazon_ecs_agent_handler
+    InputPayload:
+        InstanceIds: '{{InstanceIds}}'
+    Script: |
+        import json
+        import boto3
+        import pprint
+        import time
+
+        ssm_client = boto3.client('ssm')
+        ec2_client = boto3.client('ec2')
+        ec2_resource = boto3.resource('ec2')
+
+        AWS_LINUX = "amzn"
+        AWS_LINUX_2 = "amzn2"
+        INCOMPATIBLE = "incompatible"
+        MAX_RETRIALS_NUM = 3
+        retries = 0
+        WAITING_STATUS = ['Pending', 'InProgress', 'Delayed']
+        SUCCESS_STATUS = ['Success']
+        FAILURE_STATUS = ['Failed', 'Terminated',
+                        'TimedOut', 'Cancelled', 'Cancelling']
+        logs = []
+
+
+        def install_ecs_agent_amzn2(instance_id):
+            method = "install_ecs_agent_amzn2"
+            logs.append("{} instance_id='{}'".format(method, instance_id))
+            response = ssm_client.send_command(
+                InstanceIds=[instance_id],
+                DocumentName="AWS-RunShellScript",
+                TimeoutSeconds=500,
+                Parameters={'commands': ["#!/bin/bash", "set -x","pgrep ecs"," if [ $? -eq 0 ]; then"," sudo status ecs"," exit 0", " fi ","sudo amazon-linux-extras disable docker; sudo service docker start", "sudo amazon-linux-extras install -y ecs; sudo systemctl enable --now ecs", "timeout=30 # timeout after 30sec",
+                                        "while ((timeout > 0)) ", "do", " pgrep ecs", " if [ $? -eq 0 ]; then", " exit", " else", " echo \"waiting for ecs agent to start..\"", " sleep 1", " fi ", " ((timeout -= 1))", "done", "curl -s http://localhost:51678/v1/metadata | python -mjson.tool"]},
+            )
+            command_id = response['Command']['CommandId']
+            return command_id
+
+
+        def install_ecs_agent_amzn(instance_id):
+            method = "install_ecs_agent_amzn"
+            logs.append("{} instance_id='{}'".format(method, instance_id))
+            response = ssm_client.send_command(
+                InstanceIds=[instance_id],
+                DocumentName="AWS-RunShellScript",
+                TimeoutSeconds=500,
+                Parameters={'commands': ["#!/bin/bash", "set -x", "pgrep ecs"," if [ $? -eq 0 ]; then"," sudo status ecs"," exit 0"," fi ", "sudo yum install -y ecs-init", "sudo service docker start", "sudo start ecs", "timeout=30 # timeout after 30sec",
+                                        "while ((timeout > 0)) ", "do", " pgrep ecs", " if [ $? -eq 0 ]; then", " sudo status ecs", " exit", " else", " echo \"waiting for ecs agent to start..\"", " sleep 1", " fi ", " ((timeout -= 1))", "done", "curl -s http://localhost:51678/v1/metadata | python -mjson.tool"]},
+            )
+            command_id = response['Command']['CommandId']
+            return command_id
+
+
+        def get_image_name(instance_id):
+            method = "get_ami_type"
+            logs.append("{} instance_id='{}'".format(method, instance_id))
+            instance = ec2_resource.Instance(instance_id)
+            # check if the instace exists
+            image_id = instance.image_id
+            logs.append("{} image_id='{}'".format(method, image_id))
+            response = ec2_client.describe_images(
+                ImageIds=[
+                    image_id,
+                ]
+            )
+            image_name = response["Images"][0]['Name']
+            logs.append("{} image_id='{}'".format(method, image_name))
+            return image_name
+
+
+        def get_command_status(instance_id, command_id):
+            method = "get_command_status"
+            global retries
+            logs.append("{} instance_id='{}', command_id='{}'".format(
+                method, instance_id, command_id))
+
+            try:
+                response = ssm_client.get_command_invocation(
+                    CommandId=command_id,
+                    InstanceId=instance_id
+                )
+
+                status = response["Status"]
+                details = response["StatusDetails"]
+
+            except ssm_client.exceptions.InvocationDoesNotExist as e:
+                if retries < MAX_RETRIALS_NUM:
+                    logs.append("{}, InvocationDoesNotExist instance_id='{}', retry count='{}'".format(
+                        method, instance_id, retries))
+                    retries += 1
+                    time.sleep(10)
+
+                    # retry
+                    status, details = get_command_status(instance_id, command_id)
+
+                else:
+                    raise Exception(str(e))
+
+            retries = 0
+            return status, details
+
+
+        def get_command_status_with_wait(instance_id, command_id):
+            global retries
+            method = "get_command_status_with_wait"
+            logs.append("{} instance_id='{}', command_id='{}', retries='{}'".format(
+                method, instance_id, command_id, retries))
+
+            response = ssm_client.get_command_invocation(
+                CommandId=command_id,
+                InstanceId=instance_id
+            )
+            status = response["Status"]
+            details = response["StatusDetails"]
+
+            if status in WAITING_STATUS and retries < MAX_RETRIALS_NUM:
+                retries += 1
+                time.sleep(10)
+                status, details = get_command_status_with_wait(instance_id, command_id)
+
+            retries = 0
+            logs.append("{} instance_id='{}',status='{}', details='{}'".format(
+                method, instance_id, status, details))
+            return status, details
+
+
+        def install_amazon_ecs_agent_handler(event, context):
+            instances_ids = event["InstanceIds"]
+            errorMsg = ''
+            command_ids = {}
+            failed_instances = []
+            successful_instances = []
+            waiting_instances = []
+            temp_waiting_instances = []
+            out = {
+                'SuccessfulInstances': [],
+                'FailedInstances': [],
+                'InProgressInstances': []
+            }
+
+            try:
+                for instance_id in instances_ids:
+                    command_id = 'N/A'
+                    try:
+                        # check ami name
+                        image_name = get_image_name(instance_id)
+
+                        # if AWS linux 2
+                        if AWS_LINUX_2 in image_name:
+                            command_id = install_ecs_agent_amzn2(instance_id)
+                            command_ids[instance_id] = command_id
+                        # else AWS linux 1
+                        elif AWS_LINUX in image_name:
+                            command_id = install_ecs_agent_amzn(instance_id)
+                            command_ids[instance_id] = command_id
+                        else:
+                            errorMsg = "Instance '{}' is incompatible. Supported instances are Amazon Linux and Amazon Linux 2.".format(
+                                instance_id)
+                            failed_instances.append(
+                                {'InstanceId': instance_id, 'RunCommandId': command_id, 'Status': 'Failed', 'StatusDetails': errorMsg})
+
+                    except ssm_client.exceptions.InvalidInstanceId as e:
+                        errorMsg = "InvalidInstanceId, The following scenarios can result in this error: 1.Instance id is invalid. 2.Instance does not have the AWS SSM agent installed and running. 3.Instance does not have proper iam role attached, AmazonEC2RoleforSSM policy should be attached to instance's iam role. 4.Instance is in a different region. 5.Instance is not currently in the Running state."
+                        failed_instances.append(
+                            {'InstanceId': instance_id, 'RunCommandId': command_id, 'Status': 'Failed', 'StatusDetails': errorMsg})
+                    except Exception as e:
+                        errorMsg = str(e)
+                        failed_instances.append(
+                            {'InstanceId': instance_id, 'RunCommandId': command_id, 'Status': 'Failed', 'StatusDetails': errorMsg})
+
+                # get_command_status
+                for instance_id, command_id in command_ids.items():
+                    try:
+                        status, status_details = get_command_status(
+                            instance_id, command_id)
+
+                        logs.append("instance_id='{}', command_id='{}',status='{}', details='{}'".format(
+                            instance_id, command_id,status, status_details))
+                        
+                        if status in SUCCESS_STATUS:
+                            logs.append("successful_instances.append")
+                            successful_instances.append(
+                                {'InstanceId': instance_id, 'RunCommandId': command_id, 'Status': status, 'StatusDetails': status_details})
+                        elif status in FAILURE_STATUS:
+                            logs.append("failed_instances.append")
+                            failed_instances.append(
+                                {'InstanceId': instance_id, 'RunCommandId': command_id, 'Status': status, 'StatusDetails': status_details})
+                        else:
+                            logs.append("waiting_instances.append.."+ str({'InstanceId': instance_id, 'RunCommandId': command_id, 'Status': status, 'StatusDetails': status_details}))
+                            waiting_instances.append(
+                                {'InstanceId': instance_id, 'RunCommandId': command_id, 'Status': status, 'StatusDetails': status_details})
+                    except Exception as e:
+                        errorMsg = str(e)
+                        logs.append("ERROR: "+errorMsg)
+                        failed_instances.append(
+                            {'InstanceId': instance_id, 'RunCommandId': command_id, 'Status': 'Failed', 'StatusDetails': errorMsg})
+
+                # retry on the waiting instances
+                for instance in waiting_instances:
+                    
+                    try:
+                        instance_id= instance['InstanceId']
+                        command_id = instance['RunCommandId']
+
+                        logs.append("Retry on the waiting instances instance='{}'".format(str(instance)))
+                        
+                        status, status_details = get_command_status_with_wait(
+                            instance_id, command_id)
+                    
+                        if status in SUCCESS_STATUS:
+                            successful_instances.append(
+                                {'InstanceId': instance_id, 'RunCommandId': command_id,'Status': status, 'StatusDetails': status_details})
+                        elif status in FAILURE_STATUS:
+                            failed_instances.append(
+                                {'InstanceId': instance_id, 'RunCommandId': command_id, 'Status': status, 'StatusDetails': status_details})
+                        else:
+                            temp_waiting_instances.append(
+                                {'InstanceId': instance_id, 'RunCommandId': command_id, 'Status': status, 'StatusDetails': status_details})
+
+                    except Exception as e:
+                        errorMsg = str(e)
+                        logs.append("ERROR: "+errorMsg)
+                        failed_instances.append(
+                            {'InstanceId': instance_id,'RunCommandId': command_id, 'Status': 'Failed', 'StatusDetails': errorMsg})
+
+                waiting_instances = temp_waiting_instances
+
+            except Exception as e:
+                out = {
+                    'ProvidedInstanceIds': instances_ids,
+                    'SuccessfulInstances': successful_instances,
+                    'FailedInstances': failed_instances,
+                    'InProgressInstances': waiting_instances,
+                }
+                errorMsg = str(e)
+                errorMsg = errorMsg + ", output: " + json.dumps(out)
+                raise Exception(
+                    "Unable to install ECS Agent, errorMsg ='{}'.".format(errorMsg))
+
+            out = {
+                'SuccessfulInstances': successful_instances,
+                'FailedInstances': failed_instances,
+                'InProgressInstances': waiting_instances
+            }
+
+            if not successful_instances:
+                raise Exception(
+                    "Unable to install ECS Agent on any of the provided instances." + ", output: " + json.dumps(out))
+
+            return {
+                'output': json.dumps(out)
+            }
+   
+  outputs:
+    - Name: output
+      Selector: $.Payload.output
+      Type: String

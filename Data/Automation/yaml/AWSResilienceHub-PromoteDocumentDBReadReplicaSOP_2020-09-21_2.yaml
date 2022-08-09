@@ -1,0 +1,192 @@
+#
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-PromoteDocumentDBReadReplicaSOP_2020-09-21
+
+            ## Intent
+            Used to switch database to a read replica
+
+            ## Type
+            SOP
+
+            ## Risk
+            Medium
+
+            ## Requirements
+              * Available DocumentDB Cluster with a read replica instance
+
+            ## Permissions required for AutomationAssumeRole
+              * rds:DescribeDBClusters
+              * rds:DescribeDBInstances
+              * rds:FailoverDBCluster
+
+            ## Cancellation behavior
+            Fail
+
+            ## Inputs
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: ARN of the IAM role with permissions listed above
+
+            ### (Required) DBClusterIdentifier
+              * type: String
+              * description: DocumentDB Cluster Identifier
+
+            ### (Required) DBInstanceIdentifier
+              * type: String
+              * description: DocumentDB Replica Identifier
+
+            ## Details
+            The document promotes a given DocumentDB read replica instance to primary and waits for the cluster
+            to become available.
+
+            ## Steps executed in normal flow
+              * RecordStartTime
+              * PromoteReadReplica
+              * WaitUntilClusterAvailable
+              * WaitUntilPrimaryInstanceAvailable
+              * OutputRecoveryTime
+
+            ## Outputs
+            ### OutputRecoveryTime.RecoveryTime
+              * type: Integer
+              * description: SOP execution time in seconds
+schemaVersion: '0.3'
+assumeRole: '{{ AutomationAssumeRole }}'
+outputs:
+  - OutputRecoveryTime.RecoveryTime
+
+parameters:
+  DBClusterIdentifier:
+    type: String
+    description: (Required) DocDb Cluster Identifier
+  DBInstanceReplicaIdentifier:
+    type: String
+    description: (Required) DocDb Replica Identifier
+  AutomationAssumeRole:
+    type: String
+    description: >-
+      (Required) The ARN of the role that allows Automation to perform
+      the actions on your behalf. If no role is specified, Systems Manager Automation
+      uses your IAM permissions to run this document.
+
+mainSteps:
+  - name: RecordStartTime
+    description: Start recording execution time
+    action: 'aws:executeScript'
+    outputs:
+      - Name: StartTime
+        Selector: $.Payload
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: start_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def start_time(events, context):
+            return datetime.now(timezone.utc).isoformat()
+        
+        
+
+
+  - name: PromoteReadReplica
+    description: Promote Read Replica to Primary instance
+    action: aws:executeAwsApi
+    inputs:
+      Service: docdb
+      Api: FailoverDBCluster
+      DBClusterIdentifier: '{{ DBClusterIdentifier }}'
+      TargetDBInstanceIdentifier: '{{ DBInstanceReplicaIdentifier }}'
+
+  - name: WaitUntilClusterAvailable
+    description: Wait until cluster is in status available
+    action: aws:waitForAwsResourceProperty
+    timeoutSeconds: 1200
+    inputs:
+      Service: docdb
+      Api: DescribeDBClusters
+      DBClusterIdentifier: '{{ DBClusterIdentifier }}'
+      PropertySelector: "$.DBClusters[0].Status"
+      DesiredValues:
+        - 'available'
+
+  - name: WaitUntilPrimaryInstanceAvailable
+    description: Wait until the instance promoted in previous step is in status available
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 1200
+    onFailure: Abort
+    inputs:
+      Service: docdb
+      Api: DescribeDBInstances
+      Filters:
+        - Name: 'db-cluster-id'
+          Values:
+            - '{{ DBClusterIdentifier }}'
+        - Name: 'db-instance-id'
+          Values:
+            - '{{ DBInstanceReplicaIdentifier }}'
+      PropertySelector: '$.DBInstances..DBInstanceStatus'
+      DesiredValues:
+          - 'available'
+
+  - name: OutputRecoveryTime
+    description: Calculate execution time
+    action: 'aws:executeScript'
+    outputs:
+      - Name: RecoveryTime
+        Selector: $.Payload
+        Type: Integer
+    inputs:
+      Runtime: python3.8
+      Handler: recovery_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def recovery_time(events, context):
+            return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds
+        
+        
+
+      InputPayload:
+        StartTime: '{{ RecordStartTime.StartTime }}'
+

@@ -1,0 +1,149 @@
+#
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+            ## Id
+            AWSResilienceHub-RebootDocumentDBInstanceTest_2020-09-21
+
+            ## Intent
+            Test DocumentDB cluster availability after rebooting the instance and application can reconnect
+            after temporary network errors within expected recovery time
+
+            ## Type
+            TEST
+
+            ## Risk
+            Small
+
+            ## Requirements
+              * Available DocumentDB Cluster
+              * There is a [synthetic alarm](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Synthetics_Canaries.html) setup for application that alerts when application can't connect
+
+            ## Permissions required for AutomationAssumeRole
+              * cloudwatch:DescribeAlarms
+              * rds:RebootDBInstance
+              * rds:DescribeDBInstances
+
+            ##### In case cluster is encrypted with a KMS key
+              * kms:DescribeKey
+
+            ## Supports Rollback
+            No
+
+            ## Cancellation behavior
+            Fails
+
+            ## Inputs
+            ### (Required) AutomationAssumeRole
+              * type: String
+              * description: ARN of the IAM role with permissions listed above
+
+            ### (Required) DBClusterIdentifier
+              * type: String
+              * description: DocumentDB Cluster Identifier
+
+            ### (Required) DatabaseConnectionAttemptAlarmName
+              * type: String
+              * description: Name of the alarm that indicates that the application can't connect to DocumentDB
+
+            ### (Optional) IsRollback
+              * type: String
+              * description: Run the rollback steps of the document. True or False. If True, the parameter PreviousExecutionId should also be specified
+              * default: false
+
+            ### (Optional) PreviousExecutionId
+              * type: String
+              * description: SSM execution ID of the previous execution of this document for which resources need to be cleaned up
+
+            ## Details
+            The document reboots DocumentDB instance and wait for it to become available. Synthetic alarm should show
+            that application can connect to the DocumentDB instance.
+
+            ## Steps executed in normal flow
+              * AssertAlarmToBeGreenBeforeTest
+              * RebootDbInstance
+              * WaitUntilInstancesAvailable
+              * AssertAlarmToBeGreen
+
+            ## Outputs
+            None
+
+schemaVersion: "0.3"
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  DBClusterIdentifier:
+    type: String
+    description: (Required) DocDb Cluster Identifier
+  DBInstanceIdentifier:
+    type: String
+    description: (Required) DocDb Instance Identifier
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+  CanaryAlarmName:
+    type: String
+    description: (Required) Alarm which should be green after test.
+mainSteps:
+  - name: AssertAlarmToBeGreenBeforeTest
+    description: Ensure alarm is green before starting test. Fail if alarm is not green within expected time.
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 1200
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{CanaryAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: ["OK"]
+
+  - name: RebootDbInstance
+    description: Reboot the DocumentDB instance
+    action: aws:executeAwsApi
+    inputs:
+      Service: docdb
+      Api: RebootDBInstance
+      DBInstanceIdentifier: '{{ DBInstanceIdentifier }}'
+
+  - name: WaitUntilInstancesAvailable
+    description: Wait for instance to be in status available
+    action: aws:waitForAwsResourceProperty
+    timeoutSeconds: 1200
+    inputs:
+      Service: docdb
+      Api: DescribeDBInstances
+      Filters:
+        - Name: "db-cluster-id"
+          Values:
+            - '{{ DBClusterIdentifier }}'
+      PropertySelector: '$.DBInstances..DBInstanceStatus'
+      DesiredValues:
+        - available
+
+  - name: AssertAlarmToBeGreen
+    description: Wait for the alarm to be green after test is complete
+    action: aws:waitForAwsResourceProperty
+    maxAttempts: 1
+    timeoutSeconds: 1200
+    inputs:
+      Service: cloudwatch
+      Api: DescribeAlarms
+      AlarmNames:
+        - "{{CanaryAlarmName}}"
+      PropertySelector: "$.MetricAlarms[0].StateValue"
+      DesiredValues: [ "OK" ]
+

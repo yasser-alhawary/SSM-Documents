@@ -1,0 +1,172 @@
+#
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |-
+  # Id
+    rds:sop:backtrack:2020-04-01
+
+  ## Intent
+    SOP to backtrack an RDS Aurora cluster.
+
+  ## Type
+    Software
+
+  ## Risk
+    Small
+
+  ## Requirements
+    * Aurora Cluster
+
+  ## Permission required for AutomationAssumeRole
+    * rds:BacktrackDBCluster
+    * rds:DescribeDBClusters
+    * rds:DescribeDBClusterBacktracks
+
+  ## Supports Rollback
+    No.
+
+  ## Inputs
+  ### DbClusterIdentifier
+    * Description: (Required) The identifier for the db cluster
+    * Type: String
+  ### BacktrackTo
+    * Description: (Required) An ISO 8601 date and time
+    * Type: String
+  ### AutomationAssumeRole:
+    * Description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    * Type: String
+
+  ## Details of SSM Document steps:
+   * RecordStartTime
+   * BacktracDb
+   * WaitUntilInstancesAvailable
+   * VerifyBacktrackSuccess
+   * OutputRecoveryTime
+
+  ## Outputs
+    * OutputRecoveryTime.RecoveryTime: recovery time in seconds
+
+schemaVersion: '0.3'
+assumeRole: '{{ AutomationAssumeRole }}'
+outputs:
+  - OutputRecoveryTime.RecoveryTime
+  - BacktrackDb.RecoveryPoint
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: "(Required) The ARN of the role that allows Automation to perform\
+         \ the actions on your behalf"
+  DbClusterIdentifier:
+    type: String
+    description: (Required) The identifier for the db cluster
+  BacktrackTo:
+    type: String
+    description: (Required) An ISO 8601 date and time
+mainSteps:
+  - name: RecordStartTime
+    action: 'aws:executeScript'
+    outputs:
+      - Name: StartTime
+        Selector: $.Payload
+        Type: String
+    inputs:
+      Runtime: python3.8
+      Handler: start_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def start_time(events, context):
+            return datetime.now(timezone.utc).isoformat()
+        
+        
+
+  - name: BacktrackDb
+    action: 'aws:executeAwsApi'
+    description: Backtrack an RDS Aurora cluster to a date
+    outputs:
+      - Name: RecoveryPoint
+        Selector: $.BacktrackTo
+        Type: String
+    inputs:
+      Service: rds
+      Api: BacktrackDBCluster
+      DBClusterIdentifier: '{{DbClusterIdentifier}}'
+      BacktrackTo: '{{BacktrackTo}}'
+      UseEarliestTimeOnPointInTimeUnavailable: True
+  - name: WaitForBacktrackCompletion
+    action: 'aws:waitForAwsResourceProperty'
+    timeoutSeconds: 600
+    inputs:
+      Service: rds
+      Api: DescribeDBClusterBacktracks
+      DBClusterIdentifier: '{{ DbClusterIdentifier }}'
+      PropertySelector: '$.DBClusterBacktracks[0].Status'
+      DesiredValues:
+        - COMPLETED
+        - FAILED
+  - name: VerifyBacktrackSuccess
+    action: 'aws:assertAwsResourceProperty'
+    timeoutSeconds: 600
+    inputs:
+      Service: rds
+      Api: DescribeDBClusterBacktracks
+      DBClusterIdentifier: '{{ DbClusterIdentifier }}'
+      PropertySelector: '$.DBClusterBacktracks[0].Status'
+      DesiredValues:
+        - COMPLETED
+  - name: OutputRecoveryTime
+    action: 'aws:executeScript'
+    outputs:
+      - Name: RecoveryTime
+        Selector: $.Payload
+        Type: Integer
+    inputs:
+      Runtime: python3.8
+      Handler: recovery_time
+      Script: |-
+        import boto3
+        import logging
+        from datetime import datetime, timezone
+        import time
+        
+        from botocore.exceptions import ClientError
+        from dateutil import parser
+        
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        
+        
+
+        def recovery_time(events, context):
+            return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds
+        
+        
+
+      InputPayload:
+        StartTime: '{{ RecordStartTime.StartTime }}'
+

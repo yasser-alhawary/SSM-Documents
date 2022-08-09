@@ -1,0 +1,380 @@
+---
+schemaVersion: '2.2'
+description: Removes a list of users from all groups specified.
+parameters:
+  Groups:
+    type: String
+    description: A command separated list of groups to modify.
+    allowedPattern: ^[^"'\/\\\[\]:;|#=+*?<>\r\n]+$
+  Users:
+    type: String
+    description: A comma separated list of users to remove.
+    allowedPattern: ^[^"'\/\\\[\]:;|=+*?<>@\r\n]+$
+  PerformAction:
+    type: String
+    description: (Optional) Set this to 'Yes' to perform the action.
+    default: 'No'
+    allowedValues:
+      - 'No'
+      - 'Yes'
+mainSteps:
+- precondition:
+    StringEquals:
+      - platformType
+      - Windows
+  action: aws:runPowerShellScript
+  name: InvokeWindowsScript
+  inputs:
+    runCommand:
+      - |
+        $ErrorActionPreference = 'Stop'
+        
+        Function ParseInputParameter {
+            param (
+                [string]$Name,
+                [string]$Value,
+                [string]$Regex
+            )
+        
+            $ValidParameterRegex = '^--%[ +{|{].*}( +)?$'
+            if ($Value -notmatch $ValidParameterRegex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            }
+            $parameterValue = $Value.Substring(3)
+        
+            $trimmedParameterValue = $parameterValue.TrimStart().TrimEnd()
+            $trimmedParameterValue = $trimmedParameterValue.Substring(1)
+            $trimmedParameterValue = $trimmedParameterValue.Substring(0, $trimmedParameterValue.Length - 1)
+        
+            if ($Regex -and $trimmedParameterValue -notmatch $Regex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            } else {
+                $trimmedParameterValue
+            }
+        }
+        
+        function ExitWithFailureMessage {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PrintJson) {ConvertTo-Json -InputObject @{error = $errorMessage} -Compress}
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit(1)
+        }
+        
+        function ExitWithFailureMessageAndExitCode {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [int]$ExitCode,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PSBoundParameters.ContainsKey('ExitCode') -eq $true) {
+                $exitCode = $ExitCode
+            } else {
+                $exitCode = 1
+            }
+            if ($PrintJson) {
+                $ErrorObject = @{
+                    error = $errorMessage
+                    exitCode = $exitCode
+                }
+                ConvertTo-Json -InputObject $ErrorObject -Compress
+            }
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit($exitCode)
+        }
+        
+        function ExitWithSuccessMessage {
+            param (
+                [string]$Message
+            )
+            Write-Host $Message
+            [System.Environment]::Exit(0)
+        }
+        
+        function WriteStandardError {
+            param (
+                [string]$Message
+            )
+            $Host.UI.WriteErrorLine($Message)
+        }
+
+        function TestPerformAction {
+            param ( [string]$PerformAction )
+            if ($PerformAction -ne 'Yes') {
+                ExitWithFailureMessage -Message "No action was taken because the PerformAction parameter is set to $PerformAction. To make the desired change, set this parameter to Yes."
+            }
+        }
+
+        $Groups = Write-Output --%{{{ Groups }}}
+        $Groups = ParseInputParameter -Name 'Groups' -Value $Groups
+        
+        $Users = Write-Output --%{{{ Users }}}
+        $Users = ParseInputParameter -Name 'Users' -Value $Users
+        
+        $PerformAction = Write-Output --%{{{ PerformAction }}}
+        $PerformAction = ParseInputParameter -Name 'PerformAction' -Value $PerformAction -Regex '(Yes|No)'
+        TestPerformAction -PerformAction $PerformAction
+        
+        function TestLocalUserExists {
+            param (
+                [string]$Username
+            )
+            $getCimInstance = @{
+                Class = 'Win32_UserAccount'
+                Filter = 'LocalAccount=True'
+            }
+            if (Get-CimInstance @getCimInstance | Where-Object {$_.Name -eq $Username}) {
+                return $true
+            } else {
+                return $false
+            }
+        }
+        
+        function TestLocalGroupExists {
+            param (
+                [string]$Name,
+                [string]$Domain
+            )
+            $getCimInstance = @{Class = 'Win32_Group' }
+            if (Get-CimInstance @getCimInstance | Where-Object { $_.Name -eq $Name -and $_.Domain -eq $Domain }) {
+                return $true
+            } else {
+                return $false
+            }
+        }
+        
+        function GroupContains {
+            param (
+                [string]$Username,
+                [psobject]$Group
+            )
+            $Group.psbase.Invoke('Members') | ForEach-Object {
+                $user = $_.GetType().InvokeMember('Name', 'GetProperty', $null, $_, $null)
+                if ($user -eq $Username) {
+                    return $true
+                }
+            }
+            return $false
+        }
+        
+        $exceptionCount = 0
+        
+        foreach ($group in $Groups.Split(',')) {
+            try {
+                $groupName = $group.Trim()
+            } catch {
+                $exceptionCount++
+                WriteStandardError -Message "The group name for $group is invalid."
+                continue
+            }
+        
+            if ([string]::IsNullOrWhiteSpace($groupName)) {continue}
+        
+            if (-not(TestLocalGroupExists -Name $groupName -Domain $env:COMPUTERNAME)) {
+                $exceptionCount++
+                WriteStandardError -Message "The specified group $groupName does not exist."
+                continue
+            }
+        
+            $groupObj = ([adsi]"WinNT://$env:COMPUTERNAME/$groupName,group")
+            foreach ($user in $Users.Split(',')) {
+                try {
+                    $userName = $user.Trim()
+                } catch {
+                    $exceptionCount++
+                    WriteStandardError -Message "The user name for $user is invalid."
+                    continue
+                }
+        
+                if ([string]::IsNullOrWhiteSpace($userName)) {continue}
+        
+                if (GroupContains -UserName $userName -Group $groupObj) {
+                    try {
+                        $groupObj.Remove("WinNT://$env:COMPUTERNAME/$userName,user")
+                        Write-Host "$($groupName): The user $userName has been removed."
+                    } catch {
+                        $exceptionCount++
+                        WriteStandardError -Message "$($groupName): Failed to remove the user $userName."
+                    }
+                } else {
+                    Write-Host "$($groupName): The user $userName is not a member."
+                }
+            }
+        }
+        
+        if ($exceptionCount -gt 0) {
+            $exitWithFailureMessage = @{
+                Message = 'There was at least one error when removing users from the specified groups.'
+                PrintJson = $true
+            }
+            ExitWithFailureMessage @exitWithFailureMessage
+        }
+        
+        ExitWithSuccessMessage 'All users have been removed from the specified groups.'
+- precondition:
+    StringEquals:
+      - platformType
+      - Linux
+  action: aws:runShellScript
+  name: InvokeLinuxScript
+  inputs:
+    runCommand:
+      - |
+        #!/bin/bash
+        set -e
+        
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release
+            OS_RELEASE="$ID${VERSION_ID:+.${VERSION_ID}}"
+        elif [ -f /etc/centos-release ]; then
+            OS_RELEASE="centos.$(awk '{print $3}' /etc/centos-release)"
+        elif [ -f /etc/redhat-release ]; then
+            OS_RELEASE="rhel.$(lsb_release -r | awk '{print $2}')"
+        fi
+        
+        case "$OS_RELEASE" in
+            amzn.2|centos.7*|centos.8*|fedora.*|rhel.7*|rhel.8*|sles*)
+                command_path='/usr/bin/'
+                ;;
+            amzn.2018.03|centos.6*|debian.*|rhel.6*|ubuntu.16*|ubuntu.18*|ubuntu.20*)
+                command_path='/bin/'
+                ;;
+            *)
+                # Catch all without the full path for untested platforms
+                command_path=''
+        esac
+        
+        ExitWithFailureMessage() {
+            MESSAGE="$1"
+            JSON="$2"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{\"error\":\"$MESSAGE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit 1
+        }
+        
+        # exit codes. 0-100 are reserved exit codes. 101-150 codes are for linux, 151-200 are for macos and 200 onwards codes are for windows.
+        ExitWithFailureMessageAndExitCode() {
+            MESSAGE="$1"
+            EXITCODE="$2"
+            JSON="$3"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{\"error\":\"$MESSAGE\",\"exitCode\":\"$EXITCODE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit "$EXITCODE"
+        }
+        
+        ExitWithSuccessMessage() {
+            "${command_path}echo" "$1"
+            exit 0
+        }
+        
+        WriteStandardError() {
+            MESSAGE="$1"
+            (>&2 "${command_path}echo" "$MESSAGE")
+        }
+
+        TestPerformAction() {
+            if [[ "$1" != "Yes" ]]; then
+                ExitWithFailureMessage "No action was taken because the PerformAction parameter is set to $1. To make the desired change, set this parameter to Yes."
+            fi
+        }
+
+        Groups='{{ Groups }}'
+        Users='{{ Users }}'
+        
+        PERFORMACTION='{{ PerformAction }}'
+        TestPerformAction "$PERFORMACTION"
+        
+        RemoveLeadingAndTrailingWhitespace() {
+          "${command_path}echo" "$1" | "${command_path}sed" -e 's/^[[:space:]]*//' | "${command_path}sed" -e 's/[[:space:]]*$//'
+        }
+        
+        TestLocalGroupExists() {
+          GROUP="$1"
+          if "${command_path}grep" -q "^$GROUP:" /etc/group; then
+            return 0
+          else
+            return 1
+          fi
+        }
+        
+        TestLocalUserExists() {
+          USERNAME="$1"
+          if "${command_path}grep" -q "^$USERNAME:" /etc/passwd; then
+            return 0
+          else
+            return 1
+          fi
+        }
+        
+        GroupContains() {
+          USER="$1"
+          GROUP="$2"
+          if /usr/bin/id --name --groups "$USER" | "${command_path}grep" -q "$GROUP"; then
+            return 0
+          else
+            return 1
+          fi
+        }
+        
+        EXCEPTION_COUNT=0
+        
+        IFS=',' read -ra group_list <<< "$Groups"
+        IFS=',' read -ra user_list <<< "$Users"
+        
+        for group in "${group_list[@]}"; do
+          # Remove leading and trailing whitespace
+          groupName=$(RemoveLeadingAndTrailingWhitespace "$group")
+          if [[ "$groupName" == "" ]]; then
+            continue
+          fi
+        
+          TestLocalGroupExists "$groupName" || {
+            EXCEPTION_COUNT=$((EXCEPTION_COUNT+1))
+            WriteStandardError "The specified group $groupName does not exist."
+            continue
+          }
+        
+          for user in "${user_list[@]}"; do
+            # Remove leading and trailing whitespace
+            userName=$(RemoveLeadingAndTrailingWhitespace "$user")
+            if [[ "$userName" == "" ]]; then
+              continue
+            fi
+        
+            if GroupContains "$userName" "$groupName"; then
+              /usr/bin/gpasswd -d "$userName" "$groupName" > /dev/null || {
+                EXCEPTION_COUNT=$((EXCEPTION_COUNT+1))
+                WriteStandardError "$groupName: Failed to remove the user $userName."
+                continue
+              }
+              "${command_path}echo" "$groupName: The user $userName has been removed."
+            else
+              "${command_path}echo" "$groupName: The user $userName is not a member."
+            fi
+          done
+        done
+        
+        if [[ "$EXCEPTION_COUNT" != "0" ]]; then
+          ExitWithFailureMessage 'There was at least one error when removing users from the specified groups.' 'PRINT_JSON'
+        fi
+        
+        ExitWithSuccessMessage 'All users have been removed from the specified groups.'
+

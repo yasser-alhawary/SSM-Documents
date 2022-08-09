@@ -1,0 +1,953 @@
+---
+schemaVersion: '2.2'
+description: 'End the process or the process tree.'
+parameters:
+  Id:
+    type: String
+    description: The Id of the process you are about to end.
+    allowedPattern: ^[0-9]*$
+  TerminateProcessTree:
+    type: String
+    description: (Optional) Confirm whether you want to end the process or the process tree.
+    default: 'No'
+    allowedValues:
+      - 'No'
+      - 'Yes'
+  PerformAction:
+    type: String
+    description: (Optional) Set this to 'Yes' to perform the action.
+    default: 'No'
+    allowedValues:
+      - 'No'
+      - 'Yes'
+mainSteps:
+- precondition:
+    StringEquals:
+      - platformType
+      - Windows
+  action: aws:runPowerShellScript
+  name: InvokeWindowsScript
+  inputs:
+    runCommand:
+      - |
+        $ErrorActionPreference = 'Stop'
+        
+        Function ParseInputParameter {
+            param (
+                [string]$Name,
+                [string]$Value,
+                [string]$Regex
+            )
+        
+            $ValidParameterRegex = '^--%[ +{|{].*}( +)?$'
+            if ($Value -notmatch $ValidParameterRegex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            }
+            $parameterValue = $Value.Substring(3)
+        
+            $trimmedParameterValue = $parameterValue.TrimStart().TrimEnd()
+            $trimmedParameterValue = $trimmedParameterValue.Substring(1)
+            $trimmedParameterValue = $trimmedParameterValue.Substring(0, $trimmedParameterValue.Length - 1)
+        
+            if ($Regex -and $trimmedParameterValue -notmatch $Regex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            } else {
+                $trimmedParameterValue
+            }
+        }
+        
+        function ExitWithFailureMessage {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PrintJson) {ConvertTo-Json -InputObject @{error = $errorMessage} -Compress}
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit(1)
+        }
+        
+        function ExitWithFailureMessageAndExitCode {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [int]$ExitCode,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PSBoundParameters.ContainsKey('ExitCode') -eq $true) {
+                $exitCode = $ExitCode
+            } else {
+                $exitCode = 1
+            }
+            if ($PrintJson) {
+                $ErrorObject = @{
+                    error = $errorMessage
+                    exitCode = $exitCode
+                }
+                ConvertTo-Json -InputObject $ErrorObject -Compress
+            }
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit($exitCode)
+        }
+        
+        function ExitWithSuccessMessage {
+            param (
+                [string]$Message
+            )
+            Write-Host $Message
+            [System.Environment]::Exit(0)
+        }
+        
+        function WriteStandardError {
+            param (
+                [string]$Message
+            )
+            $Host.UI.WriteErrorLine($Message)
+        }
+
+        function TestPerformAction {
+            param ( [string]$PerformAction )
+            if ($PerformAction -ne 'Yes') {
+                ExitWithFailureMessage -Message "No action was taken because the PerformAction parameter is set to $PerformAction. To make the desired change, set this parameter to Yes."
+            }
+        }
+
+        $script:ResultProperty = 'results'
+        $script:DataProperty = 'data'
+        $script:NextTokenProperty = 'nextToken'
+        
+        function ConvertBase64ToString {
+            param (
+                [string]$Base64
+            )
+            $bytes = [System.Convert]::FromBase64String($Base64)
+            [System.Text.Encoding]::UTF8.GetString($bytes)
+        }
+        
+        function ConvertStringToBase64 {
+            param (
+                [string]$String
+            )
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($String)
+            [System.Convert]::ToBase64String($bytes)
+        }
+        
+        function GetCompressionBoolean {
+            param (
+                [ValidateSet('No','Yes')]
+                [string]$CompressOutput
+            )
+            if ($CompressOutput -eq 'Yes') {
+                $true
+            } else {
+                $false
+            }
+        }
+        
+        function GetJson {
+            param ($InputObject)
+            ConvertTo-Json -InputObject $InputObject -Compress -Depth 5
+        }
+        
+        function GetBase64EncodedGzipString {
+            param ($InputString)
+        
+            $inputBytes = [System.Text.Encoding]::UTF8.GetBytes($InputString)
+        
+            try {
+                $memoryStream = New-Object -TypeName 'System.IO.MemoryStream'
+                $compressionMode = [System.IO.Compression.CompressionMode]::Compress
+                $gzipStream = New-Object -TypeName 'System.IO.Compression.GzipStream' -ArgumentList @($memoryStream, $compressionMode)
+        
+                $gzipStream.Write($inputBytes, 0, $inputBytes.Length)
+                $gzipStream.Close()
+                $memoryStream.Close()
+        
+                [System.Convert]::ToBase64String($memoryStream.ToArray())
+            } finally {
+                $gzipStream.Dispose()
+                $memoryStream.Dispose()
+            }
+        }
+        
+        function GetResultAsString {
+            param (
+                [PSObject]$Object,
+                [bool]$Completed,
+                [switch]$ConvertNextTokenToBase64,
+                [bool]$EnableCompression,
+                [bool]$ForceEmptyNextToken,
+                [string]$NextToken,
+                [string]$PaginationProperty,
+                [array]$StringReplacementRegex
+            )
+        
+            if ([string]::IsNullOrWhiteSpace($NextToken)) {
+                if ($Completed -eq $false -and $Object.Count -ge 1 -and $ForceEmptyNextToken -ne $true) {
+                    if ($PaginationProperty -eq '.') {
+                        $NextToken = $Object[-1]
+                    } else {
+                        $NextToken = $Object[-1].$PaginationProperty
+                    }
+                }
+            }
+        
+            if ($ForceEmptyNextToken) {
+                $NextToken = [string]::Empty
+            } elseif ($ConvertNextTokenToBase64) {
+                $NextToken = ConvertStringToBase64 -String $NextToken
+            }
+        
+            $data = @{
+                $script:ResultProperty    = $Object
+                $script:NextTokenProperty = $NextToken
+            }
+        
+            if ($EnableCompression -eq $true) {
+                $string = GetJson -InputObject $data
+        
+                if ($StringReplacementRegex.Count -eq 2) {
+                    $string = $string -replace $StringReplacementRegex
+                }
+        
+                $data = GetBase64EncodedGzipString -InputString $string
+            }
+        
+            $output = GetJson -InputObject @{
+                $script:DataProperty = $data
+            }
+            if ($StringReplacementRegex.Count -eq 2) {
+                $output -replace $StringReplacementRegex
+            } else {
+                $output
+            }
+        }
+        
+        function GetMaximumOutputBytes {
+            param (
+                $AllowTruncatedOutput,
+                [int]$MaximumOutputSize = 2500
+            )
+            if ($AllowTruncatedOutput -eq 'Yes') {
+                0
+            } else {
+                $padding = (GetResultAsString -Object @() -Completed $false -EnableCompression $false).length
+                $MaximumOutputSize - $padding
+            }
+        }
+        
+        function ProcessItems {
+            param (
+                [scriptblock]$ScriptBlock,
+                [switch]$ConvertNextTokenToBase64,
+                [int]$ChunksPerLoop = 1,
+                [bool]$EnableCompression,
+                [int]$MaximumOutputBytes,
+                [string]$PaginationProperty,
+                [string]$PropertyToRemove,
+                [string]$NextToken,
+                [switch]$SetNextTokenBeforeAdding,
+                [array]$StringReplacementRegex
+            )
+        
+            $chunkedOutputArray = New-Object -TypeName 'System.Collections.ArrayList'
+        
+            $outputResult = [string]::Empty
+        
+            $outputTooBig = $false
+            $counter = 0
+        
+            $getResultString = @{
+                EnableCompression = $EnableCompression
+                PaginationProperty = $PaginationProperty
+                StringReplacementRegex = $StringReplacementRegex
+            }
+        
+            foreach ($item in (& $ScriptBlock)) {
+                if ($outputTooBig -eq $true) { break }
+        
+                if ($NextToken -ne '*') {
+                    if ($PaginationProperty -eq '.' -and $item -le $NextToken) {
+                        continue
+                    } elseif ($PaginationProperty -ne '.' -and $item.$PaginationProperty -le $NextToken) {
+                        continue
+                    }
+                }
+        
+                if ($SetNextTokenBeforeAdding) {
+                    if ($PaginationProperty -eq '.') {
+                        $newNextToken = $item
+                    } else {
+                        $newNextToken = $item.$PaginationProperty
+                    }
+                }
+        
+                if ($PropertyToRemove) {
+                    $item.PSObject.properties.remove($PropertyToRemove)
+                }
+        
+                $null = $chunkedOutputArray.Add($item)
+        
+                if ($counter -lt $ChunksPerLoop) {
+                    $counter++
+                    continue
+                }
+        
+                $counter = 0
+        
+                $properties = @{
+                    Object = $chunkedOutputArray
+                    Completed = $outputTooBig
+                }
+                if ($ConvertNextTokenToBase64) {
+                    $properties.Add('ConvertNextTokenToBase64', $ConvertNextTokenToBase64)
+                }
+                if ($SetNextTokenBeforeAdding) {
+                    $properties.Add('NextToken', $newNextToken)
+                }
+                $tempResult = GetResultAsString @properties @getResultString
+        
+                if ($MaximumOutputBytes -eq 0 -or $tempResult.Length -le $MaximumOutputBytes) {
+                    $outputResult = $tempResult
+                } else {
+                    $outputTooBig = $true
+                    break
+                }
+            }
+        
+            # Processing remaining items if the output isn't too big yet
+            if ($outputTooBig -eq $false) {
+                $properties = @{
+                    Object = $chunkedOutputArray
+                    Completed = $outputTooBig
+                    ForceEmptyNextToken = $true
+                }
+                if ($ConvertNextTokenToBase64) {
+                    $properties.Add('ConvertNextTokenToBase64', $ConvertNextTokenToBase64)
+                }
+                if ($SetNextTokenBeforeAdding) {
+                    $properties.Add('NextToken', $newNextToken)
+                }
+                $tempResult = GetResultAsString @getResultString @properties
+                if ($MaximumOutputBytes -eq 0 -or $tempResult.Length -le $MaximumOutputBytes) {
+                    $outputResult = $tempResult
+                }
+            }
+        
+            $outputResult
+        }
+
+        $Id = Write-Output --%{{{ Id }}}
+        $Id = ParseInputParameter -Name 'Id' -Value $Id
+        
+        # check for the terminateProcess or terminateProcessTree action
+        $TerminateProcessTree = Write-Output --%{{{ TerminateProcessTree }}}
+        $TerminateProcessTree = ParseInputParameter -Name 'TerminateProcessTree' -Value $TerminateProcessTree -Regex '(Yes|No)'
+        
+        $PerformAction = Write-Output --%{{{ PerformAction }}}
+        $PerformAction = ParseInputParameter -Name 'PerformAction' -Value $PerformAction -Regex '(Yes|No)'
+        TestPerformAction -PerformAction $PerformAction
+        
+        # exit codes
+        $INVALID_PROCESS_ID = 201
+        $FAILED_PROCESS_TREE_ERROR = 202
+        $FAILED_PROCESS_ERROR = 203
+        
+        function TerminateProcess {
+            Param([int]$ppid)
+            Get-CimInstance -Class Win32_Process | Where-Object { $_.ParentProcessId -eq $ppid } | ForEach-Object { TerminateProcess -ppid $_.ProcessId }
+            Stop-Process -Id $ppid -Force
+        }
+        
+        if ( Get-Process -Id $Id -ErrorAction SilentlyContinue ) {
+            # Process is running
+            if ($TerminateProcessTree -eq 'Yes'){
+                try{
+                    TerminateProcess -ppid $Id
+                    ExitWithSuccessMessage "Ended the process tree with Id $Id." -PrintJson
+                } catch {
+                    ExitWithFailureMessageAndExitCode -Message "Failed to end the process tree with Id $Id." -ExitCode $FAILED_PROCESS_TREE_ERROR -PrintJson
+                }
+            }
+            else {
+                try {
+                    Stop-Process -Id $Id -Force
+                    ExitWithSuccessMessage "Ended the process with Id $Id." -PrintJson
+                } catch {
+                    ExitWithFailureMessageAndExitCode -Message "Failed to end the process with Id $Id." -ExitCode $FAILED_PROCESS_ERROR -PrintJson
+                }
+            }
+        }
+        else{
+            ExitWithFailureMessageAndExitCode -Message "The process with Id "$Id" doesn't exist." -ExitCode $INVALID_PROCESS_ID -PrintJson
+        }
+- precondition:
+    StringEquals:
+      - platformType
+      - Linux
+  action: aws:runShellScript
+  name: InvokeLinuxScript
+  inputs:
+    runCommand:
+      - |
+        #!/bin/bash
+        set -e
+        
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release
+            OS_RELEASE="$ID${VERSION_ID:+.${VERSION_ID}}"
+        elif [ -f /etc/centos-release ]; then
+            OS_RELEASE="centos.$(awk '{print $3}' /etc/centos-release)"
+        elif [ -f /etc/redhat-release ]; then
+            OS_RELEASE="rhel.$(lsb_release -r | awk '{print $2}')"
+        fi
+        
+        case "$OS_RELEASE" in
+            amzn.2|centos.7*|centos.8*|fedora.*|rhel.7*|rhel.8*|sles*)
+                command_path='/usr/bin/'
+                ;;
+            amzn.2018.03|centos.6*|debian.*|rhel.6*|ubuntu.16*|ubuntu.18*|ubuntu.20*)
+                command_path='/bin/'
+                ;;
+            *)
+                # Catch all without the full path for untested platforms
+                command_path=''
+        esac
+        
+        ExitWithFailureMessage() {
+            MESSAGE="$1"
+            JSON="$2"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{\"error\":\"$MESSAGE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit 1
+        }
+        
+        # exit codes. 0-100 are reserved exit codes. 101-150 codes are for linux, 151-200 are for macos and 200 onwards codes are for windows.
+        ExitWithFailureMessageAndExitCode() {
+            MESSAGE="$1"
+            EXITCODE="$2"
+            JSON="$3"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{\"error\":\"$MESSAGE\",\"exitCode\":\"$EXITCODE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit "$EXITCODE"
+        }
+        
+        ExitWithSuccessMessage() {
+            "${command_path}echo" "$1"
+            exit 0
+        }
+        
+        WriteStandardError() {
+            MESSAGE="$1"
+            (>&2 "${command_path}echo" "$MESSAGE")
+        }
+
+        TestPerformAction() {
+            if [[ "$1" != "Yes" ]]; then
+                ExitWithFailureMessage "No action was taken because the PerformAction parameter is set to $1. To make the desired change, set this parameter to Yes."
+            fi
+        }
+
+        JQ="jq"
+        VERSION="1.6"
+        PRODUCT_PATH="/opt/amazon/ssm/fleet_manager"
+        JQ_BINARY="$PRODUCT_PATH/$JQ-$VERSION"
+        
+        CheckSha256FileHash() {
+            FILE_PATH="$1"
+            SHA256="$2"
+        
+            if [ -f "$FILE_PATH" ]; then
+                TEST=$("${command_path}echo" "$SHA256  $FILE_PATH" | /usr/bin/sha256sum -c 2>&1) || return 1
+                return 0
+            fi
+        
+            return 1
+        }
+        
+        SetLockedDownPermissions() {
+            "${command_path}chmod" u+rwx "$1"
+            "${command_path}chmod" go-rwx "$1"
+            "${command_path}chown" "$(/usr/bin/whoami)":"$(/usr/bin/id --group --name)" "$1"
+        }
+        
+        CreateLockedDownFolder() {
+            "${command_path}mkdir" -p "$1"
+            SetLockedDownPermissions "$1"
+        }
+        
+        DownloadFile() {
+            SOURCE="$1"
+            DESTINATION="$2"
+            if [ -f /usr/bin/curl ]; then
+                /usr/bin/curl -s "$SOURCE" -o "$DESTINATION"
+            elif [ -f /usr/bin/wget ]; then
+                /usr/bin/wget -q "$SOURCE" -O "$DESTINATION"
+            else
+                ExitWithFailureMessage "Unable to download the source using 'curl' or 'wget'. Failing execution." 'PRINT_JSON'
+            fi
+        }
+        
+        IfRunningKernelVersion2() {
+            "${command_path}uname" -r | grep -q '^2\.' || return 1
+        }
+        
+        GetJQSHA256Hash() {
+            case "$1" in
+                'aarch64')
+                    "${command_path}echo" "a6e84e979b91b26763c700d4ba6c616554444bbbf0cf1863e96611b0e68b88f2"
+                    ;;
+                'armv6l')
+                    "${command_path}echo" "4717f1350a963e5ae5446e61eb21e3936754f84dd13586d494dcd6b497b267c1"
+                    ;;
+                'armv7l')
+                    "${command_path}echo" "e097be6c7ef954d581a359ad2d7aa4ec19c89bd3b9ab55919c826a1d30373a5c"
+                    ;;
+                'i686')
+                    "${command_path}echo" "062902c5a177cb80866d556a07e10331d9f8b8b676ffb1b7cd2985a9c2e539c8"
+                    ;;
+                'x86_64')
+                    "${command_path}echo" "15d1d1b093481c737603247a785731b7f32f3b4dccd63f77186de8bfe4f6fd68"
+                    ;;
+                'x86_64_kernel2')
+                    "${command_path}echo" "af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44"
+                    ;;
+                *)
+                    ExitWithFailureMessage "The CPU architecture '$1' is not supported. Failing execution." 'PRINT_JSON'
+                    ;;
+            esac
+        }
+        
+        RandomString() {
+            "${command_path}cat" /dev/urandom | /usr/bin/tr -dc 'a-zA-Z0-9' | /usr/bin/fold -w ${1:-32} | /usr/bin/head -n 1
+        }
+        
+        InstallJQ() {
+            CreateLockedDownFolder "$PRODUCT_PATH"
+        
+            CPU_ARCH=$("${command_path}uname" -m)
+            IfRunningKernelVersion2 && CPU_ARCH="${CPU_ARCH}_kernel2"
+            JQ_SHA256=$(GetJQSHA256Hash "$CPU_ARCH")
+        
+            CheckSha256FileHash "$JQ_BINARY" "$JQ_SHA256" || {
+                JQ_TEMP_BINARY="$PRODUCT_PATH/$(RandomString)"
+        
+                OS_NAME=$("${command_path}uname" -s)
+                REGION="us-east-1"
+                S3_BUCKET="aws-fleet-manager-artifacts-us-east-1"
+                S3_DNS="s3.us-east-1.amazonaws.com"
+                SOURCE="https://$S3_BUCKET.$S3_DNS/$JQ/$VERSION/$OS_NAME/$CPU_ARCH/$JQ"
+                DownloadFile "$SOURCE" "$JQ_TEMP_BINARY"
+        
+                CheckSha256FileHash "$JQ_TEMP_BINARY" "$JQ_SHA256" || {
+                    "${command_path}rm" --force "$JQ_TEMP_BINARY"
+                    ExitWithFailureMessage "Downloading the $JQ binary failed. Failing execution."
+                }
+        
+                "${command_path}mv" "$JQ_TEMP_BINARY" "$JQ_BINARY"
+            }
+        
+            SetLockedDownPermissions "$JQ_BINARY"
+        }
+
+        InstallJQ
+
+        ConvertBase64ToString() {
+            "${command_path}echo" "$1" | /usr/bin/base64 --decode
+        }
+        
+        ConvertStringToBase64() {
+            "${command_path}echo" "$1" | /usr/bin/base64 --wrap=0
+        }
+        
+        GetBase64EncodedGzipString() {
+            "${command_path}echo" "$1" | "${command_path}gzip" -f --best | /usr/bin/base64 --wrap=0
+        }
+        
+        GetResultAsString() {
+            TempString="$1"
+            ItemCount="$2"
+            OutputTooBig="$3"
+            EnableCompression="$4"
+            ForceEmptyNextToken="$5"
+            ConvertToBase64="$6"
+        
+            nextToken='""'
+            if [ "$OutputTooBig" == "0" ] && [ "$ItemCount" -ge 1 ] && [ "$ForceEmptyNextToken" != "Yes" ]; then
+                nextToken=$("${command_path}echo" "$TempString" | "$JQ_BINARY" '.[-1].null' | "$JQ_BINARY" -r .)
+            fi
+        
+            if [ "$ConvertToBase64" == "CONVERT_NEXT_TOKEN_TO_BASE64" ] && [ "$nextToken" != '""' ]; then
+                nextToken="\"$("${command_path}echo" "$nextToken" | /usr/bin/base64 --wrap=0)\""
+            fi
+        
+            data=$("${command_path}echo" ["$nextToken", "$TempString"] | "$JQ_BINARY" -c '{nextToken: .[0], results: .[1]}')
+        
+            if [ "$EnableCompression" == "Yes" ]; then
+                compressed=$(GetBase64EncodedGzipString "$data")
+                "$JQ_BINARY" -n -c "{data:\"$compressed\"}"
+            else
+                "${command_path}echo" "$data" | "$JQ_BINARY" -c '{data: .}'
+            fi
+        }
+        
+        GetMaximumOutputBytes() {
+            AllowTruncatedOutput="$1"
+            MAXIMUM_OUTPUT_SIZE=2500
+        
+            if [[ "$AllowTruncatedOutput" == 'Yes' ]]; then
+                "${command_path}echo" 0
+            else
+                padding=$("${command_path}echo" '{"data":{"nextToken":"","results":""}}' | /usr/bin/awk '{print length}')
+                "${command_path}echo" "$((MAXIMUM_OUTPUT_SIZE-padding))"
+            fi
+        }
+        
+        ProcessItems() {
+            ITEMS="$1"
+            CONVERT_TO_BASE64="$2"
+        
+            declare -a chunkedArray
+        
+            counter=0
+            chunksPerLoop=5
+            outputTooBig=0
+        
+            OIFS="$IFS"
+            IFS=$'\n'
+            for item in $("$JQ_BINARY" -c '.[]' <<< "$ITEMS"); do
+                if [[ "$outputTooBig" == 1 ]]; then
+                    break
+                fi
+        
+                chunkedArray+=("$item")
+        
+                if [ "$counter" -lt "$chunksPerLoop" ]; then
+                    counter=$((counter+1))
+                    continue
+                fi
+        
+                counter=0
+        
+                tempString=$("$JQ_BINARY" -c --slurp . <<< "${chunkedArray[@]}")
+                arrayLength=$("$JQ_BINARY" '. | length' <<< "$tempString")
+                tempContent=$(GetResultAsString "$tempString" "$arrayLength" "$outputTooBig" "$CompressOutput" 'No' "$CONVERT_TO_BASE64")
+        
+                tempContentLength=$("${command_path}echo" "$tempContent" | /usr/bin/awk '{print length}')
+                if [ "$MaximumOutputBytes" -eq 0 ] || [ "$tempContentLength" -le "$MaximumOutputBytes" ]; then
+                    outputContent=$tempContent
+                else
+                    outputTooBig=1
+                fi
+            done
+            IFS="$OIFS"
+        
+            # If the output is not too large, processing any remaining items
+            if [ $outputTooBig -eq 0 ]; then
+                tempString=$("$JQ_BINARY" -c --slurp . <<< "${chunkedArray[@]}")
+                arrayLength=$("$JQ_BINARY" '. | length' <<< "$tempString")
+                tempContent=$(GetResultAsString "$tempString" "$arrayLength" "$outputTooBig" "$CompressOutput" 'Yes' "$CONVERT_TO_BASE64")
+        
+                tempContentLength=$("${command_path}echo" "$tempContent" | /usr/bin/awk '{print length}')
+                if [ "$MaximumOutputBytes" -eq 0 ] || [ "$tempContentLength" -le "$MaximumOutputBytes" ]; then
+                    outputContent="$tempContent"
+                fi
+            fi
+        
+            "${command_path}echo" "$outputContent"
+        }
+
+        Id='{{ Id }}'
+        TerminateProcessTree='{{ TerminateProcessTree }}'
+        PERFORMACTION='{{ PerformAction }}'
+        TestPerformAction "$PERFORMACTION"
+        
+        # exit codes
+        INVALID_PROCESS_ID=101
+        FAILED_PROCESS_TREE_ERROR=102
+        FAILED_PROCESS_ERROR=103
+        
+        if "${command_path}ps" -p "$Id" > /dev/null 2>&1; then
+            if [[ "$TerminateProcessTree" = "Yes" ]] ; then
+                kill -9 -$(${command_path}ps -o pgid= "$Id" | grep -o '[0-9]*')
+                if [[ $? = 0 ]]; then
+                    ExitWithSuccessMessage "Ended the process tree with Id "$Id"." 'PRINT_JSON'
+                else
+                    ExitWithFailureMessageAndExitCode "Failed to end the process tree with Id "$Id"." "$FAILED_PROCESS_TREE_ERROR" 'PRINT_JSON'
+                fi
+            else
+                kill "$Id"
+                if [[ $? = 0 ]]; then
+                    ExitWithSuccessMessage "Ended the process with Id "$Id"." 'PRINT_JSON'
+                else
+                    ExitWithFailureMessageAndExitCode "Failed to end the process with Id "$Id"." "$FAILED_PROCESS_ERROR" 'PRINT_JSON'
+                fi
+            fi
+        else
+            ExitWithFailureMessageAndExitCode "The process with Id "$Id" doesn't exist." "$INVALID_PROCESS_ID" 'PRINT_JSON'
+        fi
+- precondition:
+    StringEquals:
+      - platformType
+      - MacOS
+  action: aws:runShellScript
+  name: InvokeMacOSScript
+  inputs:
+    runCommand:
+      - |
+        #!/bin/bash
+        set -e
+        
+        ExitWithFailureMessage() {
+            MESSAGE="$1"
+            JSON="$2"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                /bin/echo "{\"error\":\"$MESSAGE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit 1
+        }
+        
+        ExitWithSuccessMessage() {
+            /bin/echo "$1"
+            exit 0
+        }
+        
+        WriteStandardError() {
+            MESSAGE="$1"
+            (>&2 /bin/echo "$MESSAGE")
+        }
+
+        TestPerformAction() {
+            if [[ "$1" != "Yes" ]]; then
+                ExitWithFailureMessage "No action was taken because the PerformAction parameter is set to $1. To make the desired change, set this parameter to Yes."
+            fi
+        }
+
+        JQ="jq"
+        VERSION="1.6"
+        PRODUCT_PATH="/opt/amazon/ssm/fleet_manager"
+        JQ_BINARY="$PRODUCT_PATH/$JQ-$VERSION"
+        
+        CheckSha256FileHash() {
+            FILE_PATH="$1"
+            SHA256="$2"
+        
+            if [ -f "$FILE_PATH" ]; then
+                TEST=$(/bin/echo "$SHA256  $FILE_PATH" | /usr/bin/shasum -c 2>&1) || return 1
+                return 0
+            fi
+        
+            return 1
+        }
+        
+        SetLockedDownPermissions() {
+            /bin/chmod u+rwx "$1"
+            /bin/chmod go-rwx "$1"
+            /usr/sbin/chown "$(/usr/bin/whoami)":"$(/usr/bin/id -g -nr)" "$1"
+        }
+        
+        CreateLockedDownFolder() {
+            /bin/mkdir -p "$1"
+            SetLockedDownPermissions "$1"
+        }
+        
+        DownloadFile() {
+            SOURCE="$1"
+            DESTINATION="$2"
+            /usr/bin/curl -s "$SOURCE" -o "$DESTINATION"
+        }
+        
+        GetJQSHA256Hash() {
+            case "$1" in
+                'x86_64')
+                    /bin/echo "5c0a0a3ea600f302ee458b30317425dd9632d1ad8882259fcaf4e9b868b2b1ef"
+                    ;;
+                *)
+                    ExitWithFailureMessage "The CPU architecture '$1' is not supported. Failing execution." 'PRINT_JSON'
+                    ;;
+            esac
+        }
+        
+        RandomString() {
+            /usr/bin/openssl rand -base64 6
+        }
+        
+        InstallJQ() {
+            CreateLockedDownFolder "$PRODUCT_PATH"
+        
+            CPU_ARCH=$(/usr/bin/uname -m)
+            JQ_SHA256=$(GetJQSHA256Hash "$CPU_ARCH")
+        
+            CheckSha256FileHash "$JQ_BINARY" "$JQ_SHA256" || {
+                JQ_TEMP_BINARY="$PRODUCT_PATH/$(RandomString)"
+        
+                OS_NAME=$(/usr/bin/uname -s)
+                REGION="us-east-1"
+                S3_BUCKET="aws-fleet-manager-artifacts-us-east-1"
+                S3_DNS="s3.us-east-1.amazonaws.com"
+                SOURCE="https://$S3_BUCKET.$S3_DNS/$JQ/$VERSION/$OS_NAME/$CPU_ARCH/$JQ"
+                DownloadFile "$SOURCE" "$JQ_TEMP_BINARY"
+        
+                CheckSha256FileHash "$JQ_TEMP_BINARY" "$JQ_SHA256" || {
+                    /bin/rm -f "$JQ_TEMP_BINARY"
+                    ExitWithFailureMessage "Downloading the $JQ binary failed. Failing execution."
+                }
+        
+                /bin/mv "$JQ_TEMP_BINARY" "$JQ_BINARY"
+            }
+        
+            SetLockedDownPermissions "$JQ_BINARY"
+        }
+
+        InstallJQ
+
+        ConvertBase64ToString() {
+            /bin/echo "$1" | /usr/bin/base64 --decode
+        }
+        
+        ConvertStringToBase64() {
+            /bin/echo "$1" | /usr/bin/base64
+        }
+        
+        GetBase64EncodedGzipString() {
+            /bin/echo "$1" | /usr/bin/gzip -f --best | /usr/bin/base64
+        }
+        
+        GetResultAsString() {
+            TempString="$1"
+            ItemCount="$2"
+            OutputTooBig="$3"
+            EnableCompression="$4"
+            ForceEmptyNextToken="$5"
+            ConvertToBase64="$6"
+        
+            nextToken='""'
+            if [ "$OutputTooBig" == "0" ] && [ "$ItemCount" -ge 1 ] && [ "$ForceEmptyNextToken" != "Yes" ]; then
+                nextToken=$(/bin/echo "$TempString" | "$JQ_BINARY" '.[-1].null' | "$JQ_BINARY" -r .)
+            fi
+        
+            if [ "$ConvertToBase64" == "CONVERT_NEXT_TOKEN_TO_BASE64" ] && [ "$nextToken" != '""' ]; then
+                nextToken="\"$(/bin/echo "$nextToken" | /usr/bin/base64)\""
+            fi
+        
+            data=$(/bin/echo ["$nextToken", "$TempString"] | "$JQ_BINARY" -c '{nextToken: .[0], results: .[1]}')
+        
+            if [ "$EnableCompression" == "Yes" ]; then
+                compressed=$(GetBase64EncodedGzipString "$data")
+                "$JQ_BINARY" -n -c "{data:\"$compressed\"}"
+            else
+                /bin/echo "$data" | "$JQ_BINARY" -c '{data: .}'
+            fi
+        }
+        
+        GetMaximumOutputBytes() {
+            AllowTruncatedOutput="$1"
+            MAXIMUM_OUTPUT_SIZE=2500
+        
+            if [[ "$AllowTruncatedOutput" == 'Yes' ]]; then
+                /bin/echo 0
+            else
+                padding=$(/bin/echo '{"data":{"nextToken":"","results":""}}' | /usr/bin/awk '{print length}')
+                /bin/echo "$((MAXIMUM_OUTPUT_SIZE-padding))"
+            fi
+        }
+        
+        ProcessItems() {
+            ITEMS="$1"
+            CONVERT_TO_BASE64="$2"
+        
+            declare -a chunkedArray
+        
+            counter=0
+            chunksPerLoop=5
+            outputTooBig=0
+        
+            OIFS="$IFS"
+            IFS=$'\n'
+            for item in $("$JQ_BINARY" -c '.[]' <<< "$ITEMS"); do
+                if [[ "$outputTooBig" == 1 ]]; then
+                    break
+                fi
+        
+                chunkedArray+=("$item")
+        
+                if [ "$counter" -lt "$chunksPerLoop" ]; then
+                    counter=$((counter+1))
+                    continue
+                fi
+        
+                counter=0
+        
+                tempString=$("$JQ_BINARY" -c --slurp . <<< "${chunkedArray[@]}")
+                arrayLength=$("$JQ_BINARY" '. | length' <<< "$tempString")
+                tempContent=$(GetResultAsString "$tempString" "$arrayLength" "$outputTooBig" "$CompressOutput" 'No' "$CONVERT_TO_BASE64")
+        
+                tempContentLength=$(/bin/echo "$tempContent" | /usr/bin/awk '{print length}')
+                if [ "$MaximumOutputBytes" -eq 0 ] || [ "$tempContentLength" -le "$MaximumOutputBytes" ]; then
+                    outputContent="$tempContent"
+                else
+                    outputTooBig=1
+                fi
+            done
+            IFS="$OIFS"
+        
+            # If the output is not too large, processing any remaining items
+            if [ "$outputTooBig" -eq "0" ]; then
+                tempString=$("$JQ_BINARY" -c --slurp . <<< "${chunkedArray[@]}")
+                arrayLength=$("$JQ_BINARY" '. | length' <<< "$tempString")
+                tempContent=$(GetResultAsString "$tempString" "$arrayLength" "$outputTooBig" "$CompressOutput" 'Yes' "$CONVERT_TO_BASE64")
+        
+                tempContentLength=$(/bin/echo "$tempContent" | /usr/bin/awk '{print length}')
+                if [ "$MaximumOutputBytes" -eq 0 ] || [ "$tempContentLength" -le "$MaximumOutputBytes" ]; then
+                    outputContent="$tempContent"
+                fi
+            fi
+        
+            /bin/echo "$outputContent"
+        }
+
+        Id='{{ Id }}'
+        TerminateProcessTree='{{ TerminateProcessTree }}'
+        PERFORMACTION='{{ PerformAction }}'
+        TestPerformAction "$PERFORMACTION"
+        
+        # exit codes
+        INVALID_PROCESS_ID=151
+        FAILED_PROCESS_TREE_ERROR=152
+        FAILED_PROCESS_ERROR=153
+        
+        if "${command_path}ps" -p "$Id" > /dev/null 2>&1; then
+            if [[ "$TerminateProcessTree" = "Yes" ]] ; then
+                kill -9 -$(${command_path}ps -o pgid= "$Id" | grep -o '[0-9]*')
+                if [[ $? = 0 ]]; then
+                    ExitWithSuccessMessage "Ended the process tree with Id "$Id"." 'PRINT_JSON'
+                else
+                    ExitWithFailureMessageAndExitCode "Failed to end the process tree with Id "$Id"." "$FAILED_PROCESS_TREE_ERROR" 'PRINT_JSON'
+                fi
+            else
+                kill "$Id"
+                if [[ $? = 0 ]]; then
+                    ExitWithSuccessMessage "Ended the process tree with Id "$Id"." 'PRINT_JSON'
+                else
+                    ExitWithFailureMessageAndExitCode "Failed to end the process tree with Id "$Id"." "$FAILED_PROCESS_ERROR" 'PRINT_JSON'
+                fi
+            fi
+        else
+            ExitWithFailureMessageAndExitCode -Message "The process with Id "$Id" doesn't exist." "$INVALID_PROCESS_ID" 'PRINT_JSON'
+        fi
+

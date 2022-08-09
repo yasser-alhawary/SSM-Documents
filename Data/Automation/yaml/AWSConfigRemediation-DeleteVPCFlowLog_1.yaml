@@ -1,0 +1,76 @@
+schemaVersion: "0.3"
+description: |
+  ### Document name - AWSConfigRemediation-DeleteVPCFlowLog
+
+  ## What does this document do?
+  This runbook deletes the virtual private cloud (VPC) flow log you specify using the [DeleteVPCFlowLog](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DeleteFlowLogs.html) API.
+
+  ## Input Parameters
+  * AutomationAssumeRole: (Required) The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that allows Systems Manager Automation to perform the actions on your behalf.
+  * FlowLogId: (Required) The ID of the flow log that you want to delete.
+
+  ## Output Parameters
+  * DeleteFlowLogs.Output: The response of the DeleteFlowLogs API call.
+
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The Amazon Resource Name (ARN) of the AWS Identity and Access Management (IAM) role that allows Systems Manager Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:iam::\d{12}:role/[\w+=,.@-]+
+  FlowLogId:
+    type: String
+    description: (Required) The ID of the flow log that you want to delete.
+    allowedPattern: ^fl-[a-f0-9]+$
+outputs:
+  - DeleteFlowLogs.Output
+mainSteps:
+  - name: DeleteFlowLogs
+    action: aws:executeAwsApi
+    description: |
+      ## DeleteFlowLogs
+      Deletes the flow log you specify in the FlowLogId parameter.
+      ## Outputs
+      * Output: The response of the DeleteFlowLogs API call.
+    timeoutSeconds: 600
+    isEnd: false
+    inputs:
+      Service: ec2
+      Api: DeleteFlowLogs
+      FlowLogIds:
+        - "{{ FlowLogId }}"
+    outputs:
+      - Name: Output
+        Selector: $
+        Type: StringMap
+  - name: VerifyFlowLogsDeletion
+    action: "aws:executeScript"
+    description: |
+      ## VerifyFlowLogsDeletion
+      Verifies the flow log has been deleted.
+      ## Outputs
+      * Output: A success message or failure exception.
+    isEnd: true
+    timeoutSeconds: 600
+    inputs:
+      Runtime: python3.7
+      Handler: handler
+      InputPayload:
+        FlowLogId: "{{ FlowLogId }}"
+      Script: |-
+        import boto3
+        import botocore
+
+        def handler(event, context):
+            ec2_client = boto3.client("ec2")
+            flow_log_id = event["FlowLogId"]
+            response = ec2_client.describe_flow_logs(FlowLogIds=[flow_log_id])
+            if not response["FlowLogs"]:
+                return {"output": "Verification of delete vpc flow log is successful."}
+            error_message = f"VERIFICATION FAILED. VPC FLOW LOG {flow_log_id} DELETION UNSUCCESSFUL."
+            raise Exception(error_message)
+    outputs:
+      - Name: Output
+        Selector: $.Payload.output
+        Type: String
+

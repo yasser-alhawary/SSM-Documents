@@ -1,0 +1,68 @@
+{
+  "description" : "## Id\nAWSResilienceHub-ChangeLambdaConcurrencyLimitSOP_2020-10-26\n\n## Intent\nChange reserved concurrent executions limit of a Lambda function\n\n## Type\nSOP\n\n## Risk\nMedium\n\n## Requirements\n  * Lambda Function\n\n## Permissions required for AutomationAssumeRole\n  * lambda:PutFunctionConcurrency\n\n##### To log output to CloudWatch\n  * logs:CreateLogStream\n  * logs:PutLogEvents\n  * logs:DescribeLogGroups\n  * logs:DescribeLogStreams\n\n## Cancellation behavior\nFail\n\n## Inputs\n### (Required) AutomationAssumeRole\n  * type: String\n  * description: ARN of the IAM role with permissions listed above\n\n### (Required) LambdaARN\n  * type: String\n  * description: The ARN of the Lambda function\n\n### (Optional) NewReservedConcurrentExecutions\n  * type: Integer\n  * description: New reserved concurrent executions limit value\n  * default: 0\n\n## Details\nThe document checks the amount of available concurrent executions and sets the specified value for the\nspecified Lambda if it's possible.\n\n## Steps executed in normal flow\n  * RecordStartTime\n  * PutFunctionConcurrency\n  * OutputRecoveryTime\n\n## Outputs\n### SetReservedConcurrentExecutions.NewReservedConcurrencyValue\n  * type: Integer\n  * description: Updated reserved concurrency executions value for the specified Lambda function\n\n### OutputRecoveryTime.RecoveryTime\n  * type: Integer\n  * description: Execution time in seconds",
+  "schemaVersion" : "0.3",
+  "assumeRole" : "{{AutomationAssumeRole}}",
+  "outputs" : [ "OutputRecoveryTime.RecoveryTime", "PutFunctionConcurrency.NewReservedConcurrentExecutions" ],
+  "parameters" : {
+    "LambdaARN" : {
+      "type" : "String",
+      "description" : "(Required) The ARN of the Lambda function."
+    },
+    "NewReservedConcurrentExecutions" : {
+      "type" : "Integer",
+      "description" : "(Optional) New reserved concurrent executions",
+      "default" : 0
+    },
+    "AutomationAssumeRole" : {
+      "type" : "String",
+      "description" : "(Required) The ARN of the role that allows Automation to perform the actions on your behalf."
+    }
+  },
+  "mainSteps" : [ {
+    "name" : "RecordStartTime",
+    "description" : "Start recording execution time",
+    "action" : "aws:executeScript",
+    "outputs" : [ {
+      "Name" : "StartTime",
+      "Selector" : "$.Payload",
+      "Type" : "String"
+    } ],
+    "inputs" : {
+      "Runtime" : "python3.8",
+      "Handler" : "start_time",
+      "Script" : "import boto3\nimport logging\nfrom datetime import datetime, timezone\nimport time\n\nfrom botocore.exceptions import ClientError\nfrom dateutil import parser\n\nlogger = logging.getLogger()\nlogger.setLevel(logging.INFO)\n\n\n\ndef start_time(events, context):\n    return datetime.now(timezone.utc).isoformat()"
+    }
+  }, {
+    "name" : "PutFunctionConcurrency",
+    "description" : "Set new value for reserved concurrent executions",
+    "action" : "aws:executeAwsApi",
+    "inputs" : {
+      "Service" : "lambda",
+      "Api" : "PutFunctionConcurrency",
+      "FunctionName" : "{{ LambdaARN }}",
+      "ReservedConcurrentExecutions" : "{{ NewReservedConcurrentExecutions }}"
+    },
+    "outputs" : [ {
+      "Name" : "NewReservedConcurrentExecutions",
+      "Selector" : "$.ReservedConcurrentExecutions",
+      "Type" : "Integer"
+    } ]
+  }, {
+    "name" : "OutputRecoveryTime",
+    "description" : "Calculate execution time",
+    "action" : "aws:executeScript",
+    "outputs" : [ {
+      "Name" : "RecoveryTime",
+      "Selector" : "$.Payload",
+      "Type" : "Integer"
+    } ],
+    "inputs" : {
+      "Runtime" : "python3.8",
+      "Handler" : "recovery_time",
+      "Script" : "import boto3\nimport logging\nfrom datetime import datetime, timezone\nimport time\n\nfrom botocore.exceptions import ClientError\nfrom dateutil import parser\n\nlogger = logging.getLogger()\nlogger.setLevel(logging.INFO)\n\n\n\ndef recovery_time(events, context):\n    return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds",
+      "InputPayload" : {
+        "StartTime" : "{{ RecordStartTime.StartTime }}"
+      }
+    }
+  } ]
+}

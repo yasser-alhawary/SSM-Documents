@@ -1,0 +1,116 @@
+#
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+  ### Document Name - AWS-SetRequiredTags
+
+  ## What does this document do?
+  This document adds the specified tags to one or more AWS resources.
+
+  ## Notes
+  * Not all resources support tagging. For a list of services that support tagging, see the [Resource Groups Tagging API Reference](https://docs.aws.amazon.com/resourcegroupstagging/latest/APIReference/Welcome.html).
+  * Each resource can have up to 50 tags. For other limits, see the [Tag Naming and Usage Conventions in the AWS General Reference](https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html#tag-conventions).
+  * You can only tag resources that are located in the current region for the AWS account.
+  * To add tags to a resource, you need the necessary permissions for the service that the resource belongs to as well as permissions for adding tags. For more information see the [Resource Groups Tagging API Reference](https://docs.aws.amazon.com/resourcegroupstagging/latest/APIReference/Welcome.html).
+  * This document will execute successfully even if setting tags fails for one or more resources. Please check the execution output for complete information on the successes and failures.
+
+  ## Input Parameters
+  * RequiredTags: (Required) The tags to add to the resources.
+  * ResourceARNs: (Required) The ARNs of the resources to add the tags to.
+  * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  * SetRequiredTags.SuccessfulResources: A list of the resources that were successfully tagged.
+  * SetRequiredTags.FailedResources : A mapList of the resources where tagging failed and the reason for the failure.
+
+schemaVersion: '0.3'
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  RequiredTags:
+    type: StringMap
+    description: (Required) The tags to add to the resources.
+    displayType: textarea
+  ResourceARNs:
+    type: StringList
+    description: (Required) The ARNs of the resources to add the tags to.
+    minItems: 1
+    displayType: textarea
+    allowedPattern: ^(.*\S.*)|^$
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::\d{12}:role\/[\w+=,.@_\/-]+|^$'
+outputs:
+  - SetRequiredTags.SuccessfulResources
+  - SetRequiredTags.FailedResources
+mainSteps:
+  - name: SetRequiredTags
+    action: 'aws:executeScript'
+    description: |
+      ## SetRequiredTags
+      Adds the specified tags to the target resources.
+      ## Inputs
+      * RequiredTags: The tags to add to the resources.
+      * ResourceARNs: The ARNs of the resources to add the tags to.
+      ## Outputs
+      * SuccessfulResources: A list of the resources that were successfully tagged.
+      * FailedResources: A mapList of the resources where tagging failed and the reason for the failure.
+    onFailure: Abort
+    isCritical: true
+    timeoutSeconds: 600
+    isEnd: true
+    inputs:
+      Runtime: python3.7
+      Handler: set_required_tags_handler
+      InputPayload:
+        RequiredTags: '{{RequiredTags}}'
+        ResourceARNs: '{{ResourceARNs}}'
+      Script: |
+        import json
+        import boto3
+
+        def set_required_tags_handler(event, context):
+          client = boto3.client('resourcegroupstaggingapi')
+
+          successesResources = []
+          FailedResources = []
+          resourcesArn = event["ResourceARNs"]
+          tags = event["RequiredTags"]
+
+          for arn in resourcesArn:
+              try:
+                  response = client.tag_resources(ResourceARNList = [arn], Tags = tags)
+                  successesResources.append(arn)
+
+              except Exception as e:
+                errorMsg = str(e)
+                FailedResources.append({'ResourceArn': arn , "error": errorMsg})
+
+          out = {
+              "SuccessesResources": successesResources,
+              "FailedResources": FailedResources
+          }
+          return out
+    outputs:
+      - Name: SuccessfulResources
+        Selector: $.Payload.SuccessesResources
+        Type: StringList
+      - Name: FailedResources
+        Selector: $.Payload.FailedResources
+        Type: MapList
+

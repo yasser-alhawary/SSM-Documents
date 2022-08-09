@@ -1,0 +1,165 @@
+#
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+  ### Document Name - AWS-ChangeDDBRWCapacityMode
+
+  ## What does this document do?
+  This document changes the read/write capacity mode for one or more DynamoDB tables to on-demand mode or provisioned mode.
+
+  ## Input Parameters
+  * TableNames: (Required) Comma separated list of DynamoDB table names to change the read/write capacity mode for.
+  * CapacityMode: (Required) The desired read/write capacity mode. When switching from on-demand(pay-per-request) to provisioned capacity, initial provisioned capacity values must be set. The initial provisioned capacity values are estimated based on the consumed read and write capacity of your table and global secondary indexes over the past 30 minutes.
+    * Allowed Values: PROVISIONED | PAY_PER_REQUEST
+  * ReadCapacityUnits: (Optional) The maximum number of strongly consistent reads consumed per second before DynamoDB returns a ThrottlingException.
+  * WriteCapacityUnits: (Optional) The maximum number of writes consumed per second before DynamoDB returns a ThrottlingException.
+  * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  * ChangeDDBRWCapacityMode.SuccessesTables: List of DynamoDB table names where the capacity mode was successfully changed.
+  * ChangeDDBRWCapacityMode.FailedTables: Maplist of DynamoDB table names where changing the capacity mode failed and the reason for the failure.
+
+  ## Minimum Permissions Required
+  * `dynamodb:DescribeTable` on the target DynamoDB table.
+  * `dynamodb:UpdateTable` on the target DynamoDB table.
+
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  TableNames:
+    type: StringList
+    description: (Required) Comma separated string list for Dynamo DB table names to change Read/write capacity mode  to on-demand mode or provisioned mode.
+    allowedPattern: '[a-zA-Z0-9_.-]+'
+  CapacityMode:
+    type: String
+    description: (Required) The desired read/write capacity mode.
+    allowedValues:
+      - PROVISIONED
+      - PAY_PER_REQUEST
+  ReadCapacityUnits:
+    type: Integer
+    description:  The maximum number of strongly consistent reads consumed per second before DynamoDB returns a ThrottlingException.
+    default: 0
+    allowedPattern: '^[0-9]\d*$'
+  WriteCapacityUnits:
+    type : Integer
+    description: The maximum number of writes consumed per second before DynamoDB returns a ThrottlingException.
+    default: 0
+    allowedPattern: '^[0-9]\d*$'
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::\d{12}:role\/[\w+=,.@_\/-]+|^$'
+outputs:
+  - ChangeDDBRWCapacityMode.SuccessesTables
+  - ChangeDDBRWCapacityMode.FailedTables
+mainSteps:
+- name: ChangeDDBRWCapacityMode
+  action: aws:executeScript
+  onFailure: Abort
+  isCritical: true
+  isEnd: true
+  timeoutSeconds: 600
+  description: |
+    ## RestrictIncomingTrafficTemplate
+    Changes DynamoDB databases' read/write capacity mode to the desired setting.
+    ## Inputs
+    * TableNames: The list of DynamoDB tables to change the read/write capacity mode for.
+    * CapacityMode: The desired read/write capacity mode for the DynamoDB tables
+    * ReadCapacityUnits: The maximum number of strongly consistent reads consumed per second before DynamoDB returns a ThrottlingException.
+    * WriteCapacityUnits: The maximum number of writes consumed per second before DynamoDB returns a ThrottlingException.
+    ## Outputs
+    * SuccessesTables: List of DynamoDB table names where the capacity mode was successfully changed.
+    * FailedTables: Maplist of DynamoDB table names where changing the capacity mode failed and the reason for the failure.
+  inputs:
+    Runtime: python3.7
+    Handler: change_DDB_RW_capacity
+    InputPayload:
+        TableNames: '{{TableNames}}'
+        CapacityMode: '{{CapacityMode}}'
+        ReadCapacityUnits: '{{ReadCapacityUnits}}'
+        WriteCapacityUnits : '{{WriteCapacityUnits}}'
+    Script: |
+        import json
+        import boto3
+
+        client = boto3.client('dynamodb')
+
+        def change_DDB_RW_capacity(event, context):
+            TableNames = event['TableNames']
+            CapacityMode = event['CapacityMode']
+            if 'ReadCapacityUnits' in event.keys():
+                ReadCapacityUnits = event['ReadCapacityUnits']
+            else:
+                ReadCapacityUnits = 0
+
+            if 'WriteCapacityUnits' in event.keys():
+                WriteCapacityUnits = event['WriteCapacityUnits']
+            else:
+                WriteCapacityUnits = 0
+            FailedTables = []
+            SuccessesTable = []
+            for TableName in TableNames:
+              try:
+                  currentMode = get_current_capacity_mode(TableName)
+                  if(currentMode.lower() == CapacityMode.lower()):
+                      raise Exception("Table " + " already in " + currentMode + " mode.")
+                  if CapacityMode.lower() == "PROVISIONED".lower():
+                      if ReadCapacityUnits > 0 and WriteCapacityUnits > 0:
+                          response = client.update_table(
+                              TableName = TableName,
+                              BillingMode = 'PROVISIONED',
+                              ProvisionedThroughput = {
+                                  'ReadCapacityUnits': ReadCapacityUnits,
+                                  'WriteCapacityUnits': WriteCapacityUnits
+                              }
+                          )
+                      else:
+                          raise Exception("You must specify Read/Write capacity units in case of provisioned mode.")
+                  elif CapacityMode.lower() == "PAY_PER_REQUEST".lower():
+                      response = client.update_table(
+                          TableName=TableName,
+                          BillingMode='PAY_PER_REQUEST'
+                      )
+                  else:
+                      raise Exception("No capacity mode called: " + CapacityMode)
+                  SuccessesTable.append(TableName)
+              except Exception as e:
+                  FailedTables.append({"TableName" : TableName , "errorMsg" : str(e)})
+              out = {
+                  "SuccessesTables":SuccessesTable,
+                  "FailedTables":FailedTables
+              }
+            return out
+
+        def get_current_capacity_mode(TableName):
+            TableDetails = client.describe_table(TableName = TableName)
+            current_RCU = TableDetails.get('Table').get('ProvisionedThroughput').get('ReadCapacityUnits')
+            current_WCU = TableDetails.get('Table').get('ProvisionedThroughput').get('WriteCapacityUnits')
+            if current_RCU == 0 or current_WCU == 0 :
+                return 'PAY_PER_REQUEST'
+            else :
+                return 'PROVISIONED'
+  outputs:
+    - Name: SuccessesTables
+      Selector: $.Payload.SuccessesTables
+      Type: StringList
+    - Name: FailedTables
+      Selector: $.Payload.FailedTables
+      Type: MapList
+

@@ -1,0 +1,83 @@
+schemaVersion: "0.3"
+description: |
+   ### Document Name - AWSConfigRemediation-DeleteDynamoDbTable
+
+   ## What does this document do?
+   This document deletes a given Amazon DynamoDB table using the [DeleteTable](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DeleteTable.html) API.
+
+   ## Input Parameters
+   * AutomationAssumeRole: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+   * TableName: (Required) The name of the table to delete.
+
+   ## Output Parameters
+   * DeleteDynamoDbTable.Output: The standard HTTP response from the DeleteTable API.
+   * VerifyDynamoDbTableDeletion.Output: Success message or failure exception.
+
+assumeRole: "{{ AutomationAssumeRole }}"
+parameters:
+  AutomationAssumeRole:
+    type: String
+    description: (Required) The ARN of the role that allows Automation to perform the actions on your behalf.
+    allowedPattern: ^arn:(aws[a-zA-Z-]*)?:iam::\d{12}:role/[\w+=,.@-]+
+  TableName:
+    type: String
+    description: (Required) The name of the table to delete.
+    allowedPattern: ^[\w.-]{3,255}$
+outputs:
+  - DeleteDynamoDbTable.Output
+  - VerifyDynamoDbTableDeletion.Output
+mainSteps:
+  -
+    name: DeleteDynamoDbTable
+    action: "aws:executeAwsApi"
+    description: |
+      ## DeleteDynamoDbTable
+      Deletes the given Amazon DynamoDB table.
+      ## Outputs
+      * Output: The standard HTTP response from the DeleteTable API.
+    timeoutSeconds: 600
+    isEnd: false
+    inputs:
+      Service: dynamodb
+      Api: DeleteTable
+      TableName: "{{ TableName }}"
+    outputs:
+      - Name: Output
+        Selector: $
+        Type: StringMap
+  -
+    name: VerifyDynamoDbTableDeletion
+    action: "aws:executeScript"
+    description: |
+      ## VerifyDynamoDbTableDeletion
+      Verifies that the Amazon DynamoDB table has been successfully deleted.
+      ## Outputs
+      * Output: Success message or failure exception.
+    isEnd: true
+    timeoutSeconds: 600
+    inputs:
+      Runtime: python3.6
+      Handler: handler
+      InputPayload:
+        TableName: "{{ TableName }}"
+      Script: |-
+        import boto3
+        import botocore
+
+        def handler(event, context):
+            dynamodb_client = boto3.client("dynamodb")
+            table_name = event["TableName"]
+            try:
+              dynamodb_waiter = dynamodb_client.get_waiter("table_not_exists")
+              dynamodb_waiter.wait(TableName=table_name)
+              dynamodb_client.describe_table(TableName=table_name)
+            except botocore.exceptions.WaiterError:
+              error_message = f"VERIFICATION FAILED. DYNAMODB TABLE {table_name} NOT DELETED."
+              raise Exception(error_message)
+            except dynamodb_client.exceptions.ResourceNotFoundException:
+                return {"output": "Verification of 'DeleteDynamoDbTable' step successful."}
+    outputs:
+      - Name: Output
+        Selector: $.Payload.output
+        Type: String
+

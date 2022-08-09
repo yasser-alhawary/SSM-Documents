@@ -1,0 +1,339 @@
+---
+schemaVersion: '1.0'
+description: "Document to retrieve a file's content"
+sessionType: InteractiveCommands
+parameters:
+  Path:
+    type: String
+    description: The file path to process
+    allowedPattern: ^\w:$|^\w:\\[^"'|\r\n]*$|^\/[^"'|\r\n]*$|^([A-Za-z0-9-_\/+]{4})*([A-Za-z0-9-_\/+]{4}|[A-Za-z0-9-_\/+]{3}=|[A-Za-z0-9-_\/+]{2}==)$
+  TailFile:
+    type: String
+    description: (Optional) If set to 'Yes', the file's content will be continuously monitored.
+    default: 'No'
+    allowedValues:
+      - 'No'
+      - 'Yes'
+  NumberOfLinesToReturn:
+    type: String
+    description: (Optional) The number of lines to return when retrieving a files content. If set to '0' then all lines are returned. This parameter ignored when 'TailFile' is set to 'Yes'.
+    default: '0'
+    allowedPattern: '^\d*$'
+  PrintInteractiveStatements:
+    type: String
+    description: (Optional) If set to 'No', the execution will not print text that indicates a keystoke is required to end execution.
+    default: 'Yes'
+    allowedValues:
+      - 'No'
+      - 'Yes'
+properties:
+  windows:
+    commands: |
+        $ErrorActionPreference = 'Stop'
+        
+        Function ParseInputParameter {
+            param (
+                [string]$Name,
+                [string]$Value,
+                [string]$Regex
+            )
+        
+            $ValidParameterRegex = '^--%[ +{|{].*}( +)?$'
+            if ($Value -notmatch $ValidParameterRegex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            }
+            $parameterValue = $Value.Substring(3)
+        
+            $trimmedParameterValue = $parameterValue.TrimStart().TrimEnd()
+            $trimmedParameterValue = $trimmedParameterValue.Substring(1)
+            $trimmedParameterValue = $trimmedParameterValue.Substring(0, $trimmedParameterValue.Length - 1)
+        
+            if ($Regex -and $trimmedParameterValue -notmatch $Regex) {
+                ExitWithFailureMessage -Message "Invalid syntax for the parameter $Name"
+            } else {
+                $trimmedParameterValue
+            }
+        }
+        
+        function ExitWithFailureMessage {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PrintJson) {ConvertTo-Json -InputObject @{error = $errorMessage} -Compress}
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit(1)
+        }
+        
+        function ExitWithFailureMessageAndExitCode {
+            param (
+                [string]$Message,
+                [string]$ExceptionMessage,
+                [int]$ExitCode,
+                [Switch]$PrintJson
+            )
+            if ([string]::IsNullOrWhitespace($ExceptionMessage)) {
+                $errorMessage = $Message
+            } else {
+                $errorMessage = '{0} {1}' -f $Message, $ExceptionMessage
+            }
+            if ($PSBoundParameters.ContainsKey('ExitCode') -eq $true) {
+                $exitCode = $ExitCode
+            } else {
+                $exitCode = 1
+            }
+            if ($PrintJson) {
+                $ErrorObject = @{
+                    error = $errorMessage
+                    exitCode = $exitCode
+                }
+                ConvertTo-Json -InputObject $ErrorObject -Compress
+            }
+            WriteStandardError -Message $errorMessage
+            [System.Environment]::Exit($exitCode)
+        }
+        
+        function ExitWithSuccessMessage {
+            param (
+                [string]$Message
+            )
+            Write-Host $Message
+            [System.Environment]::Exit(0)
+        }
+        
+        function WriteStandardError {
+            param (
+                [string]$Message
+            )
+            $Host.UI.WriteErrorLine($Message)
+        }
+
+        $Path = Write-Output --%{{{ Path }}}
+        $Path = ParseInputParameter -Name 'Path' -Value $Path
+        
+        $TailFile = Write-Output --%{{{ TailFile }}}
+        $TailFile = ParseInputParameter -Name 'TailFile' -Value $TailFile
+        
+        $NumberOfLinesToReturn = Write-Output --%{{{ NumberOfLinesToReturn }}}
+        $NumberOfLinesToReturn = ParseInputParameter -Name 'NumberOfLinesToReturn' -Value $NumberOfLinesToReturn
+        
+        $PrintInteractiveStatements = Write-Output --%{{{ PrintInteractiveStatements }}}
+        $PrintInteractiveStatements = ParseInputParameter -Name 'PrintInteractiveStatements' -Value $PrintInteractiveStatements
+        
+        function ConvertBase64ToString {
+            param (
+                [string]$Base64
+            )
+            $bytes = [System.Convert]::FromBase64String($Base64)
+            [System.Text.Encoding]::UTF8.GetString($bytes)
+        }
+        
+        $base64Regex = '^([A-Za-z0-9-_\/+]{4})*([A-Za-z0-9-_\/+]{4}|[A-Za-z0-9-_\/+]{3}=|[A-Za-z0-9-_\/+]{2}==)$'
+        if ($Path -match $base64Regex) {
+            $Path = ConvertBase64ToString -Base64 $Path
+        }
+        
+        if (Test-Path -Path $Path -PathType 'Leaf') {
+            Write-Host "Getting the file content for $Path"
+            if ($TailFile -eq 'Yes') {
+                Get-Content -Path $Path -Tail 10 -Wait
+            } else {
+                if ($NumberOfLinesToReturn -eq 0) {
+                    Get-Content -Path $Path -Raw
+                } else {
+                    Get-Content -Path $Path | Select-Object -First $NumberOfLinesToReturn
+                }
+            }
+        } else {
+            ExitWithFailureMessage -Message 'The specified path is invalid.' -PrintJson
+        }
+        if ($TailFile -ne 'Yes') {
+            # Pause execution to ensure all file content is returned through the session
+            if ($PrintInteractiveStatements -eq 'Yes') {
+                Write-Host ""
+                Pause
+            } else {
+                Read-Host
+            }
+        }
+    runAsElevated: true
+  linux:
+    commands: |
+        #!/bin/bash
+        set -e
+        
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release
+            OS_RELEASE="$ID${VERSION_ID:+.${VERSION_ID}}"
+        elif [ -f /etc/centos-release ]; then
+            OS_RELEASE="centos.$(awk '{print $3}' /etc/centos-release)"
+        elif [ -f /etc/redhat-release ]; then
+            OS_RELEASE="rhel.$(lsb_release -r | awk '{print $2}')"
+        fi
+        
+        case "$OS_RELEASE" in
+            amzn.2|centos.7*|centos.8*|fedora.*|rhel.7*|rhel.8*|sles*)
+                command_path='/usr/bin/'
+                ;;
+            amzn.2018.03|centos.6*|debian.*|rhel.6*|ubuntu.16*|ubuntu.18*|ubuntu.20*)
+                command_path='/bin/'
+                ;;
+            *)
+                # Catch all without the full path for untested platforms
+                command_path=''
+        esac
+        
+        ExitWithFailureMessage() {
+            MESSAGE="$1"
+            JSON="$2"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{\"error\":\"$MESSAGE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit 1
+        }
+        
+        # exit codes. 0-100 are reserved exit codes. 101-150 codes are for linux, 151-200 are for macos and 200 onwards codes are for windows.
+        ExitWithFailureMessageAndExitCode() {
+            MESSAGE="$1"
+            EXITCODE="$2"
+            JSON="$3"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                "${command_path}echo" "{\"error\":\"$MESSAGE\",\"exitCode\":\"$EXITCODE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit "$EXITCODE"
+        }
+        
+        ExitWithSuccessMessage() {
+            "${command_path}echo" "$1"
+            exit 0
+        }
+        
+        WriteStandardError() {
+            MESSAGE="$1"
+            (>&2 "${command_path}echo" "$MESSAGE")
+        }
+
+        FILEPATH='{{ Path }}'
+        TAILFILE='{{ TailFile }}'
+        NUMBEROFLINESTORETURN='{{ NumberOfLinesToReturn }}'
+        PRINTINTERACTIVESTATEMENTS='{{ PrintInteractiveStatements }}'
+        
+        ConvertBase64ToString() {
+            "${command_path}echo" "$1" | /usr/bin/base64 --decode
+        }
+        
+        base64Regex='^(?!\/)([A-Za-z0-9-_\/+]{4})*([A-Za-z0-9-_\/+]{4}|[A-Za-z0-9-_\/+]{3}=|[A-Za-z0-9-_\/+]{2}==)$'
+        linuxPathRegex='^\/[^"''|\r\n]*$'
+        
+        if [ $("${command_path}echo" "$FILEPATH" | "${command_path}grep" -P "$base64Regex") ]; then
+            FILEPATH=$(ConvertBase64ToString "$FILEPATH")
+        fi
+        
+        if [[ ! $("${command_path}echo" "$FILEPATH" | "${command_path}grep" -P "$linuxPathRegex") ]]; then
+            ExitWithFailureMessage "The specified path "$FILEPATH" is invalid." 'PRINT_JSON'
+        fi
+        
+        if [ -f "$FILEPATH" ]; then
+            "${command_path}echo" "Getting the file content for $FILEPATH"
+            if [[ "$TAILFILE" == "Yes" ]]; then
+                /usr/bin/tail -f "$FILEPATH"
+            else
+                if [ "$NUMBEROFLINESTORETURN" == "0" ]; then
+                    "${command_path}cat" "$FILEPATH"
+                else
+                    /usr/bin/head -n "$NUMBEROFLINESTORETURN" "$FILEPATH"
+                fi
+            fi
+        else
+            ExitWithFailureMessage 'The specified path is invalid.'
+        fi
+        if [[ "$TAILFILE" != "Yes" ]]; then
+            if [[ "$PRINTINTERACTIVESTATEMENTS" == "Yes" ]]; then
+                "${command_path}echo" ""
+                "${command_path}echo" "Press Enter to continue...:"
+            fi
+            # Pause execution to ensure all file content is returned through the session
+            if [ -f /usr/bin/read ]; then
+                /usr/bin/read
+            else
+                read
+            fi
+        fi
+    runAsElevated: true
+  macos:
+    commands: |
+        #!/bin/bash
+        set -e
+        
+        ExitWithFailureMessage() {
+            MESSAGE="$1"
+            JSON="$2"
+            if [[ "$JSON" == "PRINT_JSON" ]]; then
+                /bin/echo "{\"error\":\"$MESSAGE\"}"
+            fi
+            WriteStandardError "$MESSAGE"
+            exit 1
+        }
+        
+        ExitWithSuccessMessage() {
+            /bin/echo "$1"
+            exit 0
+        }
+        
+        WriteStandardError() {
+            MESSAGE="$1"
+            (>&2 /bin/echo "$MESSAGE")
+        }
+
+        FILEPATH='{{ Path }}'
+        TAILFILE='{{ TailFile }}'
+        NUMBEROFLINESTORETURN='{{ NumberOfLinesToReturn }}'
+        PRINTINTERACTIVESTATEMENTS='{{ PrintInteractiveStatements }}'
+        
+        ConvertBase64ToString() {
+            /bin/echo "$1" | /usr/bin/base64 --decode
+        }
+        
+        base64Regex='^(?!\/)([A-Za-z0-9-_\/+]{4})*([A-Za-z0-9-_\/+]{4}|[A-Za-z0-9-_\/+]{3}=|[A-Za-z0-9-_\/+]{2}==)$'
+        pathRegex='^\/[^"''|\r\n]*$'
+        
+        if [ $(/bin/echo "$FILEPATH" | /usr/bin/perl -ne "print if /$base64Regex/") ]; then
+            FILEPATH=$(ConvertBase64ToString "$FILEPATH")
+        fi
+        
+        if [[ ! $("${command_path}echo" "$FILEPATH" | "${command_path}grep" -P "$pathRegex") ]]; then
+            ExitWithFailureMessage "The specified path "$FILEPATH" is invalid." 'PRINT_JSON'
+        fi
+        
+        if [ -f "$FILEPATH" ]; then
+            /bin/echo "Getting the file content for $FILEPATH"
+            if [[ "$TAILFILE" == "Yes" ]]; then
+                /usr/bin/tail -f "$FILEPATH"
+            else
+                if [ "$NUMBEROFLINESTORETURN" == "0" ]; then
+                    /bin/cat "$FILEPATH"
+                else
+                    /usr/bin/head -n "$NUMBEROFLINESTORETURN" "$FILEPATH"
+                fi
+            fi
+        else
+            ExitWithFailureMessage 'The specified path is invalid.'
+        fi
+        if [[ "$TAILFILE" != "Yes" ]]; then
+            if [[ "$PRINTINTERACTIVESTATEMENTS" == "Yes" ]]; then
+                /bin/echo ""
+                /bin/echo "Press Enter to continue...:"
+            fi
+            # Pause execution to ensure all file content is returned through the session
+            /usr/bin/read
+        fi
+    runAsElevated: true
+

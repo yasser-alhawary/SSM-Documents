@@ -1,0 +1,97 @@
+#
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+  ### Document Name - AWS-EnableCloudTrailCloudWatchLogs
+
+  ## What does this document do?
+  This document updates the configuration of one or more CloudTrail trails and enables sending the events to a CloudWatch log group.
+
+  ## Input Parameters
+  * TrailNames: (Required) A comma separated list of the names of the targeted CloudTrail trails.
+  * CloudWatchLogsLogGroupArn: (Required) The ARN of the CloudWatch log group where the CloudTrail logs will be delivered.
+  * CloudWatchLogsRoleArn: (Required) The ARN of the role for the CloudWatch Logs endpoint to assume to write to the specified log group.
+  * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  This document has no outputs.
+
+  ## Minimum Permissions Required
+  * `cloudtrail:UpdateTrail` on the targeted trails
+  * `iam:PassRole` on the CloudWatchLogsRoleArn
+
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  TrailNames:
+    type: StringList
+    description: (Required) A comma separated list of the names of the targeted CloudTrail trails.
+    allowedPattern: '^[\w][\w\.,\-_/]+[\w]$'
+  CloudWatchLogsLogGroupArn:
+    type: String
+    description: (Required) The ARN of the CloudWatch log group where the CloudTrail logs will be delivered.
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:logs:[a-z]{2}-[a-z]*-[0-9]{1}:\d{12}:log-group:[\.\-_/#A-Za-z0-9]+:\*'
+  CloudWatchLogsRoleArn:
+    type: String
+    description: (Required) The ARN of the role for the CloudWatch Logs endpoint to assume to write to the specified log group.
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::\d{12}:role\/[\w+=,.@_\/-]+|^$'
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::\d{12}:role\/[\w+=,.@_\/-]+|^$'
+mainSteps:
+  - name: EnableCloudTrailCloudWatchLogs
+    action: 'aws:executeScript'
+    timeoutSeconds: 300
+    onFailure: Abort
+    isCritical: true
+    isEnd: true
+    description: |
+      ## EnableCloudTrailCloudWatchLogs
+      Updates the targeted trails to deliver their logs to the specified log group.
+      ## Inputs
+      * TrailNames: The list of the names of the targeted CloudTrail trails.
+      * LogGroupArn: The ARN of the log group where the CloudTrail logs will be delivered.
+      * CwRoleArn: The ARN of the role for the CloudWatch Logs endpoint to assume to write to the specified log group.
+      ## Outputs
+      This step has no outputs.
+    inputs:
+      Runtime: python3.7
+      Handler: enable_ct_cw_logs_handler
+      InputPayload:
+        TrailNames: '{{TrailNames}}'
+        LogGroupArn: '{{CloudWatchLogsLogGroupArn}}'
+        CwRoleArn: '{{CloudWatchLogsRoleArn}}'
+      Script: |
+        import boto3
+
+        def enable_ct_cw_logs_handler(event, bucket):
+          trail_names = event["TrailNames"]
+          log_group = event["LogGroupArn"]
+          role_arn = event["CwRoleArn"]
+          client = boto3.client('cloudtrail')
+
+          for trail_name in trail_names:
+            try:
+              client.update_trail(Name = trail_name, CloudWatchLogsLogGroupArn = log_group, CloudWatchLogsRoleArn = role_arn)
+              print("CloudWatch Logs are now enabled for the trail '{}' and logs will be delivered to the log group: '{}'.".format(trail_name, log_group))
+            except Exception as e:
+              errorMsg = str(e)
+              raise Exception("Unable to perform the required action on trail '{}'. error: '{}'.".format(trail_name, errorMsg))
+

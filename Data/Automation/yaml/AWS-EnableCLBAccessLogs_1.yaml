@@ -1,0 +1,141 @@
+#
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+---
+description: |
+  ### Document Name - AWS-EnableCLBAccessLogs
+
+  ## What does this document do?
+  This document enables access logs for Classic Load Balancers.
+
+  ## Notes
+  * You must attach a policy to the S3 bucket used to store the logs. Please see the following link for more details:
+  (https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/enable-access-logs.html#attach-bucket-policy)
+  * This document will execute successfully even if enabling access logs fails for one or more load balancers. Please check the execution output for complete information on successes and failures.
+
+  ## Input Parameters
+  * LoadBalancerNames: (Required) Comma separated list of Classic Load Balancers to enable access logs for.
+  * S3BucketName: (Required) The name of the Amazon S3 bucket where the access logs are stored.
+  * EmitInterval: (Optional) The interval for publishing the access logs in minutes.
+    * Allowed Values: 5 | 60
+    * Default: 60
+  * S3BucketPrefix: (Optional) The logical hierarchy you created for your Amazon S3 bucket, for example `my-bucket-prefix/prod`. If the prefix is not provided, the log is placed at the root level of the bucket.
+  * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output Parameters
+  * EnableCLBAccessLogs.SuccessesLoadBalancers: List of load balancer names where access logs where successfully enabled.
+  * EnableCLBAccessLogs.FailedLoadBalancers: MapList of load balancer names where enabling access logs failed and the reason for the failure.
+
+  ## Minimum Permissions Required
+  * `elasticloadbalancing:ModifyLoadBalancerAttributes` permission on the targeted classic load balancers.
+
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  LoadBalancerNames:
+    type: StringList
+    description: (Required) Comma separated list of Classic Load Balancers to enable access logs for.
+  EmitInterval:
+    type: Integer
+    description: (Optional) The interval for publishing the access logs in minutes. Default Value - 60 minutes.
+    default: 60
+    allowedValues:
+      - 5
+      - 60
+  S3BucketName:
+    type: String
+    description: (Required) The name of the Amazon S3 bucket where the access logs are stored.
+    allowedPattern: '(?=^.{3,63}$)(?!^(\\d{1,3}\\.){3}\\d{1,3}$)(^[a-z0-9]([a-z0-9-]*(\\.[a-z0-9])?)*$(?<!\\-))'
+  S3BucketPrefix :
+    type: String
+    description: (Optional) The logical hierarchy you created for your Amazon S3 bucket.
+    default: ''
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: ''
+    allowedPattern: '^arn:aws(-cn|-us-gov)?:iam::\d{12}:role\/[\w+=,.@_\/-]+|^$'
+outputs:
+  - EnableCLBAccessLogs.SuccessesLoadBalancers
+  - EnableCLBAccessLogs.FailedLoadBalancers
+mainSteps:
+- name: EnableCLBAccessLogs
+  action: aws:executeScript
+  onFailure: Abort
+  isCritical: true
+  isEnd: true
+  timeoutSeconds: 600
+  description: |
+    ## EnableCLBAccessLogs
+    Enables access logs for the targeted load balancers.
+    ## Inputs
+    * LoadBalancerNames: The list of load balancer names.
+    * EmitInterval: The interval for publishing the access logs.
+    * S3BucketName: The name of the Amazon S3 bucket.
+    * S3BucketPrefix: The logical hierarchy you created for the Amazon S3 bucket.
+    ## Outputs
+    * SuccessesLoadBalancers: List of load balancer names where access logs where successfully enabled.
+    * FailedLoadBalancers: MapList of load balancer names where enabling access logs failed and the reason for failure.
+  inputs:
+    Runtime: python3.7
+    Handler: enable_CLB_AccessLogs
+    InputPayload:
+        LoadBalancerNames: '{{LoadBalancerNames}}'
+        EmitInterval: '{{EmitInterval}}'
+        S3BucketName: '{{S3BucketName}}'
+        S3BucketPrefix: '{{S3BucketPrefix}}'
+    Script: |
+      import json
+      import boto3
+
+      client = boto3.client('elb')
+
+      def enable_CLB_AccessLogs(event, context):
+          LoadBalancerNames = event['LoadBalancerNames']
+          EmitInterval = event['EmitInterval']
+          S3BucketName = event['S3BucketName']
+          S3BucketPrefix = event['S3BucketPrefix']
+          FailedloadBalancers = []
+          SuccessesloadBalancers = []
+          for loadBalancer in LoadBalancerNames:
+              try:
+                  response = client.modify_load_balancer_attributes(
+                      LoadBalancerName = loadBalancer,
+                      LoadBalancerAttributes = {
+                          'AccessLog': {
+                              'Enabled': True,
+                              'S3BucketName': S3BucketName ,
+                              'EmitInterval': EmitInterval,
+                              'S3BucketPrefix': S3BucketPrefix
+                          }
+                      }
+                  )
+                  SuccessesloadBalancers.append(loadBalancer)
+              except Exception as e :
+                  FailedloadBalancers.append({'loadBalancersName': loadBalancer, "ErrorMsg":  str(e)})
+
+          return {
+              'SuccessesloadBalancers': SuccessesloadBalancers,
+              'FailedloadBalancers': FailedloadBalancers
+          }
+  outputs:
+    - Name: SuccessesLoadBalancers
+      Selector: $.Payload.SuccessesloadBalancers
+      Type: StringList
+    - Name: FailedLoadBalancers
+      Selector: $.Payload.FailedloadBalancers
+      Type: MapList
+

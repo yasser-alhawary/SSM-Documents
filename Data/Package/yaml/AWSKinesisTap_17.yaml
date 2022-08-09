@@ -1,0 +1,18 @@
+---
+schemaVersion: "2.0"
+publisher: "Amazon AWS"
+url: "https://www.amazonaws.com/"
+packageArn: "arn:aws:ssm:::package/AWSKinesisTap"
+version: "20211019.1"
+packages:
+  windows:
+    _any:
+      x86_64:
+        file: "AWSKinesisTap.zip"
+files:
+  AWSKinesisTap.zip:
+    checksums:
+      sha256: "0880dab252cc501384b8705448041ae4c7c37f35c5ee9a5600f9765de1fc3f8d"
+    size: 30367846
+    downloadLocation: "https://s3-us-east-1.amazonaws.com/aws-kinesistap-bw-us-east-1/20211019-1/AWSKinesisTap.zip"
+
