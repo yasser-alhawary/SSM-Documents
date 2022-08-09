@@ -2,12 +2,11 @@
 #This Document Download AWS Predefined Documents Command/Automation/Session/Policy with YAML Format with naming convention DocumentName_Version
 #The Downloaded Document YAML Format Maybe Broken Because Of paterns within the documents itself
 #v2 reduce api calls
-[ -d Data ] || mkdir Data
-cd Data
+mkdir -p Data && cd Data
 for DocumentType in $(aws ssm list-documents --no-cli-pager --filter Key=Owner,Values=Amazon --query DocumentIdentifiers[].DocumentType --output text |tr '\t' '\n'|sort|uniq)
 	do
 		echo -e  "######\nAll $DocumentType start Downloading"
-		[ -d $DocumentType ] || mkdir $DocumentType 
+		mkdir -p $DocumentType 
 		for DocumentVersion in  $(aws ssm list-documents --no-cli-pager --query 'DocumentIdentifiers[].{name:Name,version:DocumentVersion}'  --filter Key=DocumentType,Values=$DocumentType Key=Owner,Values=Amazon --output text|sed 's/\t/_/g'|sed 's/$/.yaml/g'|tee ${DocumentType}/${DocumentType}_DocumentsVersionsList.txt|egrep -v `ls $DocumentType -1 |tr '\n' '|' |sed 's/.$//'`)
 				do
 					DocumentName=`echo $DocumentVersion |cut -d'_' -f1`
