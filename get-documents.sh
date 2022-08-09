@@ -2,6 +2,7 @@
 #This Document Download AWS Predefined Documents Command/Automation/Session/Policy with YAML Format with naming convention DocumentName_Version
 #The Downloaded Document YAML Format Maybe Broken Because Of paterns within the documents itself
 #v2 reduce api calls
+[ -d Data ] || mkdir Data
 cd Data
 for DocumentType in $(aws ssm list-documents --no-cli-pager --filter Key=Owner,Values=Amazon --query DocumentIdentifiers[].DocumentType --output text |tr '\t' '\n'|sort|uniq)
 	do
