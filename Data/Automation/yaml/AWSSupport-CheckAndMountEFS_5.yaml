@@ -613,4 +613,4 @@ mainSteps:
   - Name: "output"
     Selector: "$.Payload.output"
     Type: "String"
-
+	2022-07-08T16:11:28.858000+02:00	YAML	Automation	5	AWSSupport-CheckAndMountEFS	Active

@@ -106,4 +106,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: StringMap
+        Type: StringMap	2020-12-18T17:07:23.772000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableRedshiftClusterAutomatedSnapshot	Active

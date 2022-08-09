@@ -116,4 +116,4 @@ mainSteps:
       \ "
     - "$PYTHON_BIN install-aws-backint-agent -f default.rsp -m silent -ssm -a {{EnsureNoBackupInProcess}}\
       \ $DEBUGMODE $IGNORECHECKS"
-
+	2022-02-24T17:04:30.056000+01:00	YAML	Command	11	AWSSAP-InstallBackint	Active

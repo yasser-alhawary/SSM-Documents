@@ -95,4 +95,4 @@ mainSteps:
     StackName: "DetachEBSVolumeStack{{automation:EXECUTION_ID}}"
 outputs:
 - "detachVolume.LogResult"
-
+	2022-06-22T19:09:31.796000+02:00	YAML	Automation	1	AWS-DetachEBSVolume	Active

@@ -141,4 +141,4 @@ mainSteps:
         - "{{KMSKeyARN}}"
     isEnd: true
 
-
+	2020-11-05T17:05:30.189000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableRedshiftClusterEncryption	Active

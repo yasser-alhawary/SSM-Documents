@@ -233,4 +233,4 @@ mainSteps:
 
       InputPayload:
         StartTime: '{{ RecordStartTime.StartTime }}'
-
+	2022-04-25T22:12:10.669000+02:00	YAML	Automation	2	AWSResilienceHub-RestoreS3ObjectToPreviousVersionSOP_2020-09-21	Active

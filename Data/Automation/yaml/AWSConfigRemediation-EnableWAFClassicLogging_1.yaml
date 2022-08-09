@@ -106,4 +106,4 @@ mainSteps:
       PropertySelector: $.LoggingConfiguration.LogDestinationConfigs[0]
       DesiredValues:
         - "{{ CheckDeliveryStreamExistence.DeliveryStreamArn }}"
-
+	2021-03-24T16:09:56.927000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableWAFClassicLogging	Active

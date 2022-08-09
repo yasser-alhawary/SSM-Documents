@@ -736,4 +736,4 @@ mainSteps:
 
             return {
                 'output': json.dumps(out)
-            }
+            }	2021-04-09T23:32:03.903000+02:00	YAML	Automation	1	AWS-UpdateAmazonECSAgent	Active

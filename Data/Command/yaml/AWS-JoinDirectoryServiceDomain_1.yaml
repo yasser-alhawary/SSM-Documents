@@ -26,4 +26,4 @@ runtimeConfig:
       directoryName: "{{ directoryName }}"
       directoryOU: "{{ directoryOU }}"
       dnsIpAddresses: "{{ dnsIpAddresses }}"
-
+	2020-07-01T23:50:30.995000+02:00	YAML	Command	1	AWS-JoinDirectoryServiceDomain	Active

@@ -50,4 +50,4 @@ mainSteps:
       MFADelete: "Disabled"
       Status: "{{VersioningState}}"
   isEnd: true
-...
+...	2018-08-27T19:53:10.329000+02:00	YAML	Automation	1	AWS-ConfigureS3BucketVersioning	Active

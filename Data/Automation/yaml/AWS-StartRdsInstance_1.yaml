@@ -60,4 +60,4 @@ mainSteps:
       DesiredValues: ["available"]
     isEnd: true
 ...
-
+	2018-08-27T18:49:37.985000+02:00	YAML	Automation	1	AWS-StartRdsInstance	Active

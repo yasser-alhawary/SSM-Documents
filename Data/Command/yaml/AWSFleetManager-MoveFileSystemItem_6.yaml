@@ -1009,4 +1009,4 @@ mainSteps:
         done
         
         ExitWithSuccessMessage 'Successfully moved source files or directories at the specified destination path.' 'PRINT_JSON'
-
+	2022-02-08T18:14:36.540000+01:00	YAML	Command	6	AWSFleetManager-MoveFileSystemItem	Active

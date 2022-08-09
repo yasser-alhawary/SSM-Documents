@@ -615,4 +615,4 @@ mainSteps:
     - '    if ($allowReboot -ieq ''False'') { $command += '' -NoReboot'' }'
     - '    Invoke-Expression $command'
     - '}'
-    - 'Invoke-AWSInstallWindowsUpdate'
+    - 'Invoke-AWSInstallWindowsUpdate'	2020-11-18T22:32:41.163000+01:00	YAML	Command	1	AWS-InstallWindowsUpdates	Active

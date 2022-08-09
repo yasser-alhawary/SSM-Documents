@@ -85,4 +85,4 @@ mainSteps:
     outputs:
       - Name: Response
         Selector: $.DeleteInternetGatewayResponse.return
-        Type: Boolean
+        Type: Boolean	2021-03-17T16:08:47.034000+01:00	YAML	Automation	1	AWSConfigRemediation-DetachAndDeleteInternetGateway	Active

@@ -25,4 +25,4 @@ mainSteps:
     NoReboot: "{{ NoReboot }}"
 outputs:
 - "createImage.ImageId"
-
+	2018-08-08T19:03:22.388000+02:00	YAML	Automation	1	AWS-CreateImage	Active

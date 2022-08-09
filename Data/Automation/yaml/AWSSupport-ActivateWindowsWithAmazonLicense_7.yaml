@@ -435,4 +435,4 @@ mainSteps:
 outputs:
 - "activateWindows.Output"
 - "getActivateWindowsOfflineResult.Output"
-
+	2022-03-24T10:27:05.474000+01:00	YAML	Automation	7	AWSSupport-ActivateWindowsWithAmazonLicense	Active

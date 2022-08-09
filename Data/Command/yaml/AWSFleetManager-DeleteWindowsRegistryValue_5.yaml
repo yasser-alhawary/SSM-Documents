@@ -408,4 +408,4 @@ mainSteps:
         } catch {
             ExitWithFailureMessage -Message 'Failed to delete the specified registry value.' -PrintJson
         }
-
+	2021-09-09T18:09:02.612000+02:00	YAML	Command	5	AWSFleetManager-DeleteWindowsRegistryValue	Active

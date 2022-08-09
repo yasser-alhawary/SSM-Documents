@@ -171,4 +171,4 @@ parameters:
     description: (Required) The subnet ID for the public subnet.
     type: String
 schemaVersion: '0.3'
-
+	2021-05-08T00:33:35.332000+02:00	YAML	Automation	3	AWSDocs-ScaleLoadBalanced	Active

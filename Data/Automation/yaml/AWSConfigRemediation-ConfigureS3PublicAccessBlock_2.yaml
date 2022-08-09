@@ -133,4 +133,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: StringMap
+        Type: StringMap	2020-10-29T16:10:08.665000+01:00	YAML	Automation	2	AWSConfigRemediation-ConfigureS3PublicAccessBlock	Active

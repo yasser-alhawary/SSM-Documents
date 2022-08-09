@@ -93,4 +93,4 @@ mainSteps:
     sourceHash: "{{ sourceHash }}"
     workingDirectory: "{{ workingDirectory }}"
     timeoutSeconds: "{{ executionTimeout }}"
-
+	2021-07-06T23:58:16.469000+02:00	YAML	Command	1	AWS-InstallPowerShellModule	Active

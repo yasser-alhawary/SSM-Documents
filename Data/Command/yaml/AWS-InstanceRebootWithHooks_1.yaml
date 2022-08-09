@@ -76,4 +76,4 @@ mainSteps:
     documentType: "SSMDocument"
     documentPath: "{{PostRebootHookDocName}}"
     finallyStep: true
-
+	2021-03-23T21:05:37.829000+01:00	YAML	Command	1	AWS-InstanceRebootWithHooks	Active

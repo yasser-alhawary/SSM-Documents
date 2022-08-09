@@ -169,4 +169,4 @@ mainSteps:
     isEnd: true
     inputs:
       Duration: "PT1S"
-
+	2022-04-25T22:14:36.501000+02:00	YAML	Automation	3	AWSResilienceHub-ScaleOutAsgSOP_2020-07-01	Active

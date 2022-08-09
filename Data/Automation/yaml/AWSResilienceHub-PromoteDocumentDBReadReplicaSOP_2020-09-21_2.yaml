@@ -189,4 +189,4 @@ mainSteps:
 
       InputPayload:
         StartTime: '{{ RecordStartTime.StartTime }}'
-
+	2022-04-25T22:32:44.563000+02:00	YAML	Automation	2	AWSResilienceHub-PromoteDocumentDBReadReplicaSOP_2020-09-21	Active

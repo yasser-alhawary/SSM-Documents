@@ -60,4 +60,4 @@ mainSteps:
       LoadBalancerName: "{{ LoadBalancerName }}"
       PropertySelector: LoadBalancerAttributes.CrossZoneLoadBalancing.Enabled
       DesiredValues:
-        - "True"
+        - "True"	2021-01-28T17:07:29.291000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableCLBCrossZoneLoadBalancing	Active

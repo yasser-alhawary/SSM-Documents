@@ -113,4 +113,4 @@ mainSteps:
                 raise Exception("Unable to perform the required action on trail '{}'. error = '{}'.".format(trail_name, errorMsg))
           else:
             raise Exception("'{}' is not a valid key".format(kms_id))
-
+	2021-05-26T22:51:04.597000+02:00	YAML	Automation	1	AWS-EnableCloudTrailKmsEncryption	Active

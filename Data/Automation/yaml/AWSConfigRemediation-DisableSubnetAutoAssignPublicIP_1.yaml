@@ -61,4 +61,4 @@ mainSteps:
       PropertySelector: "$.Subnets[0].MapPublicIpOnLaunch"
       DesiredValues:
         - "False"
-
+	2020-12-07T23:09:00.747000+01:00	YAML	Automation	1	AWSConfigRemediation-DisableSubnetAutoAssignPublicIP	Active

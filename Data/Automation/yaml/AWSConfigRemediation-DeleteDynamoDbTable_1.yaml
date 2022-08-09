@@ -80,4 +80,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: String
-
+	2020-11-13T17:08:31.244000+01:00	YAML	Automation	1	AWSConfigRemediation-DeleteDynamoDbTable	Active

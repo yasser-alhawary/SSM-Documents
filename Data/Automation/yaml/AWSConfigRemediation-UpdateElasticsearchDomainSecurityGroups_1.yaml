@@ -84,4 +84,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: StringMap
+        Type: StringMap	2021-02-02T17:07:25.847000+01:00	YAML	Automation	1	AWSConfigRemediation-UpdateElasticsearchDomainSecurityGroups	Active

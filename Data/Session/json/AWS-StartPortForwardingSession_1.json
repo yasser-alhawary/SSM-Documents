@@ -21,4 +21,4 @@
     "type":"LocalPortForwarding",
     "localPortNumber":"{{ localPortNumber }}"
   }
-}
+}	2019-07-24T19:20:52.139000+02:00	JSON	Session	1	AWS-StartPortForwardingSession	Active

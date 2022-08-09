@@ -559,4 +559,4 @@ outputs:
 - restoreToExistingManagedLinuxInstance.Output
 - restoreToNewInstanceWindows.Output
 - restoreToExistingEC2InstanceWindows.Output
-
+	2022-03-09T20:32:18.937000+01:00	YAML	Automation	5	AWSEC2-SQLServerDBRestore	Active

@@ -60,4 +60,4 @@ mainSteps:
       PropertySelector: $.Reservations[0].Instances[0].MetadataOptions.HttpTokens
       DesiredValues:
         - required
-
+	2020-11-13T17:09:03.251000+01:00	YAML	Automation	1	AWSConfigRemediation-EnforceEC2InstanceIMDSv2	Active

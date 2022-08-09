@@ -148,4 +148,4 @@
     "isEnd" : true
   } ],
   "outputs" : [ "registerInstanceToElbAndTargetGroup.Status", "invokeLambdaToDeregister.LambdaError", "invokeLambdaToDeregister.TargetGroupArns", "invokeLambdaToDeregister.ClassicELBNames" ]
-}
+}	2022-05-25T20:03:26.449000+02:00	JSON	Automation	1	AWSEC2-PatchLoadBalancerInstance	Active

@@ -488,4 +488,4 @@ mainSteps:
         } catch {
             ExitWithFailureMessage -Message 'Failed to set the specified registry value.' -PrintJson
         }
-
+	2021-09-09T18:10:14.626000+02:00	YAML	Command	5	AWSFleetManager-SetWindowsRegistryValue	Active

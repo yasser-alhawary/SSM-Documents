@@ -189,4 +189,4 @@ mainSteps:
     StackName: "CreateJiraIssueMacroStack{{automation:EXECUTION_ID}}"
 outputs:
 - "createJiraIssue.Payload"
-
+	2021-05-26T22:49:52.623000+02:00	YAML	Automation	1	AWS-CreateJiraIssue	Active

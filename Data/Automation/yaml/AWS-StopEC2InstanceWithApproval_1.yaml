@@ -33,4 +33,4 @@ mainSteps:
   inputs:
     InstanceIds: "{{ InstanceId }}"
     DesiredState: "stopped"
-
+	2017-11-22T01:33:58.513000+01:00	YAML	Automation	1	AWS-StopEC2InstanceWithApproval	Active

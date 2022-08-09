@@ -79,4 +79,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: StringMap
+        Type: StringMap	2021-03-03T17:12:26.282000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableWAFV2Logging	Active

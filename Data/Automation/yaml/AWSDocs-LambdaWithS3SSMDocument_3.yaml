@@ -208,4 +208,4 @@ parameters:
       the actions on your behalf
     type: String
 schemaVersion: '0.3'
-
+	2021-05-08T00:33:45.498000+02:00	YAML	Automation	3	AWSDocs-LambdaWithS3SSMDocument	Active

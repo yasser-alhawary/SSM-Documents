@@ -168,4 +168,4 @@
       "DesiredValues" : [ "True" ]
     }
   } ]
-}
+}	2020-12-07T23:09:27.748000+01:00	JSON	Automation	1	AWSConfigRemediation-EnablePerformanceInsightsOnRDSInstance	Active

@@ -130,4 +130,4 @@ mainSteps:
   inputs:
     Duration: PT1S
   isEnd: true
-...
+...	2018-08-31T23:16:00.045000+02:00	YAML	Automation	1	AWS-ConfigureS3BucketLogging	Active

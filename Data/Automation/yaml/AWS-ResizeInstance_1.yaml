@@ -71,4 +71,4 @@ mainSteps:
       InstanceIds:
         - "{{InstanceId}}"
       DesiredState: running 
-...
+...	2022-01-10T19:13:16.294000+01:00	YAML	Automation	1	AWS-ResizeInstance	Active

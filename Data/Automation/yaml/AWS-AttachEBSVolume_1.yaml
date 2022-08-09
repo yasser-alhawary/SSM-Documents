@@ -45,4 +45,4 @@ mainSteps:
   action: "aws:deleteStack"
   inputs:
     StackName: "AttachEBSVolumeStack{{automation:EXECUTION_ID}}"
-
+	2022-05-11T19:10:41.341000+02:00	YAML	Automation	1	AWS-AttachEBSVolume	Active

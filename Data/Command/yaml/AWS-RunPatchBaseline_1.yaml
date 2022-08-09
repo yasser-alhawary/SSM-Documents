@@ -1115,4 +1115,4 @@ mainSteps:
     - "RETURN_CODE=$?"
     - ""
     - "exit $RETURN_CODE"
-
+	2022-06-27T16:18:17.241000+02:00	YAML	Command	1	AWS-RunPatchBaseline	Active

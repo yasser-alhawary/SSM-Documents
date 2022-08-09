@@ -32,4 +32,4 @@
       "Script" : "import boto3\n\ndef enable_log_file_validation_handler(event, bucket):\n  client = boto3.client('cloudtrail')\n\n  trail_names = event[\"trailNames\"]\n  for trail_name in trail_names:\n    response = client.get_trail(Name = trail_name)\n    if response['Trail']['LogFileValidationEnabled']:\n      print(f'Log file validation is already enabled for trail {trail_name}.')\n    else:\n      try:\n        client.update_trail(Name = trail_name, EnableLogFileValidation = True)\n        print(f'Log file validation is now enabled for trail {trail_name}.')\n      except Exception as e:\n        errorMsg = str(e)\n        raise Exception(\"Unable to perform the required action on trail '{}'. error = '{}'.\".format(trail_name, errorMsg))\n"
     }
   } ]
-}
+}	2021-05-26T22:51:11.636000+02:00	JSON	Automation	1	AWS-EnableCloudTrailLogFileValidation	Active

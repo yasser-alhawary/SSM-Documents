@@ -33,4 +33,4 @@ mainSteps:
   inputs:
     InstanceIds: "{{ InstanceId }}"
     DesiredState: "running"
-
+	2017-11-22T01:34:12.756000+01:00	YAML	Automation	1	AWS-StartEC2InstanceWithApproval	Active

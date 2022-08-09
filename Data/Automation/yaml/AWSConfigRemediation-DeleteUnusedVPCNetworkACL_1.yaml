@@ -81,4 +81,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: String
-
+	2020-10-20T17:05:06.441000+02:00	YAML	Automation	1	AWSConfigRemediation-DeleteUnusedVPCNetworkACL	Active

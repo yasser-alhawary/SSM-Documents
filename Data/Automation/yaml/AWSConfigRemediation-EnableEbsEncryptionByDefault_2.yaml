@@ -51,4 +51,4 @@ mainSteps:
       PropertySelector: "$.EbsEncryptionByDefault"
       DesiredValues:
         - "True"
-
+	2021-10-06T17:11:14.514000+02:00	YAML	Automation	2	AWSConfigRemediation-EnableEbsEncryptionByDefault	Active

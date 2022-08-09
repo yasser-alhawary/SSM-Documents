@@ -49,4 +49,4 @@
       "runCommand" : [ "#!/bin/bash\n\n########################\n# Fault-specific logic #\n########################\n\nif [ {{ DurationSeconds }} -lt 1 ] || [ {{ DurationSeconds }} -gt 43200 ] ; then echo DurationSeconds parameter value must be between 1 and 43200 && exit 1; fi\nif [ {{ Percent }} -lt 1 ] || [ {{ Percent }} -gt 100 ] ; then echo Percent parameter value must be between 1 and 100 && exit 1; fi\npgrep stress-ng && echo Another stress-ng command is running, exiting... && exit 1\necho Initiating IO stress for {{ DurationSeconds }} seconds...\nstress-ng --iomix {{ Workers }} --iomix-bytes {{ Percent }}% -t {{ DurationSeconds }}s\necho Finished IO stress.\n" ]
     }
   } ]
-}
+}	2021-11-04T10:57:27.211000+01:00	JSON	Command	1	AWSFIS-Run-IO-Stress	Active

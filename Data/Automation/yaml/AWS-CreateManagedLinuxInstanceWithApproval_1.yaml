@@ -358,4 +358,4 @@ mainSteps:
   onFailure: "Abort"
   inputs:
     StackName: "{{StackName}}"
-
+	2022-03-02T19:07:28.654000+01:00	YAML	Automation	1	AWS-CreateManagedLinuxInstanceWithApproval	Active

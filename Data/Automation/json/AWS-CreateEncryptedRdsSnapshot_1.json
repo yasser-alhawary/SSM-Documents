@@ -128,4 +128,4 @@
       "Script" : "import boto3\nimport time\n\nrds_client = boto3.client('rds')\n\ndef handler(event, context):\n    snapshot_id = event[\"DBSnapshotId\"]\n    wait_period = 5\n    retries = 5\n    while True:\n        try:\n            rds_client.delete_db_snapshot(DBSnapshotIdentifier=snapshot_id)\n            return True\n        except Exception as ex:\n            # As the list of snapshot is eventually consistent old snapshots might appear in listed snapshots\n            if getattr(ex, \"response\", {}).get(\"Error\", {}).get(\"Code\", \"\") == \"InvalidSnapshot.NotFound\":\n                return False\n            # Throttling might occur when deleting snapshots too fast\n            if \"throttling\" in ex.message.lower():\n                retries -= 1\n                if retries == 0:\n                    raise ex\n                time.sleep(wait_period)\n                wait_period = min(wait_period + 10 , 30)\n                continue\n            raise ex\n"
     }
   } ]
-}
+}	2021-05-05T22:26:29.497000+02:00	JSON	Automation	1	AWS-CreateEncryptedRdsSnapshot	Active

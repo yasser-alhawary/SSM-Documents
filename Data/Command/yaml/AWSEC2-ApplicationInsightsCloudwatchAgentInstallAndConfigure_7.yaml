@@ -142,4 +142,4 @@ mainSteps:
     documentParameters: "{\"action\":\"configure (append)\",\"mode\" : \"ec2\",\"\
       optionalConfigurationSource\" : \"ssm\",\"optionalConfigurationLocation\" :\
       \ {{parameterStoreName}}}"
-
+	2022-02-17T00:47:42.479000+01:00	YAML	Command	7	AWSEC2-ApplicationInsightsCloudwatchAgentInstallAndConfigure	Active

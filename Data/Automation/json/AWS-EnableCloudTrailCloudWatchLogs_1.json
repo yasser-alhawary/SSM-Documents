@@ -45,4 +45,4 @@
       "Script" : "import boto3\n\ndef enable_ct_cw_logs_handler(event, bucket):\n  trail_names = event[\"TrailNames\"]\n  log_group = event[\"LogGroupArn\"]\n  role_arn = event[\"CwRoleArn\"]\n  client = boto3.client('cloudtrail')\n\n  for trail_name in trail_names:\n    try:\n      client.update_trail(Name = trail_name, CloudWatchLogsLogGroupArn = log_group, CloudWatchLogsRoleArn = role_arn)\n      print(\"CloudWatch Logs are now enabled for the trail '{}' and logs will be delivered to the log group: '{}'.\".format(trail_name, log_group))\n    except Exception as e:\n      errorMsg = str(e)\n      raise Exception(\"Unable to perform the required action on trail '{}'. error: '{}'.\".format(trail_name, errorMsg))\n"
     }
   } ]
-}
+}	2021-05-05T22:27:15.508000+02:00	JSON	Automation	1	AWS-EnableCloudTrailCloudWatchLogs	Active

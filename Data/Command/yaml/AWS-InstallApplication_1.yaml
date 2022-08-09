@@ -89,4 +89,4 @@ mainSteps:
     parameters: "{{ parameters }}"
     source: "{{ source }}"
     sourceHash: "{{ sourceHash }}"
-
+	2021-06-02T19:50:30.147000+02:00	YAML	Command	1	AWS-InstallApplication	Active

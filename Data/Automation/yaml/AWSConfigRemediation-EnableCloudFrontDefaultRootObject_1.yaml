@@ -81,4 +81,4 @@ mainSteps:
       - Name: Output
         Type: StringMap
         Selector: $.Payload.Output
-
+	2021-03-11T17:09:25.235000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableCloudFrontDefaultRootObject	Active

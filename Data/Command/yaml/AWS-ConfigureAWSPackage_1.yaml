@@ -107,4 +107,4 @@ mainSteps:
     installationType: "{{installationType}}"
     version: "{{ version }}"
     additionalArguments: "{{ additionalArguments }}"
-
+	2021-07-06T23:58:04.967000+02:00	YAML	Command	1	AWS-ConfigureAWSPackage	Active

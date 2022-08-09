@@ -179,4 +179,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: StringMap
+        Type: StringMap	2021-04-21T17:12:24.054000+02:00	YAML	Automation	1	AWSConfigRemediation-EnableVPCFlowLogsToS3Bucket	Active

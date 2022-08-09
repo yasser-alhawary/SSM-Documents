@@ -444,4 +444,4 @@ mainSteps:
     DesiredState: "terminated"
 outputs:
 - "CreateImage.ImageId"
-
+	2022-05-11T19:13:41.346000+02:00	YAML	Automation	1	AWS-UpdateWindowsAmi	Active

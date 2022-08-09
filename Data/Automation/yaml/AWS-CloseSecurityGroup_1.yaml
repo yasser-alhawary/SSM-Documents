@@ -106,4 +106,4 @@ mainSteps:
 
             if not successful:
                 raise Exception("Unable to close the security group '{}'. error: '{}'.".format(sg_id, errorMsg))
-
+	2021-05-05T22:26:14.984000+02:00	YAML	Automation	1	AWS-CloseSecurityGroup	Active

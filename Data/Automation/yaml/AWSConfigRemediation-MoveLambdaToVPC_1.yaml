@@ -121,4 +121,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: StringMap
+        Type: StringMap	2020-12-07T23:10:26.872000+01:00	YAML	Automation	1	AWSConfigRemediation-MoveLambdaToVPC	Active

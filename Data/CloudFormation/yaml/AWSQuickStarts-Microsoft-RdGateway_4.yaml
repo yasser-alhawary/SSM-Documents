@@ -271,4 +271,4 @@ templateBody:
             Fn::GetAtt:
               - VPCStack
               - Outputs.VPCID
-
+	2022-02-26T00:20:52.349000+01:00	YAML	CloudFormation	4	AWSQuickStarts-Microsoft-RdGateway	Active	AWSQuickStarts-Microsoft-RdGateway-2022-02-25-23-05-30

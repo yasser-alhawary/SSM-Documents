@@ -22,4 +22,4 @@
     "inputs" : { },
     "description" : "**Monitor customer impact**\n* View the **Metrics** tab of the incident to monitor for recovery of your key performance indicators (KPIs).\n* Update the **Impact** field in the incident when customer impact has been reduced or resolved. \n\n**Identify action items**  \n* Add entries in the **Timeline** tab of the incident to record key decisions and actions taken, including temporary mitigations that might have been implemented. \n* Create a **Post-Incident Analysis** when the incident is closed in order to identify and track action items in [OpsCenter](https://console.aws.amazon.com/systems-manager/opsitems). "
   } ]
-}
+}	2021-04-16T19:44:10.801000+02:00	JSON	Automation	2	AWSIncidents-CriticalIncidentRunbookTemplate	Active

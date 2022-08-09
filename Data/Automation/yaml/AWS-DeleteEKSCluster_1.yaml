@@ -718,4 +718,4 @@ mainSteps:
     - Name: output
       Selector: $.Payload.output
       Type: String
-
+	2020-12-16T23:19:56.927000+01:00	YAML	Automation	1	AWS-DeleteEKSCluster	Active

@@ -91,4 +91,4 @@ mainSteps:
       DesiredValues:
         - "True"
 
-
+	2020-12-23T17:06:46.732000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableMinorVersionUpgradeOnRDSDBInstance	Active

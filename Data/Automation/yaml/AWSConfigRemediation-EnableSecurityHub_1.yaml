@@ -59,4 +59,4 @@ mainSteps:
       - Name: Output
         Selector: $
         Type: StringMap
-
+	2020-12-07T23:09:36.748000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableSecurityHub	Active

@@ -94,4 +94,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: StringMap
-
+	2022-05-24T17:12:12.904000+02:00	YAML	Automation	1	AWSConfigRemediation-UpdateOpenSearchDomainSecurityGroups	Active

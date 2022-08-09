@@ -615,4 +615,4 @@ mainSteps:
         }
         
         ProcessItems @processItems
-
+	2021-10-06T18:18:08.223000+02:00	YAML	Command	6	AWSFleetManager-GetWindowsEvents	Active

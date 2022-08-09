@@ -13,4 +13,4 @@
   "properties":{
     "portNumber":"{{ portNumber }}"
   }
-}
+}	2019-06-12T23:33:03.766000+02:00	JSON	Session	1	AWS-StartSSHSession	Active

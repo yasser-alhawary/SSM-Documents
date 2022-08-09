@@ -315,4 +315,4 @@ mainSteps:
     Selector: "$.Payload"
     Type: "StringMap"
   isEnd: true
-
+	2021-12-15T17:50:52.236000+01:00	YAML	Automation	1	AWSSupport-ConfigureDNSQueryLogging	Active

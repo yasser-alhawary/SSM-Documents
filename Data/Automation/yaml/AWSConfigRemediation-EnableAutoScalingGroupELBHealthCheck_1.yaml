@@ -85,4 +85,4 @@ mainSteps:
     outputs:
       - Name: Response
         Selector: $
-        Type: StringMap
+        Type: StringMap	2021-03-26T16:07:18.734000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableAutoScalingGroupELBHealthCheck	Active

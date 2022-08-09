@@ -250,4 +250,4 @@ runtimeConfig:
       - "# Run the script"
       - "PrepareToRunModule"
       - "RunModule"
-
+	2022-03-07T18:56:56.050000+01:00	YAML	Command	1	AWS-InstallSpecificWindowsUpdates	Active

@@ -88,4 +88,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload
-        Type: StringMap
+        Type: StringMap	2020-12-07T23:08:53.746000+01:00	YAML	Automation	1	AWSConfigRemediation-DetachIAMPolicy	Active

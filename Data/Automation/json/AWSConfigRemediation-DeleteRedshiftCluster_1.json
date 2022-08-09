@@ -86,4 +86,4 @@
       "DesiredValues" : [ "final-snapshot", "deleting" ]
     }
   } ]
-}
+}	2020-11-13T17:08:39.224000+01:00	JSON	Automation	1	AWSConfigRemediation-DeleteRedshiftCluster	Active

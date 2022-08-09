@@ -39,4 +39,4 @@
       "Script" : "import boto3\n\ndef configurecloudwatch_handler(event, context):\n  ec2_client = boto3.client('ec2')\n  instance_id = event[\"InstanceId\"]\n  new_state = event[\"status\"]\n\n  if new_state == \"Enabled\":\n    ec2_client.monitor_instances(InstanceIds=[instance_id])\n  elif new_state == \"Disabled\":\n    ec2_client.unmonitor_instances(InstanceIds=[instance_id])"
     }
   } ]
-}
+}	2022-06-22T19:07:57.804000+02:00	JSON	Automation	1	AWS-ConfigureCloudWatchOnEC2Instance	Active

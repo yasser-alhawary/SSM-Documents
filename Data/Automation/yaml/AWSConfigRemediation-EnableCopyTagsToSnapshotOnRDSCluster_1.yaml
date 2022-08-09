@@ -98,4 +98,4 @@ mainSteps:
     DBClusterIdentifier: "{{ GetDBClusterIdentifier.DBClusterIdentifier }}"
     PropertySelector: $.DBClusters[0].CopyTagsToSnapshot
     DesiredValues:
-      - "True"
+      - "True"	2020-12-29T17:08:33.220000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableCopyTagsToSnapshotOnRDSCluster	Active

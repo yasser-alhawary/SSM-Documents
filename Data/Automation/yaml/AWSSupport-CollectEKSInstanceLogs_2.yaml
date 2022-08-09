@@ -711,4 +711,4 @@ mainSteps:
       - "    exit 1"
       - "fi"
   description: "Upload logs to S3"
-
+	2022-03-24T13:29:14.567000+01:00	YAML	Automation	2	AWSSupport-CollectEKSInstanceLogs	Active

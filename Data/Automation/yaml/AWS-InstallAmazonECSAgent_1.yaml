@@ -359,4 +359,4 @@ mainSteps:
   outputs:
     - Name: output
       Selector: $.Payload.output
-      Type: String
+      Type: String	2021-04-09T23:31:40.900000+02:00	YAML	Automation	1	AWS-InstallAmazonECSAgent	Active

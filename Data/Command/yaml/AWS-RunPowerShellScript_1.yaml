@@ -27,4 +27,4 @@ runtimeConfig:
       runCommand: "{{ commands }}"
       workingDirectory: "{{ workingDirectory }}"
       timeoutSeconds: "{{ executionTimeout }}"
-
+	2017-08-21T22:35:03.797000+02:00	YAML	Command	1	AWS-RunPowerShellScript	Active

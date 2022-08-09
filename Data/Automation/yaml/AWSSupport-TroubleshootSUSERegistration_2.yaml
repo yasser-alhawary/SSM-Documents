@@ -705,4 +705,4 @@ mainSteps:
   - Name: "output"
     Selector: "$.Payload.output"
     Type: "String"
-
+	2022-03-21T18:31:52.458000+01:00	YAML	Automation	2	AWSSupport-TroubleshootSUSERegistration	Active

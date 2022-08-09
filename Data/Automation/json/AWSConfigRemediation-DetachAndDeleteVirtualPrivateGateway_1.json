@@ -153,4 +153,4 @@
       "DesiredValues" : [ "deleted" ]
     }
   } ]
-}
+}	2021-03-10T17:08:06.861000+01:00	JSON	Automation	1	AWSConfigRemediation-DetachAndDeleteVirtualPrivateGateway	Active

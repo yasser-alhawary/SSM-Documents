@@ -450,4 +450,4 @@ templateBody:
             Fn::GetAtt:
               - VPCStack
               - Outputs.VPCID
-
+	2022-07-19T21:26:00.915000+02:00	YAML	CloudFormation	2	AWSQuickStarts-Microsoft-AD-Extend-OnPrem	Active	AWSQuickStarts-Microsoft-AD-Extend-OnPrem-2022-07-19-19-19-40

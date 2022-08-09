@@ -449,4 +449,4 @@ mainSteps:
       InputPayload:
         StartTime: '{{ RecordStartTime.StartTime }}'
     isEnd: true
-
+	2022-06-28T17:51:54.461000+02:00	YAML	Automation	3	AWSResilienceHub-ScaleDownDocumentDBClusterSOP_2020-09-21	Active

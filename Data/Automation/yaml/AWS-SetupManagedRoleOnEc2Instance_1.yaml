@@ -178,4 +178,4 @@ mainSteps:
   action: "aws:deleteStack"
   inputs:
     StackName: "SetupManagedRoleOnInstanceStack{{automation:EXECUTION_ID}}"
-
+	2021-05-26T22:52:04.617000+02:00	YAML	Automation	1	AWS-SetupManagedRoleOnEc2Instance	Active

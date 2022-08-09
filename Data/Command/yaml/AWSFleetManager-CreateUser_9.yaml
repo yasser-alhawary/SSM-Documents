@@ -249,4 +249,4 @@ mainSteps:
         
         $COMMAND "$User" --comment "$Description" "$CREATE_HOME_ARGUMENT" || ExitWithFailureMessage 'Failed to create the specified user.' 'PRINT_JSON'
         ExitWithSuccessMessage 'The specified user has been created.'
-
+	2021-12-13T05:10:40.898000+01:00	YAML	Command	9	AWSFleetManager-CreateUser	Active

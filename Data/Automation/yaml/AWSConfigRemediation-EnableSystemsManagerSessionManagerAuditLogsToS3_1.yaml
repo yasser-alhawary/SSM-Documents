@@ -121,4 +121,4 @@ mainSteps:
       - Name: Response
         Selector: $.Payload.output
         Type: StringMap
-
+	2020-12-07T23:09:43.741000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableSystemsManagerSessionManagerAuditLogsToS3	Active

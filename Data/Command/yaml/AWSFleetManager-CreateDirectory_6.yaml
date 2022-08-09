@@ -973,4 +973,4 @@ mainSteps:
         fi
         
         ExitWithSuccessMessage 'Directory has been created.'
-
+	2022-02-08T18:13:56.054000+01:00	YAML	Command	6	AWSFleetManager-CreateDirectory	Active

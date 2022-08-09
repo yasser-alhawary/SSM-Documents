@@ -1008,4 +1008,4 @@ mainSteps:
         else
             ExitWithFailureMessageAndExitCode "Failed to start the process "$NAME"." "$FAILED_PROCESS_ERROR" 'PRINT_JSON'
         fi
-
+	2022-02-08T18:14:55.545000+01:00	YAML	Command	3	AWSFleetManager-StartProcess	Active

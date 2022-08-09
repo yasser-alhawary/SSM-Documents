@@ -106,4 +106,4 @@
       "DesiredValues" : [ "deleting" ]
     }
   } ]
-}
+}	2021-04-13T17:09:13.575000+02:00	JSON	Automation	1	AWSConfigRemediation-DeleteRDSInstance	Active

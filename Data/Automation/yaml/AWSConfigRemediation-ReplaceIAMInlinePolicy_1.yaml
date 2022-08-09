@@ -142,4 +142,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: StringMap
-
+	2021-03-15T16:08:30.656000+01:00	YAML	Automation	1	AWSConfigRemediation-ReplaceIAMInlinePolicy	Active

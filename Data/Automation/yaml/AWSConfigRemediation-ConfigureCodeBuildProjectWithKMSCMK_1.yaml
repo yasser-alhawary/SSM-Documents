@@ -87,4 +87,4 @@ mainSteps:
         - "{{ GetBuildName.BuildName }}"
       PropertySelector: "$.projects[0].encryptionKey"
       DesiredValues:
-        - "{{ KMSCMKArn }}"
+        - "{{ KMSCMKArn }}"	2020-12-22T17:04:33.560000+01:00	YAML	Automation	1	AWSConfigRemediation-ConfigureCodeBuildProjectWithKMSCMK	Active

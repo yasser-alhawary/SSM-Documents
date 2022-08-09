@@ -217,4 +217,4 @@ mainSteps:
     documentType: "SSMDocument"
     documentPath: "{{OnExitHookDocName}}"
     finallyStep: true
-
+	2021-01-21T22:20:40.006000+01:00	YAML	Command	1	AWS-RunPatchBaselineWithHooks	Active

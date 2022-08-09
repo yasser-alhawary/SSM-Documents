@@ -180,4 +180,4 @@ mainSteps:
       Type: String
     - Name: ModifyDBInstanceResponse
       Selector: $.Payload.ModifyDBInstanceResponse
-      Type: StringMap
+      Type: StringMap	2020-12-29T17:08:51.236000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableRDSInstanceBackup	Active

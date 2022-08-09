@@ -240,4 +240,4 @@ mainSteps:
   maxAttempts: 1
   name: deleteStackOnCompletion
 schemaVersion: '0.3'
-
+	2021-05-08T00:33:56.113000+02:00	YAML	Automation	5	AWSDocs-HostingAWordPressBlog-AL2	Active

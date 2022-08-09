@@ -29,4 +29,4 @@ mainSteps:
   name: "ConfigureDocker"
   inputs:
     action: "{{ action }}"
-
+	2021-04-09T23:30:51.858000+02:00	YAML	Command	1	AWS-ConfigureDocker	Active

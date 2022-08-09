@@ -87,4 +87,4 @@ mainSteps:
       PropertySelector: $.Volumes[0].VolumeType
       DesiredValues:
         - "{{ EbsVolumeType }}"
-
+	2021-04-22T17:06:52.960000+02:00	YAML	Automation	1	AWSConfigRemediation-ModifyEBSVolumeType	Active

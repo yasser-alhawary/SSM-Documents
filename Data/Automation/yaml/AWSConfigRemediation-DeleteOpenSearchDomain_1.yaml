@@ -83,4 +83,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: StringMap
-
+	2022-05-24T17:09:17.901000+02:00	YAML	Automation	1	AWSConfigRemediation-DeleteOpenSearchDomain	Active

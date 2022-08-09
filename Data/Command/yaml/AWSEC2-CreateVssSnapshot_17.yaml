@@ -1285,4 +1285,4 @@ mainSteps:
     StringEquals:
     - "platformType"
     - "Windows"
-
+	2022-04-20T12:09:13.526000+02:00	YAML	Command	17	AWSEC2-CreateVssSnapshot	Active

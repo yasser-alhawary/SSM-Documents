@@ -221,4 +221,4 @@ mainSteps:
         CreateRecursiveKey -Query $query -KeysToCreate $registrySubKey.Split('\')
         CreateKey -Query $query -Key $registrySubKey -Name $Name
         ExitWithSuccessMessage 'The specified registry key has been created.'
-
+	2021-09-09T18:08:22.613000+02:00	YAML	Command	5	AWSFleetManager-CreateWindowsRegistryKey	Active

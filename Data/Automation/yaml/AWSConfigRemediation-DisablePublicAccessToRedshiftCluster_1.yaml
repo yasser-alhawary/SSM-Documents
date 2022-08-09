@@ -74,4 +74,4 @@ mainSteps:
       ClusterIdentifier: "{{ ClusterIdentifier }}"
       PropertySelector: $.Clusters[0].PubliclyAccessible
       DesiredValues:
-        - "False"
+        - "False"	2021-03-16T16:10:28.384000+01:00	YAML	Automation	1	AWSConfigRemediation-DisablePublicAccessToRedshiftCluster	Active

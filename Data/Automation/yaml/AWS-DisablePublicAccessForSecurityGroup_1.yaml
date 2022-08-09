@@ -145,4 +145,4 @@ mainSteps:
           - CidrIpv6: "{{ IpAddressToBlock }}"
   isEnd: true
   onFailure: Continue
-
+	2021-02-24T22:35:22.683000+01:00	YAML	Automation	1	AWS-DisablePublicAccessForSecurityGroup	Active

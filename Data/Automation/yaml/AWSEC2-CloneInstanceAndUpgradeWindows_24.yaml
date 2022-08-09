@@ -1664,4 +1664,4 @@ outputs:
 - UpgradedFrom2012R2Or2016.Name
 - UpgradedTo2016Or2019From2008R2.ImageId
 - UpgradedTo2016Or2019From2008R2.Name
-
+	2022-04-20T19:34:18.051000+02:00	YAML	Automation	24	AWSEC2-CloneInstanceAndUpgradeWindows	Active

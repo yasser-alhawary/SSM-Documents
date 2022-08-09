@@ -30,4 +30,4 @@
     },
     "description" : "Disables a rule in EventBridge"
   } ]
-}
+}	2021-05-05T22:26:56.493000+02:00	JSON	Automation	1	AWS-DisableEventBridgeRule	Active

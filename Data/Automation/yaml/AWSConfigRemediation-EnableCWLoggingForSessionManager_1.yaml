@@ -116,4 +116,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: StringMap
+        Type: StringMap	2021-03-12T17:08:35.731000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableCWLoggingForSessionManager	Active

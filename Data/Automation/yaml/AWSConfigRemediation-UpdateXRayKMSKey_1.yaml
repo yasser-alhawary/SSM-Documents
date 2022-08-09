@@ -91,4 +91,4 @@ mainSteps:
       Api: GetEncryptionConfig
       PropertySelector: $.EncryptionConfig.KeyId
       DesiredValues:
-        - "{{ GetKMSKeyArn.KMSKeyArn }}"
+        - "{{ GetKMSKeyArn.KMSKeyArn }}"	2021-01-29T17:11:29.814000+01:00	YAML	Automation	1	AWSConfigRemediation-UpdateXRayKMSKey	Active

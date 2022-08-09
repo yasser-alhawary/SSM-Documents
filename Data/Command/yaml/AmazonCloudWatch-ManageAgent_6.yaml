@@ -257,4 +257,4 @@ mainSteps:
     - " fi"
     - " cmd=\"${cmd} -a ${action} -m {{mode}}\""
     - " ${cmd}"
-
+	2021-01-18T23:26:02.449000+01:00	YAML	Command	6	AmazonCloudWatch-ManageAgent	Active

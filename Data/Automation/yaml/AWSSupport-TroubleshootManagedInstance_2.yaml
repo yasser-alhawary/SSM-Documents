@@ -516,4 +516,4 @@ mainSteps:
   - Name: "output"
     Selector: "$.Payload.output"
     Type: "String"
-
+	2022-07-08T16:13:21.803000+02:00	YAML	Automation	2	AWSSupport-TroubleshootManagedInstance	Active

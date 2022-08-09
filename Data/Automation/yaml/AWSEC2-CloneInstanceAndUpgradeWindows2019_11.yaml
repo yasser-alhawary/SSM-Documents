@@ -1624,4 +1624,4 @@ mainSteps:
 outputs:
 - getUpgradedImageDetails.ImageId
 - getUpgradedImageDetails.Name
-
+	2022-04-20T19:34:51.320000+02:00	YAML	Automation	11	AWSEC2-CloneInstanceAndUpgradeWindows2019	Active

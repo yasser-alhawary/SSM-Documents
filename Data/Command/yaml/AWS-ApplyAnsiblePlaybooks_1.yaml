@@ -143,4 +143,4 @@ mainSteps:
     - "   ansible-playbook -i \"localhost,\" -c local -e \"{{ExtraVariables}}\" \"\
       {{Verbose}}\" \"${PlaybookFile}\""
     - "fi"
-
+	2022-03-23T18:09:16.826000+01:00	YAML	Command	1	AWS-ApplyAnsiblePlaybooks	Active

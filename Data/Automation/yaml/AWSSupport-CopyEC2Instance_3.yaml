@@ -537,4 +537,4 @@ mainSteps:
   inputs:
     Duration: "PT2S"
   isEnd: true
-
+	2022-07-04T12:22:00.166000+02:00	YAML	Automation	3	AWSSupport-CopyEC2Instance	Active

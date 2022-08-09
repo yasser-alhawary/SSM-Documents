@@ -46,4 +46,4 @@
       "DesiredValues" : [ "True" ]
     }
   } ]
-}
+}	2021-03-31T17:13:37.785000+02:00	JSON	Automation	1	AWSConfigRemediation-EnableCloudTrailLogFileValidation	Active

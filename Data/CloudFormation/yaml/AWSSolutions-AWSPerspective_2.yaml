@@ -1573,4 +1573,4 @@ templateBody:
       Description: API URL for Perpective. Use this to make direct API calls
       Value:
         Fn::Sub: https://${PerspectiveWebRestAPI}.execute-api.${AWS::Region}.amazonaws.com/Prod
-
+	2022-04-04T19:00:53.864000+02:00	YAML	CloudFormation	2	AWSSolutions-AWSPerspective	Active	aws-perspective-v1.1.4

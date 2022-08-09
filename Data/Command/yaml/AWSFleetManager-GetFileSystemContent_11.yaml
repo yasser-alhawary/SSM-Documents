@@ -997,4 +997,4 @@ mainSteps:
         fi
         
         ProcessItems "$ITEMS" "CONVERT_NEXT_TOKEN_TO_BASE64"
-
+	2022-02-08T18:14:22.552000+01:00	YAML	Command	11	AWSFleetManager-GetFileSystemContent	Active

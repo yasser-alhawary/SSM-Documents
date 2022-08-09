@@ -884,4 +884,4 @@ templateBody:
               - IsTwoAz
               - Ref: AWS::NoValue
               - Ref: ExchangeNode3PrivateIP2
-
+	2022-03-11T01:03:21.225000+01:00	YAML	CloudFormation	2	AWSQuickStarts-Microsoft-Exchange	Active	AWSQuickStarts-Microsoft-Exchange-2022-03-10-18-58-16

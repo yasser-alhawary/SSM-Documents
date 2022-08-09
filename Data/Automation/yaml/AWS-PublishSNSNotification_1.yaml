@@ -38,4 +38,4 @@ mainSteps:
     Api: Publish
     TopicArn: "{{TopicArn}}"
     Message: "{{Message}}"
-...
+...	2019-02-08T00:47:49.007000+01:00	YAML	Automation	1	AWS-PublishSNSNotification	Active

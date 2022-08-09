@@ -193,4 +193,4 @@ mainSteps:
     - Name: output
       Selector: $.Payload.output
       Type: String
-
+	2020-12-12T20:04:50.820000+01:00	YAML	Automation	1	AWS-UpdateEKSManagedNodegroupVersion	Active

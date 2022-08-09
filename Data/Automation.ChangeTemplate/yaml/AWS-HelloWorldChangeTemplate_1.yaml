@@ -60,4 +60,4 @@ mainSteps:
         - approver: '{{ Approver }}'
           type: '{{ ApproverType }}'
           minRequiredApprovals: 1
-
+	2020-12-16T23:19:31.333000+01:00	YAML	Automation.ChangeTemplate	1	AWS-HelloWorldChangeTemplate	APPROVED	Active

@@ -338,4 +338,4 @@ outputs:
 - "SaveComplianceReportToS3.Payload"
 - "RestoreFromSnapshot.Payload"
 - "CheckCompliance.Payload"
-
+	2022-05-11T19:12:34.341000+02:00	YAML	Automation	1	AWS-PatchInstanceWithRollback	Active

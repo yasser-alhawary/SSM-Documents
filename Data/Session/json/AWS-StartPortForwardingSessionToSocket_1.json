@@ -20,4 +20,4 @@
     "localConnectionType": "unix",
     "localUnixSocket": "{{ localUnixSocket }}"
   }
-}
+}	2019-11-08T23:41:44.223000+01:00	JSON	Session	1	AWS-StartPortForwardingSessionToSocket	Active

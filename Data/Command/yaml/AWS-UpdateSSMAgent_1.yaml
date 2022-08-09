@@ -81,4 +81,4 @@ mainSteps:
     source: "https://s3.{Region}.amazonaws.com/amazon-ssm-{Region}/ssm-agent-manifest.json"
     allowDowngrade: "{{ allowDowngrade }}"
     targetVersion: "{{ version }}"
-
+	2021-06-02T19:50:43.591000+02:00	YAML	Command	1	AWS-UpdateSSMAgent	Active

@@ -70,4 +70,4 @@ mainSteps:
       PropertySelector: Attributes.KmsMasterKeyId
       DesiredValues:
       - "{{ KmsKeyArn }}"
-
+	2020-12-07T23:10:04.737000+01:00	YAML	Automation	1	AWSConfigRemediation-EncryptSNSTopic	Active

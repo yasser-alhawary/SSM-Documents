@@ -365,4 +365,4 @@ mainSteps:
 outputs:
 - "performChecks.Output"
 - "collectAndUploadWindowsLogBundle.Output"
-
+	2021-06-28T06:30:38.406000+02:00	YAML	Automation	1	AWSSupport-CollectElasticBeanstalkLogs	Active

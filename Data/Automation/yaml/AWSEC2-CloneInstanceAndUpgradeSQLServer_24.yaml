@@ -1768,4 +1768,4 @@ outputs:
 - getUpgradedImageDetails.ImageId
 - getUpgradedImageDetails.Name
 - getUpgradedImageDetails.State
-
+	2022-06-08T01:56:59.335000+02:00	YAML	Automation	24	AWSEC2-CloneInstanceAndUpgradeSQLServer	Active

@@ -69,4 +69,4 @@ mainSteps:
       Duration: "PT1S"
 ...
 
-
+	2020-05-13T19:22:30.289000+02:00	YAML	Automation	1	AWS-ConfigureCloudTrailLogging	Active

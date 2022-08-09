@@ -218,4 +218,4 @@ runtimeConfig:
       - "    Write-Error $exceptionMessage"
       - "    exit 1"
       - "}"
-
+	2021-03-30T10:16:47.774000+02:00	YAML	Command	1	AWS-ConfigureWindowsUpdate	Active

@@ -81,4 +81,4 @@ mainSteps:
       PropertySelector: $.KMSKeyArn
       DesiredValues:
         - "{{ KMSKeyArn }}"
-
+	2020-12-07T23:09:57.784000+01:00	YAML	Automation	1	AWSConfigRemediation-EncryptLambdaEnvironmentVariablesWithCMK	Active

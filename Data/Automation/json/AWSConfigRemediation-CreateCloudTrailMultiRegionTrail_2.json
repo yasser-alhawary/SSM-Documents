@@ -81,4 +81,4 @@
       "DesiredValues" : [ "True" ]
     }
   } ]
-}
+}	2021-03-02T17:11:31.128000+01:00	JSON	Automation	2	AWSConfigRemediation-CreateCloudTrailMultiRegionTrail	Active

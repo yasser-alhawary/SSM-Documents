@@ -25,4 +25,4 @@ properties:
   type: "LocalPortForwarding"
   localPortNumber: "{{ localPortNumber }}"
   host: "{{ host }}"
-
+	2022-05-11T19:13:57.331000+02:00	YAML	Session	1	AWS-StartPortForwardingSessionToRemoteHost	Active

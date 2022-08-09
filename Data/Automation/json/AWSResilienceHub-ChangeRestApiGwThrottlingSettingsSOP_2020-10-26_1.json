@@ -148,4 +148,4 @@
       "Script" : "import boto3\nimport logging\nfrom datetime import datetime, timezone\nimport time\n\nfrom botocore.exceptions import ClientError\nfrom dateutil import parser\n\nlogger = logging.getLogger()\nlogger.setLevel(logging.INFO)\n\n\n\ndef recovery_time(events, context):\n    return (datetime.now(timezone.utc) - parser.parse(events['StartTime'])).seconds"
     }
   } ]
-}
+}	2021-11-06T18:30:02.099000+01:00	JSON	Automation	1	AWSResilienceHub-ChangeRestApiGwThrottlingSettingsSOP_2020-10-26	Active

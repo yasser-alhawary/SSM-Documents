@@ -92,4 +92,4 @@ mainSteps:
     - "   Write-Host 'Download location: https://aws.amazon.com/powershell/' "
     - "   Exit 255 "
     - "}"
-
+	2020-05-08T16:14:39.299000+02:00	YAML	Command	14	AWSSupport-RunEC2RescueForWindowsTool	Active

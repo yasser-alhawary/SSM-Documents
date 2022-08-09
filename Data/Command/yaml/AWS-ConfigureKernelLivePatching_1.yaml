@@ -260,4 +260,4 @@ mainSteps:
       - "  exit ${EXIT_CODE_REBOOT}"
       - ""
       - "fi"
-
+	2020-07-08T19:22:23.608000+02:00	YAML	Command	1	AWS-ConfigureKernelLivePatching	Active

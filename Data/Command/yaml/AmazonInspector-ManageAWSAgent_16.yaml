@@ -300,4 +300,4 @@ mainSteps:
     - "  Write-Host $_.Exception|format-list -force"
     - "  exit 6"
     - "}"
-
+	2022-03-11T15:07:28.691000+01:00	YAML	Command	16	AmazonInspector-ManageAWSAgent	Active

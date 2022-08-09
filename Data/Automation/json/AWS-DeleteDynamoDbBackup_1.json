@@ -22,4 +22,4 @@
       "BackupArn" : "{{BackupArn}}"
     }
   } ]
-}
+}	2018-08-31T23:15:58.639000+02:00	JSON	Automation	1	AWS-DeleteDynamoDbBackup	Active

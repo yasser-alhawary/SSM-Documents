@@ -86,4 +86,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: StringMap
-
+	2022-05-23T17:12:17.007000+02:00	YAML	Automation	1	AWSConfigRemediation-EnforceHTTPSOnOpenSearchDomain	Active

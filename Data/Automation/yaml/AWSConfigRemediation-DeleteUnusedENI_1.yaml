@@ -85,4 +85,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: StringMap
-
+	2020-12-07T23:08:43.741000+01:00	YAML	Automation	1	AWSConfigRemediation-DeleteUnusedENI	Active

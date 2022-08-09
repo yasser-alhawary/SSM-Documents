@@ -774,4 +774,4 @@ mainSteps:
 
       InputPayload:
         StartTime: '{{ RecordStartTime.StartTime }}'
-
+	2022-06-28T17:51:56.264000+02:00	YAML	Automation	3	AWSResilienceHub-RestoreDocumentDBClusterFromBackupSOP_2020-09-21	Active

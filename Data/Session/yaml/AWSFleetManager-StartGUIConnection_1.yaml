@@ -18,4 +18,4 @@ properties:
   portNumber: "{{ portNumber }}"
   type: "LocalPortForwarding"
   localPortNumber: "{{ localPortNumber }}"
-
+	2022-02-08T18:15:15.034000+01:00	YAML	Session	1	AWSFleetManager-StartGUIConnection	Active

@@ -197,4 +197,4 @@ mainSteps:
                     raise e
 outputs:
   - 'createRDSSnapshot.SnapshotId'
-
+	2022-06-22T19:08:39.811000+02:00	YAML	Automation	1	AWS-CreateRdsSnapshot	Active

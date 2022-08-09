@@ -248,4 +248,4 @@ runtimeConfig:
       - "PrepareToRunModule($scriptPath)"
       - "RunModule"
       - ""
-
+	2022-04-06T19:10:34.522000+02:00	YAML	Command	1	AWS-ListWindowsInventory	Active

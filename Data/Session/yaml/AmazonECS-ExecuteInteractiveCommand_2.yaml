@@ -51,4 +51,4 @@ properties:
   windows:
     commands: "{{command}}"
     runAsElevated: false
-
+	2021-10-21T00:12:52.478000+02:00	YAML	Session	2	AmazonECS-ExecuteInteractiveCommand	Active

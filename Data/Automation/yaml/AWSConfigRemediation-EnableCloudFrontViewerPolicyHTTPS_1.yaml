@@ -85,4 +85,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: StringMap
+        Type: StringMap	2021-01-28T17:07:38.260000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableCloudFrontViewerPolicyHTTPS	Active

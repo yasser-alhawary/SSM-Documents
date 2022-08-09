@@ -77,4 +77,4 @@
       "DesiredValues" : [ "True" ]
     }
   } ]
-}
+}	2020-12-22T17:05:18.521000+01:00	JSON	Automation	1	AWSConfigRemediation-EnableRDSClusterDeletionProtection	Active

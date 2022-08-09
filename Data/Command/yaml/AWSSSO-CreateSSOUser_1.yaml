@@ -197,4 +197,4 @@ mainSteps:
         } else {
             ExitWithFailureMessage -Message "Failed to set SSO user as an Administrator" -PrintJson
         }
-
+	2021-11-23T04:58:39.926000+01:00	YAML	Command	1	AWSSSO-CreateSSOUser	Active

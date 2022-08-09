@@ -21,4 +21,4 @@ runtimeConfig:
     settings:
       startType: "{{ status }}"
     properties: "{{ properties }}"
-
+	2018-05-08T21:09:46.004000+02:00	YAML	Command	1	AWS-ConfigureCloudWatch	Active

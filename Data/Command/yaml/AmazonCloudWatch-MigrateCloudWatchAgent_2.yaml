@@ -73,4 +73,4 @@ mainSteps:
     - "Set-Location -Path \"${Env:ProgramFiles}\\Amazon\\AmazonCloudWatchAgent\" -PassThru"
     - ".\\amazon-cloudwatch-agent-ctl.ps1 -a fetch-config -m ec2 -c file:config.json\
       \ -s"
-
+	2018-01-05T19:57:29.964000+01:00	YAML	Command	2	AmazonCloudWatch-MigrateCloudWatchAgent	Active

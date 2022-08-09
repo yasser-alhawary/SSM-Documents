@@ -1015,4 +1015,4 @@ mainSteps:
         done
         
         ExitWithSuccessMessage 'Successfully copied source files or directories at the specified destination path.' 'PRINT_JSON'
-
+	2022-02-08T18:13:48.061000+01:00	YAML	Command	4	AWSFleetManager-CopyFileSystemItem	Active

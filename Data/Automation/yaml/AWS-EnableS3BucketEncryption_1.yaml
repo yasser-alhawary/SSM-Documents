@@ -43,4 +43,4 @@ mainSteps:
             ApplyServerSideEncryptionByDefault:
                 SSEAlgorithm: "{{SSEAlgorithm}}"
   isEnd: true
-...
+...	2018-09-05T19:04:24.897000+02:00	YAML	Automation	1	AWS-EnableS3BucketEncryption	Active

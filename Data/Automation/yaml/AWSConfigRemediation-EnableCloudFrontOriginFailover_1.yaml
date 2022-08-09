@@ -130,4 +130,4 @@ mainSteps:
       - Name: Output
         Type: StringMap
         Selector: $.Payload.output
-
+	2020-12-22T17:05:03.559000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableCloudFrontOriginFailover	Active

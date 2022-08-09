@@ -263,4 +263,4 @@ mainSteps:
   - Selector: "$.Payload.aggregatorauthorization"
     Name: "AggregatorAuthorization"
     Type: "String"
-
+	2022-07-12T02:34:17.010000+02:00	YAML	Automation	3	AWSSupport-SetupConfig	Active

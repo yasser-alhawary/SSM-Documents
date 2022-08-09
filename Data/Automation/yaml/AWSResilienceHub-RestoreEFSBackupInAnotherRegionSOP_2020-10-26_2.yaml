@@ -455,4 +455,4 @@ outputs:
   - GetDestinationRecoveryPointArn.DestinationRecoveryPointArn
   - OutputRecoveryTime.RecoveryTime
   - WaitForRestoreJobCompletion.RestoredFSArn
-
+	2022-04-25T22:13:24.946000+02:00	YAML	Automation	2	AWSResilienceHub-RestoreEFSBackupInAnotherRegionSOP_2020-10-26	Active

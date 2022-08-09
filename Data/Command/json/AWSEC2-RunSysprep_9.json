@@ -20,4 +20,4 @@
       "StringEquals" : [ "platformType", "Windows" ]
     }
   } ]
-}
+}	2022-07-07T18:10:31.827000+02:00	JSON	Command	9	AWSEC2-RunSysprep	Active

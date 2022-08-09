@@ -374,4 +374,4 @@ mainSteps:
         fi
         
         ExitWithSuccessMessage 'All users have been added to the specified groups.'
-
+	2021-12-13T05:10:08.907000+01:00	YAML	Command	13	AWSFleetManager-AddUsersToGroups	Active

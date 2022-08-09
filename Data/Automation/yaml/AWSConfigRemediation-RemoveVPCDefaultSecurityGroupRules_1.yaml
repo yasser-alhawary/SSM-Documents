@@ -97,4 +97,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: String
-
+	2020-12-07T23:10:34.755000+01:00	YAML	Automation	1	AWSConfigRemediation-RemoveVPCDefaultSecurityGroupRules	Active

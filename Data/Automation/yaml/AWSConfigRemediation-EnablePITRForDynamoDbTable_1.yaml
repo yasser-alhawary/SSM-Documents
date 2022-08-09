@@ -60,4 +60,4 @@ mainSteps:
       TableName: "{{ TableName }}"
       PropertySelector: ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus
       DesiredValues:
-        - "ENABLED"
+        - "ENABLED"	2020-10-29T16:10:43.650000+01:00	YAML	Automation	1	AWSConfigRemediation-EnablePITRForDynamoDbTable	Active

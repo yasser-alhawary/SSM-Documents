@@ -324,4 +324,4 @@ mainSteps:
     StringEquals:
     - "platformType"
     - "Linux"
-
+	2022-08-03T08:47:55.791000+02:00	YAML	Command	18	AWSEC2-ConfigureSTIG	Active

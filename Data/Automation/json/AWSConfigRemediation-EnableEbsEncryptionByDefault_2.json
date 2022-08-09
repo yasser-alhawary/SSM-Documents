@@ -38,4 +38,4 @@
       "DesiredValues" : [ "True" ]
     }
   } ]
-}
+}	2021-10-06T17:11:14.514000+02:00	JSON	Automation	2	AWSConfigRemediation-EnableEbsEncryptionByDefault	Active

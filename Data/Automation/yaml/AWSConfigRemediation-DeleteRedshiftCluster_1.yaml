@@ -102,4 +102,4 @@ mainSteps:
       PropertySelector: "$.Clusters[0].ClusterStatus"
       DesiredValues:
         - "final-snapshot"
-        - "deleting"
+        - "deleting"	2020-11-13T17:08:39.224000+01:00	YAML	Automation	1	AWSConfigRemediation-DeleteRedshiftCluster	Active

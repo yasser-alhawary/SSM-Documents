@@ -87,4 +87,4 @@ mainSteps:
       DBInstanceIdentifier: "{{ GetRDSInstanceIdentifier.DbInstanceIdentifier }}"
       PropertySelector: "$.DBInstances[0].DeletionProtection"
       DesiredValues:
-        - "True"
+        - "True"	2020-10-20T17:05:16.417000+02:00	YAML	Automation	1	AWSConfigRemediation-EnableRDSInstanceDeletionProtection	Active

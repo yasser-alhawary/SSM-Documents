@@ -118,4 +118,4 @@ mainSteps:
                   except Exception as e:
                     errorMsg = str(e)
                     raise Exception("Unable to perform the required action on inline policy: '{}'. error: '{}'".format(policy, errorMsg))
-
+	2021-04-28T22:28:00.337000+02:00	YAML	Automation	1	AWS-DeleteIAMInlinePolicy	Active

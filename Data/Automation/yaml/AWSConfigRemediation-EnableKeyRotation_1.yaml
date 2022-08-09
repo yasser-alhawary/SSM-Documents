@@ -58,4 +58,4 @@ mainSteps:
       KeyId: "{{ KeyId }}"
       PropertySelector: $.KeyRotationEnabled
       DesiredValues:
-        - "True"
+        - "True"	2020-11-13T17:08:52.243000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableKeyRotation	Active

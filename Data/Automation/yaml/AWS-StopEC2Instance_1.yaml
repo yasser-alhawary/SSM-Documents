@@ -25,4 +25,4 @@ mainSteps:
     CheckStateOnly: false
     DesiredState: "stopped"
     Force: true
-
+	2018-07-11T19:03:07.332000+02:00	YAML	Automation	1	AWS-StopEC2Instance	Active

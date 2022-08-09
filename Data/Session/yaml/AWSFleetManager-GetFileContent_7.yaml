@@ -336,4 +336,4 @@ properties:
             /usr/bin/read
         fi
     runAsElevated: true
-
+	2022-02-08T18:15:06.043000+01:00	YAML	Session	7	AWSFleetManager-GetFileContent	Active

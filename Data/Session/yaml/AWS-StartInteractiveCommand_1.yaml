@@ -16,4 +16,4 @@ properties:
   macos:
     commands: "{{command}}"
     runAsElevated: false
-
+	2020-12-01T10:12:37.660000+01:00	YAML	Session	1	AWS-StartInteractiveCommand	Active

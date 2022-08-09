@@ -77,4 +77,4 @@
       "DesiredValues" : [ "applying" ]
     }
   } ]
-}
+}	2020-12-22T17:05:35.541000+01:00	JSON	Automation	1	AWSConfigRemediation-EnforceSSLOnlyConnectionsToRedshiftCluster	Active

@@ -505,4 +505,4 @@ mainSteps:
     - "}"
     - "echo \"{$(getContainerWorkload)$(getJavaWorkload)$(getDotNetWorkload)$(getMySqlWorkload)$(getSqlServerWorkload)$(getPostgreSqlWorkload)$(getOracleWorkload)$(getHanaWorkload)}\"\
       \ | sed 's/,\\(.\\)$/\\1/'"
-
+	2022-07-27T08:27:03.035000+02:00	YAML	Command	22	AWSEC2-DetectWorkload	Active

@@ -51,4 +51,4 @@ properties:
   linux:
     commands: "{{command}}"
     runAsElevated: false
-
+	2021-08-06T00:02:56.736000+02:00	YAML	Session	1	AmazonEKS-ExecuteNonInteractiveCommand	Active

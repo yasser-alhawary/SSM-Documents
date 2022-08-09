@@ -122,4 +122,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload
-        Type: StringMap
+        Type: StringMap	2021-04-22T17:05:58.864000+02:00	YAML	Automation	1	AWSConfigRemediation-EnableBeanstalkEnvironmentNotifications	Active

@@ -50,4 +50,4 @@ mainSteps:
 
       killall -{{ Signal }} '{{ ProcessName }}' || { echo No process matching '{{ ProcessName }}' found. Exiting... ; exit 1 ;}
       echo Done with command: "killall -{{ Signal }} '{{ ProcessName }}'"
-
+	2021-10-22T13:31:28.974000+02:00	YAML	Command	3	AWSFIS-Run-Kill-Process	Active

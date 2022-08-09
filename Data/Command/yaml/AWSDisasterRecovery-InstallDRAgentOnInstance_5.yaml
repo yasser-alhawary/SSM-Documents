@@ -149,4 +149,4 @@ mainSteps:
         - "rm -f ./aws-installer.sha512 ./aws-replication-installer-init.py"
         - "rm -f install_agent.py"
         - "exit $result"
-
+	2022-07-14T09:10:12.610000+02:00	YAML	Command	5	AWSDisasterRecovery-InstallDRAgentOnInstance	Active

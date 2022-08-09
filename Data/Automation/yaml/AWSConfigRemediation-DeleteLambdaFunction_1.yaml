@@ -76,4 +76,4 @@ mainSteps:
      - Name: Output
        Selector: $.Payload.output
        Type: String
-
+	2020-12-17T17:03:37.625000+01:00	YAML	Automation	1	AWSConfigRemediation-DeleteLambdaFunction	Active

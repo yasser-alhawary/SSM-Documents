@@ -299,4 +299,4 @@ mainSteps:
 
       # After the desired duration, the fault injection is removed
       rollback
-
+	2022-03-02T17:54:42.007000+01:00	YAML	Command	8	AWSFIS-Run-Network-Latency	Active

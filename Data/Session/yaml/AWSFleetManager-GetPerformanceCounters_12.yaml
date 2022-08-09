@@ -612,4 +612,4 @@ properties:
             read -r Reply
         done
     runAsElevated: true
-
+	2022-04-20T18:14:18.494000+02:00	YAML	Session	12	AWSFleetManager-GetPerformanceCounters	Active

@@ -786,4 +786,4 @@ templateBody:
       Description: ARN of the policy with permissions to read the secret holding the credentials for the domain join user
       Value:
         Ref: NonWindowsDomainJoinPolicy
-
+	2022-07-21T00:22:42.954000+02:00	YAML	CloudFormation	5	AWSQuickStarts-AWS-Managed-Microsoft-AD-Existing-VPC	Active	AWSQuickStarts-AWS-Managed-Microsoft-AD-Existing-VPC-2022-07-20-22-17-24

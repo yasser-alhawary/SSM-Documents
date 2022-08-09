@@ -235,4 +235,4 @@ mainSteps:
         else
             ExitWithFailureMessage 'The required command groupdel does not exist.' 'PRINT_JSON'
         fi
-
+	2021-12-13T05:10:58.403000+01:00	YAML	Command	9	AWSFleetManager-DeleteGroup	Active

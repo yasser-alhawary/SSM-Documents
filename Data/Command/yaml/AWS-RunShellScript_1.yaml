@@ -26,4 +26,4 @@ runtimeConfig:
       runCommand: "{{ commands }}"
       workingDirectory: "{{ workingDirectory }}"
       timeoutSeconds: "{{ executionTimeout }}"
-
+	2017-08-21T22:25:02.029000+02:00	YAML	Command	1	AWS-RunShellScript	Active

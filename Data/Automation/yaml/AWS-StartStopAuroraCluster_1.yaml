@@ -213,4 +213,4 @@ mainSteps:
     - Name: CurrentStatus
       Selector: $.Payload.CurrentStatus
       Type: String
-
+	2021-04-27T21:29:27.544000+02:00	YAML	Automation	1	AWS-StartStopAuroraCluster	Active

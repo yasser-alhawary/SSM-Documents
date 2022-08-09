@@ -155,4 +155,4 @@ mainSteps:
       PropertySelector: "$.MetricAlarms[0].StateValue"
       DesiredValues: ["OK"]
     isEnd: true
-
+	2021-11-09T01:08:13.542000+01:00	YAML	Automation	3	AWSResilienceHub-KillProcessInEc2Test_2021-10-22	Active

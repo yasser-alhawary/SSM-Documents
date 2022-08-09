@@ -351,4 +351,4 @@ templateBody:
       Condition: SetupRoute53
       Description: The public CNAME pointing to your Consul Load Balancer.
       Value: !GetAtt "HashiCorpConsulStack.Outputs.ConsulServerFQDN"
-
+	2021-06-16T01:37:47.793000+02:00	YAML	CloudFormation	1	AWSQuickStarts-HashicorpConsul	Active

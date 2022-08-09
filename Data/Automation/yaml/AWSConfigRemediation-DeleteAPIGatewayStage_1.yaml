@@ -85,4 +85,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: StringMap
-
+	2020-12-18T17:06:37.763000+01:00	YAML	Automation	1	AWSConfigRemediation-DeleteAPIGatewayStage	Active

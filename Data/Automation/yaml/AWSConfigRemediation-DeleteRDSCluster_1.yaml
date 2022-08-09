@@ -144,4 +144,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: StringMap
-
+	2020-12-29T17:08:13.216000+01:00	YAML	Automation	1	AWSConfigRemediation-DeleteRDSCluster	Active

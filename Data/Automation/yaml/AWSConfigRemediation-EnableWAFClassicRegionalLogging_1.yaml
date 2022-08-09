@@ -86,4 +86,4 @@ mainSteps:
       PropertySelector: $.LoggingConfiguration.LogDestinationConfigs[0]
       DesiredValues:
         - "{{ LogDestinationConfigs }}"
-
+	2020-12-07T23:09:50.741000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableWAFClassicRegionalLogging	Active

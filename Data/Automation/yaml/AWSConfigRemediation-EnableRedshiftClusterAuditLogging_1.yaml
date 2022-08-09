@@ -121,4 +121,4 @@ mainSteps:
         - "{{BucketName}}"
     isEnd: true
 
-
+	2020-12-29T17:08:59.299000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableRedshiftClusterAuditLogging	Active

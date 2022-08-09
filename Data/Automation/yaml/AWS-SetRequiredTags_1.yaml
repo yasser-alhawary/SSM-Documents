@@ -113,4 +113,4 @@ mainSteps:
       - Name: FailedResources
         Selector: $.Payload.FailedResources
         Type: MapList
-
+	2021-05-26T22:51:55.141000+02:00	YAML	Automation	1	AWS-SetRequiredTags	Active

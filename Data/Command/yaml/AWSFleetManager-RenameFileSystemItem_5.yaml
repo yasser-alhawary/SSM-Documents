@@ -894,4 +894,4 @@ mainSteps:
         
         "$COMMAND" "$SourceFSItemPath" "$DestinationPath"|| ExitWithFailureMessageAndExitCode "Failed to rename file/directory." "$RENAME_FAILED_ERROR" 'PRINT_JSON'
         ExitWithSuccessMessage 'Successfully renamed file/directory.' 'PRINT_JSON'
-
+	2022-02-08T18:14:46.044000+01:00	YAML	Command	5	AWSFleetManager-RenameFileSystemItem	Active

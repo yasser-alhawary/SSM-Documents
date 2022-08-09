@@ -73,4 +73,4 @@
       "DesiredValues" : [ "{{ GetKMSKeyArn.KMSKeyArn }}" ]
     }
   } ]
-}
+}	2021-04-22T17:06:12.855000+02:00	JSON	Automation	1	AWSConfigRemediation-EnableCloudTrailEncryptionWithKMS	Active

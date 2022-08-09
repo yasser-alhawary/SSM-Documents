@@ -148,4 +148,4 @@ outputs:
 - "GetInstanceProfile.InstanceProfileArn"
 - "AttachIAMProfileToInstance.AssociationId"
 - "ListInstanceProfilesForRole.InstanceProfileName"
-- "ListInstanceProfilesForRole.InstanceProfileArn"
+- "ListInstanceProfilesForRole.InstanceProfileArn"	2019-06-12T23:32:32.675000+02:00	YAML	Automation	1	AWS-AttachIAMToInstance	Active

@@ -34,4 +34,4 @@ mainSteps:
   onFailure: "Abort"
   inputs:
     StackName: "{{StackNameOrId}}"
-
+	2017-11-21T07:35:34.784000+01:00	YAML	Automation	1	AWS-DeleteCloudFormationStackWithApproval	Active

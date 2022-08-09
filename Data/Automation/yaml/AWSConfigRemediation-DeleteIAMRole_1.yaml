@@ -246,4 +246,4 @@ mainSteps:
       - Name: Output
         Selector: $.Payload.output
         Type: StringMap
-
+	2020-12-18T17:06:48.766000+01:00	YAML	Automation	1	AWSConfigRemediation-DeleteIAMRole	Active

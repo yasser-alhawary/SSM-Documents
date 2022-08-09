@@ -151,4 +151,4 @@ mainSteps:
     Selector: "$.Payload.Commands"
     Type: "StringMap"
   isEnd: true
-
+	2022-07-08T01:54:25.466000+02:00	YAML	Automation	2	AWSSupport-ModifyRDSSnapshotPermission	Active

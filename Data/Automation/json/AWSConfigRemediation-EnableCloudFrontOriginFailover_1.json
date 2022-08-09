@@ -59,4 +59,4 @@
       "Selector" : "$.Payload.output"
     } ]
   } ]
-}
+}	2020-12-22T17:05:03.559000+01:00	JSON	Automation	1	AWSConfigRemediation-EnableCloudFrontOriginFailover	Active

@@ -80,4 +80,4 @@ mainSteps:
     - ""
     workingDirectory: "{{ workingDirectory }}"
     timeoutSeconds: "{{ executionTimeout }}"
-
+	2017-10-26T02:33:39.919000+02:00	YAML	Command	1	AWS-RunRemoteScript	Active

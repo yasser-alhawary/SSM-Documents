@@ -950,4 +950,4 @@ mainSteps:
         else
             ExitWithFailureMessageAndExitCode -Message "The process with Id "$Id" doesn't exist." "$INVALID_PROCESS_ID" 'PRINT_JSON'
         fi
-
+	2021-12-13T05:12:17.905000+01:00	YAML	Command	2	AWSFleetManager-TerminateProcess	Active

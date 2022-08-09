@@ -48,4 +48,4 @@
       "DesiredValues" : [ "False" ]
     }
   } ]
-}
+}	2020-12-07T23:09:00.747000+01:00	JSON	Automation	1	AWSConfigRemediation-DisableSubnetAutoAssignPublicIP	Active

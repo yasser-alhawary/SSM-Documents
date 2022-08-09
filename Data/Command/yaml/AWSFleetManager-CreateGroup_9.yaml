@@ -256,4 +256,4 @@ mainSteps:
         else
             ExitWithFailureMessage 'The required command groupadd does not exist.' 'PRINT_JSON'
         fi
-
+	2021-12-13T05:10:32.898000+01:00	YAML	Command	9	AWSFleetManager-CreateGroup	Active

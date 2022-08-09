@@ -305,4 +305,4 @@ mainSteps:
 
       InputPayload:
         StartTime: '{{ RecordStartTime.StartTime }}'
-
+	2022-06-28T17:51:54.596000+02:00	YAML	Automation	3	AWSResilienceHub-CreateNewDocumentDBInstanceSOP_2020-09-21	Active

@@ -88,4 +88,4 @@ mainSteps:
     - "else"
     - "   ansible-playbook -i \"localhost,\" -c local -e \"{{extravars}}\" playbook.yml"
     - "fi"
-
+	2022-03-16T18:09:13.133000+01:00	YAML	Command	1	AWS-RunAnsiblePlaybook	Active

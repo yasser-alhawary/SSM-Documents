@@ -60,4 +60,4 @@
       "Selector" : "$.Payload.output"
     } ]
   } ]
-}
+}	2021-02-02T17:07:12.875000+01:00	JSON	Automation	1	AWSConfigRemediation-ModifyRedshiftClusterNodeType	Active

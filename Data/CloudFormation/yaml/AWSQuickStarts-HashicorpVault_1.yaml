@@ -677,4 +677,4 @@ templateBody:
               - ''
         AssertDescription: Using an SSL certificate is enforced. A CertificateArn
           or a HostedZoneID and Domain Name must be provided.
-
+	2021-06-29T03:03:16.749000+02:00	YAML	CloudFormation	1	AWSQuickStarts-HashicorpVault	Active

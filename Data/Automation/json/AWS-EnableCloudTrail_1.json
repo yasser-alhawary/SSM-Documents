@@ -27,4 +27,4 @@
       "S3BucketName" : "{{S3BucketName}}"
     }
   } ]
-}
+}	2018-12-05T19:05:13.578000+01:00	JSON	Automation	1	AWS-EnableCloudTrail	Active

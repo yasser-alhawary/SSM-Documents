@@ -99,4 +99,4 @@ mainSteps:
     DBInstanceIdentifier: "{{ GetDBInstanceIdentifier.DBInstanceIdentifier }}"
     PropertySelector: $.DBInstances[0].CopyTagsToSnapshot
     DesiredValues:
-      - "True"
+      - "True"	2020-12-07T23:09:08.747000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableCopyTagsToSnapshotOnRDSDBInstance	Active

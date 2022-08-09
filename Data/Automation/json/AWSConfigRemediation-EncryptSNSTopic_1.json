@@ -52,4 +52,4 @@
       "DesiredValues" : [ "{{ KmsKeyArn }}" ]
     }
   } ]
-}
+}	2020-12-07T23:10:04.737000+01:00	JSON	Automation	1	AWSConfigRemediation-EncryptSNSTopic	Active

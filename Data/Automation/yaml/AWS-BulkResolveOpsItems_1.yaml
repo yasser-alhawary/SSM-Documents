@@ -296,4 +296,4 @@ mainSteps:
 outputs:
   - "BulkResolveOpsItemsStep.Status"
   - "BulkResolveOpsItemsStep.NumberOfOpsItemsResolved"
-  - "BulkResolveOpsItemsStep.NumberOfOpsItemsFailedResolve"
+  - "BulkResolveOpsItemsStep.NumberOfOpsItemsFailedResolve"	2021-07-08T22:21:56.992000+02:00	YAML	Automation	1	AWS-BulkResolveOpsItems	Active

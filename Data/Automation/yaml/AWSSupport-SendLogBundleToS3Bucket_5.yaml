@@ -237,4 +237,4 @@ mainSteps:
 outputs:
 - "collectAndUploadWindowsLogBundle.Output"
 - "collectAndUploadLinuxLogBundle.Output"
-
+	2021-03-02T17:07:10.394000+01:00	YAML	Automation	5	AWSSupport-SendLogBundleToS3Bucket	Active

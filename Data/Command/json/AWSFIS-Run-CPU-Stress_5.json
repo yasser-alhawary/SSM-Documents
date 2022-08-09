@@ -49,4 +49,4 @@
       "runCommand" : [ "#!/bin/bash\n\n########################\n# Fault-specific logic #\n########################\n\nif [ {{ DurationSeconds }} -lt 1 ] || [ {{ DurationSeconds }} -gt 43200 ] ; then echo DurationSeconds parameter value must be between 1 and 43200 && exit 1; fi\nif [ {{ LoadPercent }} -lt 0 ] || [ {{ LoadPercent }} -gt 100 ] ; then echo LoadPercent parameter value must be between 0 and 100 && exit 1; fi\npgrep stress-ng && echo Another stress-ng command is running, exiting... && exit 1\necho Initiating CPU stress for {{ DurationSeconds }} seconds...\nstress-ng --cpu {{ CPU }} --cpu-method matrixprod -t {{ DurationSeconds }}s --cpu-load {{ LoadPercent }}\necho Finished CPU stress.\n" ]
     }
   } ]
-}
+}	2021-10-22T13:31:18.840000+02:00	JSON	Command	5	AWSFIS-Run-CPU-Stress	Active

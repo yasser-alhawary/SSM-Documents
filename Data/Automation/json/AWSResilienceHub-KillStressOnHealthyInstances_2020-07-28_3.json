@@ -59,4 +59,4 @@
       "InstanceIds" : [ "{{ FilterHealthyAsgInstances.InstanceIds }}" ]
     }
   } ]
-}
+}	2022-04-25T22:12:31.971000+02:00	JSON	Automation	3	AWSResilienceHub-KillStressOnHealthyInstances_2020-07-28	Active

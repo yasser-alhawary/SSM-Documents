@@ -124,4 +124,4 @@ mainSteps:
       DBInstanceIdentifier: "{{ DescribeDBInstances.DBInstanceIdentifier }}"
       PropertySelector: "$.DBInstances[0].PendingModifiedValues.MultiAZ"
       DesiredValues:
-        - "True"
+        - "True"	2020-10-15T17:06:36.031000+02:00	YAML	Automation	1	AWSConfigRemediation-EnableMultiAZOnRDSInstance	Active

@@ -192,4 +192,4 @@ mainSteps:
                     template_json = json.loads(escaped_template)
                 except:
                     raise Exception("cannot parse template in input_transformer")
-            return template_json, is_template_escaped
+            return template_json, is_template_escaped	2021-05-05T22:26:03.993000+02:00	YAML	Automation	1	AWS-AddOpsItemDedupStringToEventBridgeRule	Active

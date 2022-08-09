@@ -69,4 +69,4 @@
       "DesiredValues" : [ "{{ LogDestinationConfigs }}" ]
     }
   } ]
-}
+}	2020-12-07T23:09:50.741000+01:00	JSON	Automation	1	AWSConfigRemediation-EnableWAFClassicRegionalLogging	Active

@@ -77,4 +77,4 @@ mainSteps:
       **Identify action items**  
       * Add entries in the **Timeline** tab of the incident to record key decisions and actions taken, including temporary mitigations that might have been implemented. 
       * Create a **Post-Incident Analysis** when the incident is closed in order to identify and track action items in [OpsCenter](https://console.aws.amazon.com/systems-manager/opsitems). 
-
+	2021-04-16T19:44:10.801000+02:00	YAML	Automation	2	AWSIncidents-CriticalIncidentRunbookTemplate	Active

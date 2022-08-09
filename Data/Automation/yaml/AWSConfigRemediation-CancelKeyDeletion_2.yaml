@@ -60,4 +60,4 @@ mainSteps:
       PropertySelector: $..KeyState
       DesiredValues:
         - "Disabled"
-
+	2021-03-03T17:11:26.304000+01:00	YAML	Automation	2	AWSConfigRemediation-CancelKeyDeletion	Active

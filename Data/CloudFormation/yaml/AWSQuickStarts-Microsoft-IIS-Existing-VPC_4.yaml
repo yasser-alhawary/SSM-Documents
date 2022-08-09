@@ -563,4 +563,4 @@ templateBody:
     DomainJoinSecrets:
       Value:
         Ref: DomainJoinSecrets
-
+	2022-07-14T04:26:41.067000+02:00	YAML	CloudFormation	4	AWSQuickStarts-Microsoft-IIS-Existing-VPC	Active	AWSQuickStarts-Microsoft-IIS-Existing-VPC-2022-07-14-02-24-26

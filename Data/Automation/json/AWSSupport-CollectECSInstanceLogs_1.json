@@ -1259,4 +1259,4 @@
       "description": "Upload logs to S3"
     }
   ]
-}
+}	2022-03-23T22:54:26.798000+01:00	JSON	Automation	1	AWSSupport-CollectECSInstanceLogs	Active

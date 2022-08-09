@@ -96,4 +96,4 @@ mainSteps:
        PropertySelector: "$.DBClusters[0].DeletionProtection"
        DesiredValues:
          - "True"
-
+	2020-12-22T17:05:18.521000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableRDSClusterDeletionProtection	Active

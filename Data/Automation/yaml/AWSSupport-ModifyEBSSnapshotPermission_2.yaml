@@ -146,4 +146,4 @@ mainSteps:
     Selector: "$.Payload.Commands"
     Type: "StringMap"
   isEnd: true
-
+	2022-07-08T00:31:11.138000+02:00	YAML	Automation	2	AWSSupport-ModifyEBSSnapshotPermission	Active

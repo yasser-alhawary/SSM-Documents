@@ -160,4 +160,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: StringMap
+        Type: StringMap	2020-12-07T23:10:19.765000+01:00	YAML	Automation	1	AWSConfigRemediation-ModifyRDSInstancePortNumber	Active

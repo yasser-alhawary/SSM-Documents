@@ -83,4 +83,4 @@ mainSteps:
     source: "https://s3.{Region}.amazonaws.com/aws-ssm-{Region}/manifest.json"
     allowDowngrade: "{{ allowDowngrade }}"
     targetVersion: "{{ version }}"
-
+	2022-02-23T19:08:14.556000+01:00	YAML	Command	1	AWS-UpdateEC2Config	Active

@@ -85,4 +85,4 @@ mainSteps:
   action: "aws:deleteStack"
   inputs:
     StackName: "UpdateCFTemplateStack{{automation:EXECUTION_ID}}"
-
+	2022-06-22T19:13:21.809000+02:00	YAML	Automation	1	AWS-UpdateCloudFormationStackWithApproval	Active

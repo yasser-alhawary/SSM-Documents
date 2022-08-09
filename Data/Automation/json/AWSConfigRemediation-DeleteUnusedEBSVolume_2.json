@@ -134,4 +134,4 @@
     } ]
   } ],
   "outputs" : [ "ValidateAndCreateEbsSnapshot.Snapshot", "DeleteEbsVolume.Output" ]
-}
+}	2020-12-16T17:05:17.375000+01:00	JSON	Automation	2	AWSConfigRemediation-DeleteUnusedEBSVolume	Active

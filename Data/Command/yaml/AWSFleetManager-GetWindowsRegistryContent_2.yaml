@@ -484,4 +484,4 @@ mainSteps:
         }
         
         ProcessItems @processItems
-
+	2021-09-09T18:09:42.622000+02:00	YAML	Command	2	AWSFleetManager-GetWindowsRegistryContent	Active

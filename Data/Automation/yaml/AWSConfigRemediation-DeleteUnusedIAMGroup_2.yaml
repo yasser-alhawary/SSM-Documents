@@ -147,4 +147,4 @@ mainSteps:
       - Name: Response
         Selector: $.Payload
         Type: StringMap
-
+	2022-04-15T17:08:03.289000+02:00	YAML	Automation	2	AWSConfigRemediation-DeleteUnusedIAMGroup	Active

@@ -97,4 +97,4 @@ mainSteps:
   action: "aws:sleep"
   inputs:
     Duration: "{{WaitForInstance}}"
-
+	2018-07-11T19:03:01.929000+02:00	YAML	Automation	1	AWS-PatchAsgInstance	Active

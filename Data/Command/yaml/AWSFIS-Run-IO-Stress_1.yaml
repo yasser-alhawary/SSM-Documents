@@ -108,4 +108,4 @@ mainSteps:
       echo Initiating IO stress for {{ DurationSeconds }} seconds...
       stress-ng --iomix {{ Workers }} --iomix-bytes {{ Percent }}% -t {{ DurationSeconds }}s
       echo Finished IO stress.
-
+	2021-11-04T10:57:27.211000+01:00	YAML	Command	1	AWSFIS-Run-IO-Stress	Active

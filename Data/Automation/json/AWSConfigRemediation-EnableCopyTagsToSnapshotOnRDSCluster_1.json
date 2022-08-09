@@ -82,4 +82,4 @@
       "DesiredValues" : [ "True" ]
     }
   } ]
-}
+}	2020-12-29T17:08:33.220000+01:00	JSON	Automation	1	AWSConfigRemediation-EnableCopyTagsToSnapshotOnRDSCluster	Active

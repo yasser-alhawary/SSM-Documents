@@ -59,4 +59,4 @@ mainSteps:
       - "{{LambdaAssumeRole}}"
       AutomationAssumeRole:
       - "{{AutomationAssumeRole}}"
-
+	2020-05-13T19:23:09.708000+02:00	YAML	Automation	1	AWS-SetupManagedInstance	Active

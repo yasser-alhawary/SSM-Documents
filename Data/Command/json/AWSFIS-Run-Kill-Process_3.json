@@ -27,4 +27,4 @@
       "runCommand" : [ "#!/bin/bash\n\nkillall -{{ Signal }} '{{ ProcessName }}' || { echo No process matching '{{ ProcessName }}' found. Exiting... ; exit 1 ;}\necho Done with command: \"killall -{{ Signal }} '{{ ProcessName }}'\"\n" ]
     }
   } ]
-}
+}	2021-10-22T13:31:28.974000+02:00	JSON	Command	3	AWSFIS-Run-Kill-Process	Active

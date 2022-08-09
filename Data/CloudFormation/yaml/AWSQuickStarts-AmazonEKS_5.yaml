@@ -1857,4 +1857,4 @@ templateBody:
                       - Ref: ConsulUIDomainName
                       - ''
           AssertDescription: 'Consul2: Using an SSL certificate is enforced. A CertificateArn or a HostedZoneID and Domain Name must be provided.'
-
+	2022-06-21T02:35:33.022000+02:00	YAML	CloudFormation	5	AWSQuickStarts-AmazonEKS	Active	AWSQuickStarts-AmazonEKS-2022-06-21-00-32-56

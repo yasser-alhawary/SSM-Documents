@@ -188,4 +188,4 @@ mainSteps:
       Type: String
 outputs:
 - ValidateAndCreateEbsSnapshot.Snapshot
-- DeleteEbsVolume.Output
+- DeleteEbsVolume.Output	2020-12-16T17:05:17.375000+01:00	YAML	Automation	2	AWSConfigRemediation-DeleteUnusedEBSVolume	Active

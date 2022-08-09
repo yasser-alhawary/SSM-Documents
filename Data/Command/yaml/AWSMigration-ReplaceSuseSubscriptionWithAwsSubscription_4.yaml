@@ -136,4 +136,4 @@ mainSteps:
         zypper -n install --force-resolution regionServiceClientConfigEC2
         
         echo "Finished migration of SUSE subscription to AWS."
-
+	2022-06-14T18:18:17.582000+02:00	YAML	Command	4	AWSMigration-ReplaceSuseSubscriptionWithAwsSubscription	Active

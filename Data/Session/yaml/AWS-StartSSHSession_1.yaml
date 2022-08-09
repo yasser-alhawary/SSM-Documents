@@ -10,4 +10,4 @@ parameters:
     default: "22"
 properties:
   portNumber: "{{ portNumber }}"
-
+	2019-06-12T23:33:03.766000+02:00	YAML	Session	1	AWS-StartSSHSession	Active

@@ -269,4 +269,4 @@ mainSteps:
       InputPayload:
         StartTime: '{{ RecordStartTime.StartTime }}'
     isEnd: true
-
+	2022-04-25T22:27:59.433000+02:00	YAML	Automation	2	AWSResilienceHub-RestoreDynamoDBTableFromBackupSOP_2020-04-01	Active

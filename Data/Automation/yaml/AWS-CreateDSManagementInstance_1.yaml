@@ -646,4 +646,4 @@ mainSteps:
       Api: DeleteSecurityGroup
       GroupId: '{{ CreateSecurityGroup.SecurityGroupId }}'
     isEnd: true
-
+	2021-06-14T20:20:04.616000+02:00	YAML	Automation	1	AWS-CreateDSManagementInstance	Active

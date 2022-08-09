@@ -1642,4 +1642,4 @@ templateBody:
     SqsARN:
       Description: AmazonSQS Queue ARN
       Value: !Sub ${SqsQueue.Arn}
-
+	2021-07-01T23:00:06.206000+02:00	YAML	CloudFormation	1	AWSSolutions-VideoOnDemandOnAWS	Active

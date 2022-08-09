@@ -32,4 +32,4 @@ mainSteps:
     - "     }"
     - "    Write-Host $counterSet','$counterStatus"
     - "}"
-
+	2021-12-09T01:59:43.660000+01:00	YAML	Command	6	AWSEC2-CheckPerformanceCounterSets	Active

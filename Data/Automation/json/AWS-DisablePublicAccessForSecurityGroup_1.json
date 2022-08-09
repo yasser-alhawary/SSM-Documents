@@ -191,4 +191,4 @@
     "isEnd" : true,
     "onFailure" : "Continue"
   } ]
-}
+}	2021-02-24T22:35:22.683000+01:00	JSON	Automation	1	AWS-DisablePublicAccessForSecurityGroup	Active

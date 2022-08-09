@@ -885,4 +885,4 @@ templateBody:
       Value:
         Ref: RemoteDesktopGatewaySG
       Description: Remote Desktop Gateway security group ID.
-
+	2021-11-11T07:42:14.244000+01:00	YAML	CloudFormation	1	AWSQuickStarts-Microsoft-RdGateway-Domain-Joined	Active	AWSQuickStarts-Microsoft-RdGateway-Domain-Joined-2021-11-10-22-30-09

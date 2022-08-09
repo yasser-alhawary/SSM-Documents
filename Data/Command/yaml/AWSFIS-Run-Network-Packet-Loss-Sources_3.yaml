@@ -387,4 +387,4 @@ mainSteps:
 
       # After the desired duration, the fault injection is removed
       rollback
-
+	2022-03-02T17:55:21.526000+01:00	YAML	Command	3	AWSFIS-Run-Network-Packet-Loss-Sources	Active

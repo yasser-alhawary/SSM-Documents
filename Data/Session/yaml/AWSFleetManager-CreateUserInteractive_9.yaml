@@ -337,4 +337,4 @@ properties:
             }
         fi
     runAsElevated: true
-
+	2021-12-13T05:12:25.937000+01:00	YAML	Session	9	AWSFleetManager-CreateUserInteractive	Active

@@ -115,4 +115,4 @@ mainSteps:
     - "} else {"
     - "    exit 255"
     - "}"
-
+	2021-05-26T22:48:57.058000+02:00	YAML	Command	1	AWS-RunInspecChecks	Active

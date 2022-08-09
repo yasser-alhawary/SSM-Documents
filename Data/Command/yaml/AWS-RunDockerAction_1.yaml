@@ -88,4 +88,4 @@ mainSteps:
     env: "{{ env }}"
     user: "{{ user }}"
     publish: "{{ publish }}"
-
+	2016-11-15T23:11:08.409000+01:00	YAML	Command	1	AWS-RunDockerAction	Active

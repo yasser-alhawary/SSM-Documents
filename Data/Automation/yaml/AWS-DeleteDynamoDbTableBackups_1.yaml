@@ -133,4 +133,4 @@ mainSteps:
     StackName: "DeleteDynamoDbTableBackupsLambaStack{{automation:EXECUTION_ID}}"
 outputs:
 - "deleteDynamoDbTableBackups.Payload"
-
+	2021-05-26T22:50:37.633000+02:00	YAML	Automation	1	AWS-DeleteDynamoDbTableBackups	Active

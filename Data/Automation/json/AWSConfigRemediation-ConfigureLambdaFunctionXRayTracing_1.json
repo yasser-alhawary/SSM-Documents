@@ -48,4 +48,4 @@
       "DesiredValues" : [ "Active" ]
     }
   } ]
-}
+}	2020-10-15T17:05:53.092000+02:00	JSON	Automation	1	AWSConfigRemediation-ConfigureLambdaFunctionXRayTracing	Active

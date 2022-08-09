@@ -48,4 +48,4 @@
       "DesiredValues" : [ "stopped" ]
     }
   } ]
-}
+}	2018-08-27T18:49:39.504000+02:00	JSON	Automation	1	AWS-StopRdsInstance	Active

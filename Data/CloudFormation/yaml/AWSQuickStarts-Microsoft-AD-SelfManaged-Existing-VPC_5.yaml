@@ -1424,4 +1424,4 @@ templateBody:
       Description: Domain Member Security Group ID
       Value:
         Ref: DomainMembersSG
-
+	2022-07-19T21:25:55.917000+02:00	YAML	CloudFormation	5	AWSQuickStarts-Microsoft-AD-SelfManaged-Existing-VPC	Active	AWSQuickStarts-Microsoft-AD-SelfManaged-Existing-VPC-2022-07-19-19-19-40

@@ -77,4 +77,4 @@
       "DesiredValues" : [ "{{ GetKMSKeyArn.KMSKeyArn }}" ]
     }
   } ]
-}
+}	2021-01-29T17:11:29.814000+01:00	JSON	Automation	1	AWSConfigRemediation-UpdateXRayKMSKey	Active

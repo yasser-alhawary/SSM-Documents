@@ -82,4 +82,4 @@ mainSteps:
     - "   fi"
     - "fi"
     - "rm -f /srv/salt/state.sls"
-
+	2017-07-14T00:31:07.121000+02:00	YAML	Command	1	AWS-RunSaltState	Active

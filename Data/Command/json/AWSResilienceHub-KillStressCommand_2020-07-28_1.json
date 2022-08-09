@@ -11,4 +11,4 @@
       "runCommand" : [ "#!/bin/bash", "for pid in `pgrep stress-ng`", "do", "    kill -9 $pid", "done" ]
     }
   } ]
-}
+}	2021-11-06T23:20:26.790000+01:00	JSON	Command	1	AWSResilienceHub-KillStressCommand_2020-07-28	Active

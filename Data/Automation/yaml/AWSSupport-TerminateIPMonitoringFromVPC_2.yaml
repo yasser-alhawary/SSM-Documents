@@ -144,4 +144,4 @@ mainSteps:
     GroupId: "{{ describeTestSecurityGroup.GroupId }}"
   isCritical: "true"
   isEnd: "true"
-
+	2019-10-25T20:11:18.820000+02:00	YAML	Automation	2	AWSSupport-TerminateIPMonitoringFromVPC	Active

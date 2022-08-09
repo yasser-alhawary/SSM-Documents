@@ -88,4 +88,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: String
+        Type: String	2020-12-07T23:09:19.776000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableNLBCrossZoneLoadBalancing	Active

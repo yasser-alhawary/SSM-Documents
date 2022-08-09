@@ -398,4 +398,4 @@ mainSteps:
 
       InputPayload:
         StartTime: '{{ RecordStartTime.StartTime }}'
-
+	2021-11-06T18:27:49.023000+01:00	YAML	Automation	1	AWSResilienceHub-UpdateHttpWsApiGwVersionSOP_2020-10-26	Active

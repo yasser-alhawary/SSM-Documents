@@ -1096,4 +1096,4 @@
     "isEnd" : "true"
   } ],
   "outputs" : [ "getUpgradedImageDetails.ImageId", "getUpgradedImageDetails.Name" ]
-}
+}	2022-04-20T19:34:51.320000+02:00	JSON	Automation	11	AWSEC2-CloneInstanceAndUpgradeWindows2019	Active

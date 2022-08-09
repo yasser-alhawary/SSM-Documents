@@ -85,4 +85,4 @@
       "DesiredValues" : [ "{{ CheckDeliveryStreamExistence.DeliveryStreamArn }}" ]
     }
   } ]
-}
+}	2021-03-24T16:09:56.927000+01:00	JSON	Automation	1	AWSConfigRemediation-EnableWAFClassicLogging	Active

@@ -377,4 +377,4 @@ mainSteps:
         fi
         
         ExitWithSuccessMessage 'All users have been removed from the specified groups.'
-
+	2021-12-13T05:11:52.430000+01:00	YAML	Command	9	AWSFleetManager-RemoveUsersFromGroups	Active

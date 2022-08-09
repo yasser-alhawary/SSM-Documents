@@ -49,4 +49,4 @@ mainSteps:
         - ENABLED
     isEnd: true
 
-
+	2020-10-15T17:06:07.018000+02:00	YAML	Automation	1	AWSConfigRemediation-CreateGuardDutyDetector	Active

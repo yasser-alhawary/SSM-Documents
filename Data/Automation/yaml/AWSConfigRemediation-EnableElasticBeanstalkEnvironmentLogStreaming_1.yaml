@@ -115,4 +115,4 @@ mainSteps:
     outputs:
       - Name: Output
         Selector: $.Payload.output
-        Type: StringMap
+        Type: StringMap	2020-12-23T17:06:37.786000+01:00	YAML	Automation	1	AWSConfigRemediation-EnableElasticBeanstalkEnvironmentLogStreaming	Active

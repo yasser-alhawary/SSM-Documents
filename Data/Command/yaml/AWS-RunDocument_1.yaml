@@ -40,4 +40,4 @@ mainSteps:
     documentType: "LocalPath"
     documentPath: "ssmdocument"
     documentParameters: "{{ documentParameters }}"
-
+	2017-10-26T02:23:44.752000+02:00	YAML	Command	1	AWS-RunDocument	Active

@@ -160,4 +160,4 @@ mainSteps:
         - "{{ VpnGatewayId }}"
       PropertySelector: $.VpnGateways[0].State
       DesiredValues:
-        - "deleted"
+        - "deleted"	2021-03-10T17:08:06.861000+01:00	YAML	Automation	1	AWSConfigRemediation-DetachAndDeleteVirtualPrivateGateway	Active

@@ -246,4 +246,4 @@ mainSteps:
     - Name: Message
       Selector: $.Payload.Message
       Type: String
-
+	2021-05-26T22:51:29.604000+02:00	YAML	Automation	1	AWS-ModifyDynamoDBProvisionedCapacity	Active
