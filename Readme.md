@@ -1,6 +1,5 @@
-This Repo Contains AWS SSM Predefined Documents in YAML format inside "Data" Directory for education purpose:<br />
+This Repo Contains AWS SSM Predefined SSM Documents/templates in yaml/json format inside "Data" Directory for education purpose:<br />
  Downloaded via get-documents.sh bash script - rerun the script to discover any updates <br />
- Script Discover Amazon SSM Documents/Templates and download it <br /> 
- Some Documents YAML Format Maybe broken due to regex and patterns<br /><br />
+ Script Discover Amazon SSM Documents/Templates and download it , default download format is yaml unless json passed as postional parameters   <br /> 
  Feel Free to Edit the script to perform better<br />
- Documents Downloaded with DocumentName_Version.yaml Naming Convention , same docuement name and version shouldnot be downloaded twice<br />
+ Documents Downloaded with DocumentName_Version Naming Convention , same docuement name and version shouldnot be downloaded twice<br />
