@@ -1,0 +1,15 @@
+schemaVersion: "2.0"
+version: "1.0.8"
+packages:
+  redhat:
+    _any:
+      x86_64:
+        file: "hanadbExporterPackage_AMAZON.zip"
+  suse:
+    _any:
+      x86_64:
+        file: "hanadbExporterPackage_AMAZON.zip"
+files:
+  hanadbExporterPackage_AMAZON.zip:
+    checksums:
+      sha256: "90a2713b1e1ca5c8e2ac6e1b18eabc16f320eeebb321e2f06e0c8934f3da1b3d"

@@ -1,0 +1,241 @@
+schemaVersion: "0.3"
+assumeRole: "{{AutomationAssumeRole}}"
+description: "Change the Standby state of an EC2 instance in an autoscaling group"
+parameters:
+  InstanceId:
+    type: "String"
+    description: "(Required) ID of EC2 Instance to change standby state for within
+       ASG"
+  LambdaRoleArn:
+    default: ""
+    type: "String"
+    description: "(Optional) The ARN of the role that allows Lambda created by Automation
+       to perform the actions on your behalf. If not specified a transient role will
+       be created to execute the Lambda function."
+  AutomationAssumeRole:
+    default: ""
+    type: "String"
+    description: "(Optional) The ARN of the role that allows Automation to perform
+       the actions on your behalf."
+mainSteps:
+- action: "aws:createStack"
+  inputs:
+    StackName: "asg-state-change-lambda-cfn-stack-{{automation:EXECUTION_ID}}"
+    Parameters:
+    - ParameterValue: "asg-state-change-lambda-{{automation:EXECUTION_ID}}"
+      ParameterKey: "FunctionName"
+    - ParameterValue: "{{LambdaRoleArn}}"
+      ParameterKey: "LambdaRoleArn"
+    Capabilities:
+    - "CAPABILITY_IAM"
+    TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'
+Conditions:
+  IsVerbose:
+
+          Fn::Equals:
+    - {Ref: Verbose}
+    - 'true'
+  IsVerboseAndLambdaRoleNotSpecified:
+
+          Fn::And:
+    - {Condition: LambdaAssumeRoleNotSpecified}
+    - {Condition:
+       IsVerbose}
+  LambdaAssumeRoleNotSpecified:
+    Fn::Or:
+    - Fn::Equals:
+
+            - {Ref: LambdaRoleArn}
+      - ''
+    - Fn::Equals:
+      - {Ref:
+       LambdaRoleArn}
+      - undefined
+Description: Automation stack for ASG Change
+       Standby state documents
+Parameters:
+  FunctionName: {Description: What to
+       name the deployed lambda function, Type: String}
+  LambdaRoleArn: {Default:
+       '', Description: 'Assume role used by the lambda function.
+      If not specified
+       this template will create a temporary role to be used by the
+      lambda
+       created in this template.
+
+      ', Type: String}
+  Verbose:
+    AllowedValues:
+       ['true', 'false']
+    Default: 'true'
+    Description: 'Verbose setting
+
+      
+      '
+    Type: String
+Resources:
+  ChangeASGStateLambda:
+    Properties:
+
+            Code: {ZipFile: "import logging
+
+import boto3
+
+
+def handler(event,
+       context):
+
+          t"""
+tChanges the state of an instance
+       in an autoscaling group. The
+           IAM role running this lambda
+       requires the following
+tpermissions:
+t
+          {
+t  "
+      Effect": "Allow",
+t  "Action": [
+tt"autoscaling:EnterStandby
+      "
+          ,
+tt"autoscaling:ExitStandby",
+tt"autoscaling:DescribeAutoScalingInstances
+      n
+          t  ],
+t  "Resource": "*"
+t}
+t:param
+       event: Defined fields:
+t
+          t{
+tt  "State": 
+      "EnterStandby|ExitStandby",
+tt  "InstanceId"
+          :
+       "i-1234567890",
+tt  "ASGName": "MyASGName",
+t
+      t  "ShouldDecrement"
+          : true|false
+tt}
+tThe ShouldDecrement
+       field is only used for EnterStandby
+           and ignored otherwise
+      nt"""
+tas_client = boto3.client('autoscaling')
+
+       
+         t# The state to transition to. Options are EnterStandby and ExitStandby
+      n
+          tstate = event.get('State')
+tinstance_id = event.get('InstanceId')
+      nt
+          decrement = event.get('ShouldDecrement', False)
+
+tassert
+       state in {'EnterStandby',
+           'ExitStandby'}, 'Invalid state provided'
+      ntassert instance_id is not
+           None, 'InstanceId must be specified'
+      n
+tinstances = as_client.describe_auto_scaling_instances(InstanceIds=[instance_id])
+      n
+          tif len(instances.get("AutoScalingInstances", [])) >
+       0:
+ttasg_name
+           = instances["AutoScalingInstances
+      "][0]["AutoScalingGroupName"]
+t
+          tif state == 'EnterStandby':
+      ntttprint("Enter Standby: {instance_id} {asg_name}")
+tt
+      tas_client.enter_standby(InstanceIds=[instance_id],
+t
+          t
+      tttttttAutoScalingGroupName=asg_name,
+ttttttt
+      ttShouldDecrementDesiredCapacity=decrement)
+
+          ttelse:
+      ntttprint("Exit Standby: {instance_id} {asg_name}")
+
+     
+           tttas_client.exit_standby(InstanceIds=[instance_id], AutoScalingGroupName=asg_name)
+      n"}
+      FunctionName: {Ref: FunctionName}
+      Handler: index.handler
+
+            Role:
+        Fn::If:
+        - LambdaAssumeRoleNotSpecified
+    
+          - Fn::GetAtt: [LambdaRole, Arn]
+        - {Ref: LambdaRoleArn}
+     
+       Runtime: python3.7
+    Type: AWS::Lambda::Function
+  LambdaLogPolicy:
+
+          Condition: IsVerboseAndLambdaRoleNotSpecified
+    Properties:
+      PolicyDocument:
+
+              Statement:
+          Action: ['log:CreateLogStream', 'log:PutLogEvents',
+       'log:CreateLogGroup']
+          Effect: Allow
+          Resource: {'Fn::Sub':
+       'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*'}
+       
+       Version: '2012-10-17'
+      PolicyName: lambda-log-access
+      Roles:
+
+            - {Ref: LambdaRole}
+    Type: AWS::IAM::Policy
+  LambdaRole:
+    Condition:
+       LambdaAssumeRoleNotSpecified
+    Properties:
+      AssumeRolePolicyDocument:
+
+              Statement:
+        - Action: ['sts:AssumeRole']
+          Effect:
+       Allow
+          Principal:
+            Service: [lambda.amazonaws.com]
+
+              Version: '2012-10-17'
+      Path: /
+      Policies:
+      - PolicyDocument:
+
+                Statement:
+            Action: ['autoscaling:EnterStandby', 'autoscaling:ExitStandby',
+       'autoscaling:DescribeAutoScalingInstances']
+            Effect: Allow
+ 
+                 Resource: '*'
+          Version: '2012-10-17'
+        PolicyName:
+       asg-access
+    Type: AWS::IAM::Role
+"
+  maxAttempts: 1
+  name: "deployChangeStateLambda"
+  onFailure: "Abort"
+- action: "aws:invokeLambdaFunction"
+  inputs:
+    FunctionName: "asg-state-change-lambda-{{automation:EXECUTION_ID}}"
+    Payload: "{"InstanceId": "{{InstanceId}}", "State": "ExitStandby"}"
+  maxAttempts: 1
+  name: "changeState"
+  onFailure: "Abort"
+- action: "aws:deleteStack"
+  inputs:
+    StackName: "asg-state-change-lambda-cfn-stack-{{automation:EXECUTION_ID}}"
+  maxAttempts: 1
+  name: "deleteChangeStateLambda"
+  onFailure: "Abort"
