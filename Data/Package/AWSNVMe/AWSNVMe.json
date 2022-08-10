@@ -1,0 +1,26 @@
+{
+    "schemaVersion": "2.0",
+    "name": "AWSNVMe",
+    "version": "1.4.1",
+    "packageArn": "arn:aws:ssm:::package/AWSNVMe",
+    "publisher": "Amazon AWS",
+    "url": "https://amazonaws.com",
+    "packages": {
+        "windows": {
+            "_any": {
+                "x86_64": {
+                    "file": "AWSNVMe-1.4.1.zip"
+                }
+            }
+        }
+    },
+    "files": {
+        "AWSNVMe-1.4.1.zip": {
+            "checksums": {
+                "sha256": "b40410d997c2268526becd994cea38ae49292ca65b5596fc86daffe78469e19f"
+            },
+            "downloadLocation": "https://us-east-1-birdwatcher-prod.s3.us-east-1.amazonaws.com/316874961013/AWSNVMe-1.4.1.zip"
+        }
+    }
+}	2022-05-23T20:57:07.629000+02:00	JSON	Package	5	AWSNVMe	Active	1.4.1
+ATTACHMENTSCONTENT	b40410d997c2268526becd994cea38ae49292ca65b5596fc86daffe78469e19f	Sha256	AWSNVMe-1.4.1.zip	638205	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/62d/316874961013/AWSNVMe%21f2d9b68b-a093-4f00-beab-64b447ca5b50/5/AWSNVMe-1.4.1.zip?x-attachment-size=638205&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENb%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJGMEQCICOZC1Dt0jScprJVhpaNQbx%2ByQcYSDnfFdw4LWwbkvlaAiAKD1oe7O0ph2%2B37ZY7GtP%2FYvqUwtN8GmDA6kevU%2BPsMirSBAg%2BEAMaDDE4NzM0MDc2OTQ4NSIMOv0vN1bREQ%2FA0KnGKq8E1v5%2FRQgkdFjAogEx48y98GLIUaru0sGr4ESHO6ZzLjqyX9M9%2BGfd69mTkN1sz3oN2%2F50MnHFFHttYQ0VK5%2B2xweF4f3ahXZ5XjOzlqtrLBh8aeWtxSRKT84iMSc3hykRW%2FhTkLcwOgpffgnPCHuvA3BSXAPzv4uelLe3Gr5lWFj74uIo3y3g2wNiBv2nWPaEmIeBlh0PcND8ntOxEUlTwRz1lgjAEiuxs3gL487lIEQiLHAaxWz0Ln5Kyk%2FLgCexpGxMt44xzw8wrSZEMUC37HBhpjp95eqhju%2FwqS5Ybp7CuB%2Bndi0HZxDhptOSnO9NlCfYf6uaGT%2FU5wStTHn8588fe%2FU4wpQW7Jwg68UCuNw6HNBpbbiqZnwmV6Ff%2BDnlT2sigg4Keh4QkdUqrMCDQUqHFjEcz6A3j5iKEhuvM%2FYHB3E6NZlDtq2M82H%2BGXsnraGT%2BrbDIuduFHrt63at5EzBu1Ohn1Ke0QEHLtrxfX4B4xYjWVYhOi8IulH5sBCe9q36iXhGjmwIsbVARwIqtjBBsBLob5gAVBo4PUjnJUJ7rbKN%2FeUiki%2BCBeB%2FtBJEhwgtsdmRxYjhQFLGSZZFc3hGpjI%2Bn592LFKlwMPbmKu7Wy4AjrePBe4PLFZ6A60oLFGbku%2FfYxiDf676l3X%2BgWIZ1eU0B4IAOgDbGCPGX1ZsBCvkJPbfEa7cLApLIVmeZ5diBbUzkIVYjScPEXwmzj4YBxn7IjlBqSnf%2BBFVpTCQ%2B8yXBjqqATNU4v9SGT4%2By5pqgp%2Bca%2FoMRIgVoxLl%2FpH6X25Y7a%2F5dcNASCfcKlgBj1jKNMqXdhFITR3xd6l0tG5HgrjOJtovotm%2FkU5thb9PLxIAGKTFY84QuXB2%2BztiUUOkGih1M2PLBUCpps%2BRbkIBlnJZbqhbx0P7lA9iVBKWfvrHrwJX1RtgesaDsFlpueR4TQ2rQhVTkKOqANik2SO5i1JajZdi0xNNSJ%2F4WuIX&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T053208Z&X-Amz-SignedHeaders=host&X-Amz-Expires=299&X-Amz-Credential=ASIASXHTBJDGVDXMI6NC%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=8be3922ed36d23102311e6d0474a1918aa54f4d324c190f10494aacbf212f430

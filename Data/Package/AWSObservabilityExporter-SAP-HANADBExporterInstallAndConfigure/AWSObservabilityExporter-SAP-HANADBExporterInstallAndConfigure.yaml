@@ -1,0 +1,18 @@
+---
+schemaVersion: "2.0"
+version: "1.0.8"
+packages:
+  redhat:
+    _any:
+      x86_64:
+        file: "hanadbExporterPackage_AMAZON.zip"
+  suse:
+    _any:
+      x86_64:
+        file: "hanadbExporterPackage_AMAZON.zip"
+files:
+  hanadbExporterPackage_AMAZON.zip:
+    checksums:
+      sha256: "90a2713b1e1ca5c8e2ac6e1b18eabc16f320eeebb321e2f06e0c8934f3da1b3d"
+	2022-04-20T00:16:35.544000+02:00	YAML	Package	7	AWSObservabilityExporter-SAP-HANADBExporterInstallAndConfigure	Active	1.0.8
+ATTACHMENTSCONTENT	90a2713b1e1ca5c8e2ac6e1b18eabc16f320eeebb321e2f06e0c8934f3da1b3d	Sha256	hanadbExporterPackage_AMAZON.zip	350101	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/bd8/505863819994/AWSObservabilityExporter-SAP-HANADBExporterInstallAndConfigure%2173bce0d3-53c1-48c3-b2d7-9c1cd490c425/7/hanadbExporterPackage_AMAZON.zip?x-attachment-size=350101&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENT%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIQC2XdA9JhiRm3714544YwtANVYPol2vO3DJvcweq2XOFQIgXQ02g%2FesGK3bss5qmizLHcQQyyD%2FFwRQfN0wRFg1Dkwq0gQIPRADGgwxODczNDA3Njk0ODUiDCkvTtcDtPtnWwt%2FTyqvBJkVpv4QaKdNf4VhFycj8CNXRMi433U4JL%2FJPoN5G9IRvVRQ%2Bbm3Jwlzxxyeh%2BeKo1cINRtZz8P7SKsdy665HwTcWxIZLAOif3qq81cBZwjgLiOEehN%2F%2BTVCcYH12HwdRlMsOTSJx%2FxMdQeds47VU7IPgzTzYvDiR3Npwdn7xFYtVLSkZVwrFY45D7TT2xylvFDt8VyZqQddUjOBj54VvS54tYkHt8Mwf2ubl0M%2FSa7iRp83hnbnzr6OvgjsA%2F%2B3E6GqviFz6z%2FzIZNMxi4DjhznMl7qOuO63xJxghAVmIHGdtQ%2F2MYmzo2f%2BpY0oGFBg9%2Bk7O4M60RKDkvmGj3s8yJ49Xty9980Uqk6oR%2BJvJ8oRLVnX%2FM29AxPBIwHBx%2F0FZUfOrnvawkL5aM6B4broQjX%2Bl6OGzFP7BYqFtsQMFH5%2B1nhoskXfH53Bs8bHzQ3VGAo0N2oWCEgj8dCJalNPDyY4fdb%2FNZtPCzDd54kR1mxHt4unCOaGCAR4rVozfsgbYcgVd2m2J94gsUHjrgbQSjsYsj4%2FcpFv9k5sRjcAoQsyqWRjGx9RWYLIgQN2%2BbKIlBuJGzknrbUQmGKV8n7bzD0z8nf3ulVxCfLniWXn0Hp%2FWb%2Fxv27%2BOmvzHNOjJZ9wmKfjZALpfxghTcm%2BF0ikarFjivfpTerrDwmerdi9kOPcvPRv2QIdUTWt%2Bi9SS8z%2B8YQvDs%2BA0SD1qDZBD8WmJZ03a%2FwJdSjr%2BCkgjNH58QwkdzMlwY6qQFf7YhqQsMvIasQYaOIYc6EkGaCImZjwGDQj%2FdLnNPElGROr8KjNg%2FAyPIZOoNRqTESuJbTafBntbgokpn%2BvJPVSvceBkPC38iNFT7fpDFLGYoPG5%2F0BS0TAxU%2FAijNnGk4ciqAbawDfXtZXKkF66ehn%2FFd6X4jTPv0BSIqumYV6FGtmpeQ6zQBPp9m7tYMFMoc3ewzczrJGZSWQRil6NS%2BkmW9HBr5jUl6&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T042429Z&X-Amz-SignedHeaders=host&X-Amz-Expires=299&X-Amz-Credential=ASIASXHTBJDGWVLXQWWA%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=de36bba7216f9109d8af9f5c7429486d2504460dbc72e3b64b5ac289bd375cad

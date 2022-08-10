@@ -1,0 +1,19 @@
+---
+schemaVersion: "2.0"
+name: "AWSNVMe"
+version: "1.4.1"
+packageArn: "arn:aws:ssm:::package/AWSNVMe"
+publisher: "Amazon AWS"
+url: "https://amazonaws.com"
+packages:
+  windows:
+    _any:
+      x86_64:
+        file: "AWSNVMe-1.4.1.zip"
+files:
+  AWSNVMe-1.4.1.zip:
+    checksums:
+      sha256: "b40410d997c2268526becd994cea38ae49292ca65b5596fc86daffe78469e19f"
+    downloadLocation: "https://us-east-1-birdwatcher-prod.s3.us-east-1.amazonaws.com/316874961013/AWSNVMe-1.4.1.zip"
+	2022-05-23T20:57:07.629000+02:00	YAML	Package	5	AWSNVMe	Active	1.4.1
+ATTACHMENTSCONTENT	b40410d997c2268526becd994cea38ae49292ca65b5596fc86daffe78469e19f	Sha256	AWSNVMe-1.4.1.zip	638205	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/62d/316874961013/AWSNVMe%21f2d9b68b-a093-4f00-beab-64b447ca5b50/5/AWSNVMe-1.4.1.zip?x-attachment-size=638205&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENP%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJIMEYCIQDYTV3aSrLWl1Jq20MGyusCS6a5huzns9u%2BnELwrlDjYAIhAKf4o9XSYNeazpzENwL9bZhywyeDxG2ZT6Izoa4ZY%2F7MKtMECDwQAxoMMTg3MzQwNzY5NDg1Igwl4DXPd0w0tOmCD8YqsAStaSJBe0BhYh0ZSyhk1aUlgVX1sNX57xCP%2BrlgmPei529Pf%2B%2Fc3aD3JUnwlktvUFys9XfKDfYno4gWJJIV%2BfWCV79xWBVzTIjNafBKPMK5sAKaXL6BYwj7rpbzKvu5lX3rmBVLI8QnS8awoEi5On6GYb441I7%2BliXMooExPGA%2FuA7zRJuPuxLyPL1TiFox1%2Fx%2BvB20DhjUbf1BuCQzlpVkvjc6fqpT8FTGzVy5V2kJAmLbE46VdBTEradedLoj%2BwL%2BPUQqvVxgKdu502PIB6jmGFP%2FlZuHueAYO5u7AXIlRjAxaFAWtIZVYztTTea7JWwOpoBE7QKn0KOV%2FyQmTxphq2iAGclusy7INFrjZkbOu4LfA1EuMqboMsLUmfSkccq19oQ3Kt2WPGVasduIyBlnUgyF0GuInXjuiBzDVddQQRD0kiTt3tzNMLpiapsjIuTIUCumYROyroCEWBwCX5Nu18TfXx9mQw3i9FOTIFb2TgDeMQes%2FAIvJf2YrDGpePKbBQNkkq7wCqrN9Mja8%2FndjSVxaZ5xwMe3%2BQG%2BNx973pa3RC0VxIbKtPrFckba6Z1vkTyrqit2FZhyXE51jKyAE4KvMS4icXB07Jfts64SO%2FTMfG2jJ3NvH7mjzBsw9UPKGFhTy8d5%2FesmW%2Big5PgJSPIbdoVc0ke7lT5XVR5Rz%2BYl979r5XPnSdoR%2BqmulEd5BMvoLGZwhaq%2BWIqmy7wpwtUKu%2FFhZJKtZ8EhpUzsrzDlusyXBjqoAX7B40GzvLJ4U%2Bozta5yv%2BxH7FQVsDKBdE9RhoBlzMt2g77foyHehiFOp4Ue%2BpVUj1XaWez9z4QCaHEN7NGOuNIbZw%2Bix4foXsh%2FpcFXbdxSdVrRTSqOjgmF9EIAwKopwhoYFJOFPHwijZAwQdUDIR9wzJaV%2FZLJNEarmgVT%2FpB7HyCyD6E2Vxf3fD6V%2FEJLqSxxLVj7I%2FgPFSWXZOEEaesmHsGhfOPf6A%3D%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T042418Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDGSGGXKK52%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=11e7f7e67800f6091cfffa48a6305f187a5473aac2229213a33a7a705ddda098

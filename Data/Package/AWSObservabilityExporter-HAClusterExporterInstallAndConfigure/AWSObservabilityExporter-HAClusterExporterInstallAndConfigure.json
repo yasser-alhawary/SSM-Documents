@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "2.0",
+  "version": "1.2.6",
+  "packages": {
+    "redhat": {
+      "_any": {
+        "x86_64": {
+          "file": "haClusterExporterPackage_AMAZON.zip"
+        }
+      }
+    },
+    "suse": {
+      "_any": {
+        "x86_64": {
+          "file": "haClusterExporterPackage_AMAZON.zip"
+        }
+      }
+    }
+  },
+  "files": {
+    "haClusterExporterPackage_AMAZON.zip": {
+      "checksums": {
+        "sha256": "ef8f254278037e831a928537bf744567105548097469e0804ab561ee61c30d41"
+      }
+    }
+  }
+}
+	2022-04-15T17:09:11.464000+02:00	JSON	Package	4	AWSObservabilityExporter-HAClusterExporterInstallAndConfigure	Active	1.2.6
+ATTACHMENTSCONTENT	ef8f254278037e831a928537bf744567105548097469e0804ab561ee61c30d41	Sha256	haClusterExporterPackage_AMAZON.zip	6917074	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/fa8/505863819994/AWSObservabilityExporter-HAClusterExporterInstallAndConfigure%216196f830-73aa-430f-b10a-bf15ab21ba1b/4/haClusterExporterPackage_AMAZON.zip?x-attachment-size=6917074&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJIMEYCIQDTKpwh7kq4Q0pd8MHz2z%2B25pd01j9UaaP%2FFb2SPrtf0AIhAI2ZBHaPDHHZrA82l7HCauX7eyP6juwpbRID6mH36vqTKtIECD4QAxoMMTg3MzQwNzY5NDg1Igy0QrURFb8FwVGq9jkqrwQosURTi3feCMHcsJuMK4aqwK%2F8PUK5vKNybNi5a1JQ6EN6DdrK9JB%2Fw2VwpiOIMuPiYW2Ztov1F9wk%2FO3ppydNpvOTdwTNNEToUfXlBclVh%2B%2Fl4HA8IzaYDVdfW%2Bx7LOC%2F04EA9kHysq6BSvInmwejdC8J8Gu7hJ26xprMIh%2BJy2drEVc7uHh9Y3LsZpmQIH3TvT4QZm3JY9RdZ24kxaX2SPTaKOguwN1Kw0kRHdHfFmmAFDyRH%2Fff0e2MZLUbMcp%2F1YP%2BHYp4BuHBHXR80s97pGW%2B2n3razckK7mOuMOUrV7ZuCioOO5%2B%2BXA%2FmqjGEDUqgYY7znbJyMbxozgt4gB3DGCww9%2Fw3VGxbkLZv5yCeIFlD7ijfWd2mTnaoDvGq3MEag1lBFlVehGPbHbNxtle0Hc%2FmVnA7%2F7tfNOHn667khBfkNyT%2FzQk30YMz2yNNRIfyJTFjois57xsM86HAbI9C0Nd8AKYkHhE7xGn61XY0yL5y9pxrUtvssJRszkY7eGpvUJDp7vGCxxYoYfpNiKzIParVoNK4TKcpj9CyE4zRhZv2CErMOQI18AFxcruP7EoFXeDeiwsnMjgnuy3nQjov7MBkOpTx6DZLAWCbMZfw0LRRa0YJ961eaf2ACIF7mHPDjGPcjDoDLpXVjOgN%2Fu%2BR7Hl%2FXf9f6Mm74j8fysCmTV2FFdm4nr4u7WpoMpRbFcA%2FyCuQ8FPgjHEWnuytV0cQJ65E%2B3Hj1GiK6k0Vp9AMNb2zJcGOqgBb09igYwDxkRD1NQNFFfqpN60vptIYO9IxikwMtU7KoV9HHi5eVcKJEhF8vzHbQKSenYB8ePTlvEYn86%2F7%2BqgIYjqVRJm3wsSv3wyVAaaABfcwGBJKz%2F9wvpKhXBmWADrT%2BZ5ogVTqRWvjvDVW3s1X1I3TUWcXJvaoPQkhX6TBj%2FNIUM3sl7r2gslsxdGnAoCfgRvF%2FvRj28T6xTdOgtjK2vmEMup8jXf&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T053216Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDGSIGTVAHC%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=aca5374797c70ac6d86d83fad4df486ab25d8114c0dbec86022b9e442966690e

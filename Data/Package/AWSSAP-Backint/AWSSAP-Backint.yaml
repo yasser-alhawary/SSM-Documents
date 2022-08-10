@@ -1,0 +1,15 @@
+---
+schemaVersion: "2.0"
+publisher: "Amazon Web Services"
+files:
+  AWSSAP-Backint.zip:
+    checksums:
+      sha256: "ef6c71e4db9a6aef6d7f3e48461474257adcc5c5b4c9f11bfc01c8a4f03e6d4f"
+packages:
+  _any:
+    _any:
+      x86_64:
+        file: "AWSSAP-Backint.zip"
+version: "1.05.4"
+	2022-02-24T17:04:19.030000+01:00	YAML	Package	10	AWSSAP-Backint	Active	1.05.4
+ATTACHMENTSCONTENT	ef6c71e4db9a6aef6d7f3e48461474257adcc5c5b4c9f11bfc01c8a4f03e6d4f	Sha256	AWSSAP-Backint.zip	4416020	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/fd6/464188257626/AWSSAP-Backint%21be00b950-e98d-4029-9f6c-47cfc8833cc7/10/AWSSAP-Backint.zip?x-attachment-size=4416020&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENT%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIHiRNzKWWd5DioGnOesvmv%2B9FasC2ziejBG76dURyslhAiEAu6SN0ElbDg9mMKy5%2FS2IkO0B2f92ZNY7IRYXyXGdis0q0wQIPRADGgwxODczNDA3Njk0ODUiDKVt4pkQvahTl%2FEhQyqwBPxlMNOe3QA%2BFmJ293b1sOE5bF70oqVlidn%2BJLpUkLsjLCT4GVVnw9l0GYZSu%2Fpm7Oz0C%2FPaufwYl2xgzuS2ZMyNFbVm1kU0o920Vl4s0jPcFcWCe62bspmAwDRKRQNZSyfRy%2FmJ6sw9spRu7%2FgHdewRmSQNCuH2IOF9lx%2F2va%2FTtBc7s95hanhynxjxEIU2aRyXItwwMjBkhQzUwzRkOWjXA5NSeKXVmfQ0TuRVbhL5Hn6f9WyxuP26MxPozQDNu9f4G0QTgaHuj720%2BGHahSftgt5lls06pnPPTmQXbbJnkrzvXtoqn3Xaw26ALyTEKJZoxj0sOJEMEynsB8%2FoQrE2jTk3R73EQEPvnyH3OpKMvdpbKlHnfclfHjsrhKniNKkSHeKc4%2FdHACUg2amuOOimuqjeWib9b%2BPBlgfCrdP9j0Oh9qqXVYHiHPmBhwfPATpCgDZVrpyaxrpu69HRuUYBs58qiDUr%2FWjYdb3zTWmuuijrTH5FTAHlSDiqtiojQAi96lx%2BNQ5z6LENVeGTaK6bcih%2BykTdSbnSBcSxn%2FyAV%2FW4CbasVQoJohkEqUqjmU%2B4avnsmIJCG178eq27C66PpZScPROK9l1rZy%2Fwts2I2akMbhzzdM2Wve%2BlNaDFhqfL8Ey%2BGOhUiuKL4Cu99ygk4jOb%2F4yfhjljUC2gtg8V8ygmNP9NuzMvSj%2BBVpKcFyFKKrGCwqi8R22JFXzzZxZokpMda1NMAhSuOJ7%2BrS6wMKjQzJcGOqkB1J%2B%2BNm63KscVdNh52nPeA9vf8mPLY7Aau8n41rr7a5516CQz4Niew%2BeSuD4f2Y5cGR27zwYG03CqmlDCuaqQ8MfHZsAdeY8MpbZ5yxQccI11bHjebC4yANHyewvSkomsd0KOLNJJW%2FToahRWef%2BPELz7CjjXWszVHMzDJDPpMk4Ij5jnw2AJreaHOdlukdvBGIPam%2B%2B%2BK76M18AX8Jd2Q7PyPMasCT1wsQ%3D%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T042433Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDG7MHDWLHY%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=a963d8122db33db04fac49b3861d2f04b74f8b07c876f21bffd20765879de5ee

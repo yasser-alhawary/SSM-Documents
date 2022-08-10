@@ -1,0 +1,38 @@
+---
+schemaVersion: "2.0"
+packageArn: "arn:aws:ssm:::package/AWSSupport-EC2Rescue"
+version: "41"
+publisher: "Amazon AWS"
+packages:
+  windows:
+    _any:
+      _any:
+        file: "EC2Rescue_Windows_install.zip"
+  amazon:
+    _any:
+      x86_64:
+        file: "EC2Rescue_Linux_install.zip"
+  redhat:
+    _any:
+      x86_64:
+        file: "EC2Rescue_Linux_install.zip"
+  ubuntu:
+    _any:
+      x86_64:
+        file: "EC2Rescue_Linux_install.zip"
+  suse:
+    _any:
+      x86_64:
+        file: "EC2Rescue_Linux_install.zip"
+files:
+  EC2Rescue_Windows_install.zip:
+    checksums:
+      sha256: "ecc982d797d7819c285676e8b6f1b1b023dc566d32da7204b171a8cd1e8655fb"
+    downloadLocation: "https://us-east-1-birdwatcher-prod.s3.us-east-1.amazonaws.com/190294270367/EC2Rescue_Windows_install.zip"
+  EC2Rescue_Linux_install.zip:
+    checksums:
+      sha256: "d4cdd1fede9c46a098ccb3251b861c6f4b5a07b2242d16575eb2a36d75cc7061"
+    downloadLocation: "https://us-east-1-birdwatcher-prod.s3.us-east-1.amazonaws.com/190294270367/EC2Rescue_Linux_install.zip"
+	2021-11-17T16:55:21.723000+01:00	YAML	Package	7	AWSSupport-EC2Rescue	Active	41
+ATTACHMENTSCONTENT	ecc982d797d7819c285676e8b6f1b1b023dc566d32da7204b171a8cd1e8655fb	Sha256	EC2Rescue_Windows_install.zip	26369	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/8fb/190294270367/AWSSupport-EC2Rescue%214307e0cf-4052-4b51-aea1-465db2d5a38f/7/EC2Rescue_Windows_install.zip?x-attachment-size=26369&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENT%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIFJvSE3JwRFlEiqc0rM6y4dTGs227dFJWBtme8hbo6jHAiEAoW%2BW6IVzNicctudMyi27lfc9WZhJ5x0ZVfdVeykVUX8q0gQIPBADGgwxODczNDA3Njk0ODUiDBAP4AElmQkoDTLEkyqvBHKEdAOTRSswj2YRPR0168JSUMu26bVE2Hl8znzr6CX%2B6r014QcSvA7LByD%2BaXe9UzPaqtt1S5reu6thwAIdGL1Q3B9vLWla0Pv%2FiVGgAnOOSFY2bjG2KbrDpMn4B9JqlNTZj52quvb8nzXWkZ%2BEm1Qz%2BpVAfn2GdgRANOq7UMvG3kvsslqEKSb82l3QLupetZDVEaTxDWftE44WasNN0XIxtFBROtFVZa%2BN5cNCv790aucbGXw%2B7AsG91RssDxvBqKJQXZ%2BvHN0eXK71iZFlgLPqFRltiO4WwA1AK0fu8o%2Bt0fjOcH%2BypppboOTdSkhP7io%2FUOqayYZyFK5F2o4tUdYfvYASm8wMoCeqK0K%2FonODgbejdIAFegcd5QukJ1u946U0yyF%2Bz1FDHmy4sYKg9O6F6iTxnetIcCsZwlQqbbQM9zMkY5Kf4pToUj1orQz70gNqbuN82T%2BysMtkY9TG%2BFt1AKo%2FMF8l%2B4j9Vp7er%2BFALwi7cDT4Xy7GqOZgf8RrL8E6AcZ5wPo2jlWRFLVxar8errBszafHPv%2BlZEEW2L302OyOBIAJOdMoHyi%2BjMOSLb9XPoQWe3f77EY9eZLiwMWv0gz8TVZBlo19MlrifLho4pRtBdFPIFb%2Bx8oUarz1mjEacKPP2GbgesyS5P1ifIuExiNBHjH7b4Mz8WtJ8zm%2FsOupFkDfzXOhrBFuE8XQrtuYhOu0NAhTr6yHD8wmfAwGqfEonbxVO24KSDqkOwwg8XMlwY6qQGBelK4iDppRpmzcRkZj1%2FR1%2B3uj6%2B9ys9r8NFLfZ5XVplfTx0y2QMc9hyfNvn5vRqspqwm5AH3ytAm0g%2Ff0ag0SmzvjbVW%2FbKFp503KY4S5zd6DLGnXeBwLiT5TIBszYlxNLZE7XvOP80NdLXNQLdrFmZIYzbptHxl%2FSWG16blrImp76Fwqn%2BDsa6wS2TNciOX1HZjT6hCzJAAS9n23d%2FVNlvNAhf8Gm9W&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T042437Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDG6RQCWB76%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=0d5aece0cf50fdc47e2639e87f5c8a2a9506780201d74b3f0ec13279ad37ee43
+ATTACHMENTSCONTENT	d4cdd1fede9c46a098ccb3251b861c6f4b5a07b2242d16575eb2a36d75cc7061	Sha256	EC2Rescue_Linux_install.zip	1162	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/8fb/190294270367/AWSSupport-EC2Rescue%214307e0cf-4052-4b51-aea1-465db2d5a38f/7/EC2Rescue_Linux_install.zip?x-attachment-size=1162&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENT%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIFJvSE3JwRFlEiqc0rM6y4dTGs227dFJWBtme8hbo6jHAiEAoW%2BW6IVzNicctudMyi27lfc9WZhJ5x0ZVfdVeykVUX8q0gQIPBADGgwxODczNDA3Njk0ODUiDBAP4AElmQkoDTLEkyqvBHKEdAOTRSswj2YRPR0168JSUMu26bVE2Hl8znzr6CX%2B6r014QcSvA7LByD%2BaXe9UzPaqtt1S5reu6thwAIdGL1Q3B9vLWla0Pv%2FiVGgAnOOSFY2bjG2KbrDpMn4B9JqlNTZj52quvb8nzXWkZ%2BEm1Qz%2BpVAfn2GdgRANOq7UMvG3kvsslqEKSb82l3QLupetZDVEaTxDWftE44WasNN0XIxtFBROtFVZa%2BN5cNCv790aucbGXw%2B7AsG91RssDxvBqKJQXZ%2BvHN0eXK71iZFlgLPqFRltiO4WwA1AK0fu8o%2Bt0fjOcH%2BypppboOTdSkhP7io%2FUOqayYZyFK5F2o4tUdYfvYASm8wMoCeqK0K%2FonODgbejdIAFegcd5QukJ1u946U0yyF%2Bz1FDHmy4sYKg9O6F6iTxnetIcCsZwlQqbbQM9zMkY5Kf4pToUj1orQz70gNqbuN82T%2BysMtkY9TG%2BFt1AKo%2FMF8l%2B4j9Vp7er%2BFALwi7cDT4Xy7GqOZgf8RrL8E6AcZ5wPo2jlWRFLVxar8errBszafHPv%2BlZEEW2L302OyOBIAJOdMoHyi%2BjMOSLb9XPoQWe3f77EY9eZLiwMWv0gz8TVZBlo19MlrifLho4pRtBdFPIFb%2Bx8oUarz1mjEacKPP2GbgesyS5P1ifIuExiNBHjH7b4Mz8WtJ8zm%2FsOupFkDfzXOhrBFuE8XQrtuYhOu0NAhTr6yHD8wmfAwGqfEonbxVO24KSDqkOwwg8XMlwY6qQGBelK4iDppRpmzcRkZj1%2FR1%2B3uj6%2B9ys9r8NFLfZ5XVplfTx0y2QMc9hyfNvn5vRqspqwm5AH3ytAm0g%2Ff0ag0SmzvjbVW%2FbKFp503KY4S5zd6DLGnXeBwLiT5TIBszYlxNLZE7XvOP80NdLXNQLdrFmZIYzbptHxl%2FSWG16blrImp76Fwqn%2BDsa6wS2TNciOX1HZjT6hCzJAAS9n23d%2FVNlvNAhf8Gm9W&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T042437Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDG6RQCWB76%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=95a029604546e807bef0f28df83e0cee075ec1e53ae3c63c33ac7f971036e992

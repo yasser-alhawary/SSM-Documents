@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "2.0",
+  "version": "1.0.6",
+  "packages": {
+    "amazon": {
+      "_any": {
+        "x86_64": {
+          "file": "JMXPackage_LINUX.zip"
+        },
+        "arm64": {
+          "file": "JMXPackage_LINUX.zip"
+        }
+      }
+    },
+    "redhat": {
+      "_any": {
+        "x86_64": {
+          "file": "JMXPackage_LINUX.zip"
+        }
+      }
+    },
+    "suse": {
+      "_any": {
+        "x86_64": {
+          "file": "JMXPackage_LINUX.zip"
+        }
+      }
+    },
+    "centos": {
+      "_any": {
+        "x86_64": {
+          "file": "JMXPackage_LINUX.zip"
+        }
+      }
+    },
+    "ubuntu": {
+      "_any": {
+        "x86_64": {
+          "file": "JMXPackage_LINUX.zip"
+        }
+      }
+    },
+    "windows": {
+      "_any": {
+        "x86_64": {
+          "file": "JMXPackage_WINDOWS.zip"
+        }
+      }
+    }
+  },
+  "files": {
+    "JMXPackage_LINUX.zip": {
+      "checksums": {
+        "sha256": "dd88f36d2c66c49b094cba37185da4c13a65db4971eeb6ce87cdcd03a4f8210f"
+      }
+    },
+    "JMXPackage_WINDOWS.zip": {
+      "checksums": {
+        "sha256": "53c310a828184a590d608ba6b8bdd91802455ae94d19e01b8f1a863a267b8f32"
+      }
+    }
+  }
+}	2021-08-31T17:07:33.165000+02:00	JSON	Package	5	AWSObservabilityExporter-JMXExporterInstallAndConfigure	Active	1.0.6
+ATTACHMENTSCONTENT	dd88f36d2c66c49b094cba37185da4c13a65db4971eeb6ce87cdcd03a4f8210f	Sha256	JMXPackage_LINUX.zip	5032194	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/bad/505863819994/AWSObservabilityExporter-JMXExporterInstallAndConfigure%219cc736af-2276-43b9-8f3a-7d1f3c4a3769/5/JMXPackage_LINUX.zip?x-attachment-size=5032194&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENb%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJIMEYCIQDCZZWTtg0N6lnmz5aBZB%2FB%2B5lQTyBR2OvuiAX%2FJaBplAIhAL20FNr8qgn8T7cV%2F3Fig%2Bc8n0ZpwcwiF2bexx0Yv0xJKtIECD8QAxoMMTg3MzQwNzY5NDg1Igzg4wHav1KiJ2A5VvQqrwQE4hcO7qnLl%2FJevmh1MDiyzY%2Bh6vFTrT7PFtD2vpu4inY1mCNDSNRcjM2pFSrNDvksZ%2Fjd3AWz3sRRcFX0BeDI84AYvB9SWb6X4WpSPtVOh78T7zaYtU%2FFgC5%2F%2Bw0Z3jy32SKcYrBa6zQ17ApWsWnWpujNK6s2Fvm%2FmYjDCJXtXyBwqxJrwVfy4cBUrMgdsWqZ3yYG1Xx5m7Brp4ict%2BqcePslk%2BYWFdbO75rk4KgkINpAP5sqfs%2F6Pzt41ygtiou2Y7ANFOe2QNjtyldZ58jsGGOoqmZJCFxRvnEzJklAomh36luejljiBLCJBncf%2Fr5oRcp8VEFZsd4j4rAs2%2F4p%2BhvvcUOCW74pA7y7gMp5zRse319TFXgAf0OsbIdVEPcPr3RJejM%2Fko945MtipsuAHx8y%2BWLJzWKScpUX5thh3pqeGioutWduwEXfEjUA2ZSslVvGgFU6tH2CkK6HsMS1tD5hG6yd%2FJiI9Yk3OuXdRufaU4IgZPEKACHttvc0nPhH3uiBpWyZIB69qkXrbDUsZNfJIX9bgHlszC5FisIN2QxbFhsyw5Eu8xmdXn3ZWq3AeJIZ3O9asNBFcDExmnIvunNYgI2HrslXJfQialAGcxHzqOLo1RQYlkPHA%2FCc0OrotYZBSATZtz4IsQj%2Bp9kB%2BXWI7LzlkxliGv9pYc8WoQIMc0F%2BIkMgcBGEgoXCulaJvqZNjhNroZLimHzjhl9OBKI4l%2BzkFvHhkC07irmVMIKEzZcGOqgBcpJjbNTQnw5BpZQz66YUC3NxChNwbpDSBxZBlA2d8DzT3bC00zY39r3iMtKLbGeMhXwhK83qaNVS0xLU9gN3o%2BvjCttNoAH7jjyzyDTKMNcF1kkMvPh28AT0XrTXytR4IRjYs1R%2BO60w0ZuapoIZ5kV4IhEWOTRtTGVMe2qrZno3y1PB5FgTJcMsdjz9o0XB5qnC4KKiueX87ZNEJlg%2FIaGduGucJKpA&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T053221Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDG34NFHJC6%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=f0ef01cf50f19ff7596633bb158f829789493c441c7cffb4e2fa831031f7a3ce
+ATTACHMENTSCONTENT	53c310a828184a590d608ba6b8bdd91802455ae94d19e01b8f1a863a267b8f32	Sha256	JMXPackage_WINDOWS.zip	5077108	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/bad/505863819994/AWSObservabilityExporter-JMXExporterInstallAndConfigure%219cc736af-2276-43b9-8f3a-7d1f3c4a3769/5/JMXPackage_WINDOWS.zip?x-attachment-size=5077108&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENb%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJIMEYCIQDCZZWTtg0N6lnmz5aBZB%2FB%2B5lQTyBR2OvuiAX%2FJaBplAIhAL20FNr8qgn8T7cV%2F3Fig%2Bc8n0ZpwcwiF2bexx0Yv0xJKtIECD8QAxoMMTg3MzQwNzY5NDg1Igzg4wHav1KiJ2A5VvQqrwQE4hcO7qnLl%2FJevmh1MDiyzY%2Bh6vFTrT7PFtD2vpu4inY1mCNDSNRcjM2pFSrNDvksZ%2Fjd3AWz3sRRcFX0BeDI84AYvB9SWb6X4WpSPtVOh78T7zaYtU%2FFgC5%2F%2Bw0Z3jy32SKcYrBa6zQ17ApWsWnWpujNK6s2Fvm%2FmYjDCJXtXyBwqxJrwVfy4cBUrMgdsWqZ3yYG1Xx5m7Brp4ict%2BqcePslk%2BYWFdbO75rk4KgkINpAP5sqfs%2F6Pzt41ygtiou2Y7ANFOe2QNjtyldZ58jsGGOoqmZJCFxRvnEzJklAomh36luejljiBLCJBncf%2Fr5oRcp8VEFZsd4j4rAs2%2F4p%2BhvvcUOCW74pA7y7gMp5zRse319TFXgAf0OsbIdVEPcPr3RJejM%2Fko945MtipsuAHx8y%2BWLJzWKScpUX5thh3pqeGioutWduwEXfEjUA2ZSslVvGgFU6tH2CkK6HsMS1tD5hG6yd%2FJiI9Yk3OuXdRufaU4IgZPEKACHttvc0nPhH3uiBpWyZIB69qkXrbDUsZNfJIX9bgHlszC5FisIN2QxbFhsyw5Eu8xmdXn3ZWq3AeJIZ3O9asNBFcDExmnIvunNYgI2HrslXJfQialAGcxHzqOLo1RQYlkPHA%2FCc0OrotYZBSATZtz4IsQj%2Bp9kB%2BXWI7LzlkxliGv9pYc8WoQIMc0F%2BIkMgcBGEgoXCulaJvqZNjhNroZLimHzjhl9OBKI4l%2BzkFvHhkC07irmVMIKEzZcGOqgBcpJjbNTQnw5BpZQz66YUC3NxChNwbpDSBxZBlA2d8DzT3bC00zY39r3iMtKLbGeMhXwhK83qaNVS0xLU9gN3o%2BvjCttNoAH7jjyzyDTKMNcF1kkMvPh28AT0XrTXytR4IRjYs1R%2BO60w0ZuapoIZ5kV4IhEWOTRtTGVMe2qrZno3y1PB5FgTJcMsdjz9o0XB5qnC4KKiueX87ZNEJlg%2FIaGduGucJKpA&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T053221Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDG34NFHJC6%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=46099d0b2d234af27008bfd00b5d3ea3a271af1b960cc4c78919dcdae9580311

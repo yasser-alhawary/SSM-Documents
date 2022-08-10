@@ -1,0 +1,19 @@
+---
+schemaVersion: "2.0"
+name: "AWSPVDriver"
+version: "8.4.2"
+packageArn: "arn:aws:ssm:::package/AWSPVDriver"
+publisher: "Amazon AWS"
+url: "https://amazonaws.com"
+packages:
+  windows:
+    _any:
+      x86_64:
+        file: "AWSPVDriver-8.4.2.5.zip"
+files:
+  AWSPVDriver-8.4.2.5.zip:
+    checksums:
+      sha256: "a9063dc4bf65967d9ba34781a05b6c431ab0c48680224e78d2bbf90fe5f54a90"
+    downloadLocation: "https://us-east-1-birdwatcher-prod.s3.amazonaws.com/316874961013/AWSPVDriver-8.4.2.zip"
+	2022-04-14T20:36:08.457000+02:00	YAML	Package	17	AWSPVDriver	Active	8.4.2
+ATTACHMENTSCONTENT	a9063dc4bf65967d9ba34781a05b6c431ab0c48680224e78d2bbf90fe5f54a90	Sha256	AWSPVDriver-8.4.2.5.zip	6238341	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/b89/316874961013/AWSPVDriver%21243a450f-dd65-4757-a03d-86d42618d263/17/AWSPVDriver-8.4.2.5.zip?x-attachment-size=6238341&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENT%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIQDulzRI87P9Dox8lugstgjx5GnL%2BsqGq2FaAnP9cN2XIQIgCCMA9ghfEb729wOMRWgYrnv0G85yAZnq%2BDj2SFX1mWAq0gQIPBADGgwxODczNDA3Njk0ODUiDAyrASFkw4SKYWRGXiqvBIt07pu8dUjNBm%2BOiR21AvLJq2sQ2HO1alLGbHBenDoFJx53SSjddyGouj55NfD%2Fc2NCcniJODJV5%2F%2BEiXTAh0vn9xdkUNNNN%2F7RcTH1G8JnMi4hbQQPRTYnvkRJJxVhzx1qXhWaTX8DY4%2Bsob6r%2FAVj3%2BEifd4LM%2FT%2FL4TAivFflFXB3TJKI9A2meApWkJYdkGgXomKWLKxOTsNfF%2FnJBD69FugWGiqdLvGCT3Yp3nfuGj4aIUKZ2fR%2FGJXtlXl6YClr%2B2ttgeT4hO7yGCdM3Yr%2FaadgjK1hdqxm2GY8iMpi%2FV2lDsRAHlV5k%2BSuHIzEJdVFCY%2FuJqN9WUw%2Fx7Cs5K1KcnyqrloeXLgbT%2Bohk0fuYS%2FtqBmUsSdyksaXb0w3hmgfWWoLQdUwxuuhCVhn6mn74g1K8FABEc%2F%2Fk0uiUtS27SrbJvVxchXZYbFp7VBrZXbcZ3IrjpgkZf3OCAmMr5dlVjs9VWGGTBBQnesv3ZCyf77RLWM2l7wUTUP8FDdyWuRGY0bTMbe7orzFeAPCvYID%2FEXA0l1EwQdIb%2Bl4F9UoFw0rn0%2FJfjqIIMTnoGQR%2FDMe%2FRa8cu3qU99m5srk29osBrIilB804p7kh2JrPCh1rRPDATf1QYSpgKsbfCVzqkCm9MYHAcqc6WzD0w%2FOafjWUexmDN3Dy6x4J6paNs4KR82QvLKoIWalxyMX5r4di7QS4VJLNBXln8abXiNTDPj%2BKDUcSsQszBr%2BEQkGXQwnMTMlwY6qQE9wB8%2BSDu%2BMHODHXO%2BaFcRVXtLcB6mDU13l9Qx71eK12rDUkYsmuYrtra98rlIdN3cbfweXyKn6SK9ocsgnsgIt%2FAbr8nXrwoAI%2BbZ1kvtO7Dbbqz1nasmlJw6CJMJMb%2FCcFLB3pAg2wUgTr6bxIJCPXHk61UUy05jeEIQ0T0bDdvmi1OQyVOzh%2B6oYMKBoJBoK%2FtaKHAMc2MHQKXV7VM90IixHKzn7kXw&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T042431Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDG3DUJ7VOD%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=2658699449355ce5a53f620e3ea7eeb04e49acdc764a51d6b68d5a739e49e400

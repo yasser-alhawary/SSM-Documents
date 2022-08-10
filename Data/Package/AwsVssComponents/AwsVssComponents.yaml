@@ -1,0 +1,19 @@
+---
+schemaVersion: "2.0"
+name: "AwsVssComponents"
+version: "1.3.2.0"
+packageArn: "arn:aws:ssm:::package/AwsVssComponents"
+publisher: "Amazon AWS"
+url: "https://amazonaws.com"
+packages:
+  windows:
+    _any:
+      x86_64:
+        file: "AwsVssComponents-1.3.2.0.zip"
+files:
+  AwsVssComponents-1.3.2.0.zip:
+    checksums:
+      sha256: "44dffa2504ed0f1f96f5d724870eb2898bf0b06fa9fde9b36276cb67cb0873cf"
+    downloadLocation: "https://us-east-1-birdwatcher-prod.s3.amazonaws.com/014368086970/AwsVssComponents-1.3.2.0.zip"
+	2022-04-25T23:05:53.304000+02:00	YAML	Package	6	AwsVssComponents	Active	1.3.2.0
+ATTACHMENTSCONTENT	44dffa2504ed0f1f96f5d724870eb2898bf0b06fa9fde9b36276cb67cb0873cf	Sha256	AwsVssComponents-1.3.2.0.zip	314344	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/898/014368086970/AwsVssComponents%213a0b2ffc-5035-44fc-8e8b-17b6845379ad/6/AwsVssComponents-1.3.2.0.zip?x-attachment-size=314344&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENT%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIQDtyMHygbRmKSdXuRv%2Fm9jrbaXrNPWPa3srlKlMfWtjgAIgEwLeMpL47eTYiA2uYBvbYjlWWNwYXhk0S2rSdoeUfygq0gQIPRADGgwxODczNDA3Njk0ODUiDK5HbK6W1DHs%2F4KG9yqvBBjLHMzzVCgi9qdWRoQjeekX43JgBlzk8ua3PO0ywyra3DWtYGGdQfkfLyho0xn5tHcsQEPGl5EASSSa3%2ByXB24Dz0n%2Bu3R2IeOi3rCrxVuoWKfX7vg41HkHn7%2Bzb789lFbb3GttOgYkPkBrYNerw475aJEV2WJHbEkLsM8PB8t0PDqV5fwtL7sejXOQlfRaU4smeMA126k%2FAa0Y%2BtHygroZUrHYTXVP1oTLkTrNFAhT8%2Fj2blxab72vE%2F8cwEY9v%2BOHbJmxida6gZFMrOwPDLc5B8%2BuuXi6vfA825HE%2F0KucsR%2Fo2DGJee6xwITO4xLuMs3eeyH%2FOwxykdn6avjvOuvYz7fN7Pk%2FnmzB%2B7ZoYYxo03Sq6NbIc2aRReGWHNJf8wohBNVgcNBnjeBt5sZxCEw5E8SKGXAEWHcNSlj9N93Pd3aOj7XFJ9qrT1mgdVkGu8WeGSIwpw%2FzJQVVGKeMEp7NqPBj%2BH1%2BeAOrYrfmkayQqC3H%2B4gRRpF3PsCpS8sY3ZuYleh7E5c%2F37SwQ8cnNMvEA1E02sF2LYF5Py8JAirK50rE2suOtrDzwEMnl0Dqoo6fo8iexaEZ7EjjBeG47VZn18%2BtJWkV3ezz2ef9VPZ%2FKlfynQABaX6bY0gbirIkeMUmzywd0YY2n1Hwn6V7z0tXOTAvM7SOG8Nc2q1FYTuBx5rNRxOOsw2f1Mu9fz%2F341zKyPASJf%2BtIopRcYrdwzQpOtLAyeFOtpaE1WCHkUw7tLMlwY6qQHy6T2klFf%2Bn9tH9RnV4Jj1XBwTuvSR4mO7UJEF4%2FBFhaJ3PrfiVI%2FWABTqk6hdnFq8MQtqj2OwR%2Fgj9RA2asX%2FO04qzlgsZBJTK5hE7mjrPALkXl22BXbv%2FPqR6vURDqXgdSoOYGSF7saPDWpLvyDjpjbD4WNV8KDPDnr5aH8XT1I%2Fqu7Fato7Is9XlsXEXEBGFcA5WdPRLu7eX4EDlUYCu4HAV2MURrl1&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T042444Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDGZ2YRTT6T%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=b7524bc045548288e02d300a4d32f8f6a4d698fb9895b8d2ed00aa5783555ae9

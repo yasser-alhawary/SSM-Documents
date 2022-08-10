@@ -1,0 +1,17 @@
+---
+schemaVersion: "2.0"
+name: "AWSNitroEnclavesWindows"
+version: "1.2.0"
+publisher: "Amazon AWS"
+url: "https://amazonaws.com"
+packages:
+  windows:
+    _any:
+      x86_64:
+        file: "AWSNitroEnclavesWindows-1.2.0.zip"
+files:
+  AWSNitroEnclavesWindows-1.2.0.zip:
+    checksums:
+      sha256: "6bc81381f8fa09c8dcebff963468f48be472db1c4578e7611df468e13579d387"
+	2022-05-03T20:19:12.742000+02:00	YAML	Package	3	AWSNitroEnclavesWindows	Active	1.2.0
+ATTACHMENTSCONTENT	6bc81381f8fa09c8dcebff963468f48be472db1c4578e7611df468e13579d387	Sha256	AWSNitroEnclavesWindows-1.2.0.zip	3643683	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/fe6/939247698745/AWSNitroEnclavesWindows%2160c0b264-6fef-483c-a7f5-6c3b15f1739a/3/AWSNitroEnclavesWindows-1.2.0.zip?x-attachment-size=3643683&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENT%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJGMEQCIEKW%2Fhp1TkrlMh78YLvOe29oJK2SGPTSPFGESKyHPowHAiB5kBuDsHlNpzcZA%2F1G1Syf0pqO%2Ffr0GvxoTYnpZ2d9xCrSBAg9EAMaDDE4NzM0MDc2OTQ4NSIMJDvWz3GcRQcxCQs2Kq8ESXtMHMAFGXJkiO4Bgm5RPSN4M%2Fsvx0w3QpdRGhoRsW5FNPZzisearjBfJQKiqjzpHPl5BXwPvSHR4FMYZ%2BPJwRJXTOULz0w%2FtTKTEXf7sRshXrRYP6b%2FrjrYHOT6o3U0t71%2BqM510fjDEg7biHJxTIZviP5hZ%2BjHWeWekibBvD2BtYhXC7eSiKfOQnbeZ6v08cCcXVfIFPJloEZmGLJbGZHbqdeHjVExlNRCAyrRkngca07M50cdhB1I5n2ug8meRl5B6RoZrgVPiJS3G%2B2KMRpFrWLEEHK8rp4vMAwUkJdMKK4iN9SRTkvTkEW%2BnAdxmtRsMKPoeYJjp703s9sQSDblCLSVQPnyghPrwukaCItfdiseG0UBJgt7I9PGVQS2NwJ8gEda7htVpip1wSkgePoXeOcJ9H9u5V0PA6NGJory2NNIKa0o1ZPqNmOENRuOTyWdoko%2FDhuGTchd5lCd2B0Tt%2ByfN4TmMLB4QNG26XgybG8bzXdz13nH99vBxwy5IWVhVnXSAJh3joubz5Yj5zrSidFeqlYvn51WUV9LYD3dTatuPbFJAogYZjlV09vzVsLnJGR89yEhhx0iD2kgJNN05SILpjzGjLIodWXdAKAvX8A2IEeTfhMF9vmWiF1aOi1KJdJjetWLj8huIuuuVmYmqq11yDMjbObappbbRm6JnwTN3Fsr0P1a2Xo8v9uLuZjL1mQxPuRMi5kzCHfOr11OqRtgS2bC%2FJwbrprdwDDs1cyXBjqqAX3GS6aume13vsJJ92VqhaepPCcWTEZIHs%2BEXG9mrUilzTfFgveoU98p44T4q2wYFHF4jpi9oCW3s5BihSuZVflhc9c%2BFQlyZshRB1YrNJM8XF3IcIjCU0rkIQ50Zxh0nZteWLrVhrC65Wz0Zd5Ngpy0o%2Fogue9ytwDERW%2FiitzYbr5EDycfOa8o8soVIFt0yuJIw%2FIiQi8e2lrI6qNVPGwhg%2Bf6t%2BgFzaFV&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T042420Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDG5ENZP7PO%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=5f7c0def698c2ae5b8a53aedf6dcf529cae42a3411da60fbee12b36fa6bf73cb

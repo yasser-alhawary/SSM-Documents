@@ -1,0 +1,24 @@
+{
+    "schemaVersion": "2.0",
+    "name": "AWSNitroEnclavesWindows",
+    "version": "1.2.0",
+    "publisher": "Amazon AWS",
+    "url": "https://amazonaws.com",
+    "packages": {
+        "windows": {
+            "_any": {
+                "x86_64": {
+                    "file": "AWSNitroEnclavesWindows-1.2.0.zip"
+                }
+            }
+        }
+    },
+    "files": {
+        "AWSNitroEnclavesWindows-1.2.0.zip": {
+            "checksums": {
+                "sha256": "6bc81381f8fa09c8dcebff963468f48be472db1c4578e7611df468e13579d387"
+            }
+        }
+    }
+}	2022-05-03T20:19:12.742000+02:00	JSON	Package	3	AWSNitroEnclavesWindows	Active	1.2.0
+ATTACHMENTSCONTENT	6bc81381f8fa09c8dcebff963468f48be472db1c4578e7611df468e13579d387	Sha256	AWSNitroEnclavesWindows-1.2.0.zip	3643683	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/fe6/939247698745/AWSNitroEnclavesWindows%2160c0b264-6fef-483c-a7f5-6c3b15f1739a/3/AWSNitroEnclavesWindows-1.2.0.zip?x-attachment-size=3643683&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJGMEQCIGd7IA%2FoLgU4Ip79CpoChu1jbXGdlegW5EIGjlE12%2FzqAiAXdljkN6rfYJtZ09YL8Hs1TDV%2FCPZIW5xPG1bPVb7%2FWirTBAg%2BEAMaDDE4NzM0MDc2OTQ4NSIMzpItRRnMsT1NVlGlKrAEEOiw9FYVZYMBEcLpL1LkKO%2FLUJ0IanrIAauLzmbmwd219u%2FKhxaAkYMY5d1%2FA7tgPBWnoklAI6KKKvdLwnBB0oJCoLenQ9zUASfxUGSX1G%2BBWmyQRSesziOsGBrgizhVTmN1eNOaDK143pK%2BYzZkNuIKXEnLOIRbuHkUNYOaMHwCBxncnUN2i%2FDgRrfILE4iQ%2FRMc%2BjJxcWOApibl9UgH30REA50HU3Ytp35cchchArhsLNREvWH4AgicRQcBT53rLKC9QgKF6aezi9X5m3fNsCjV%2B65zmiUmpf9pIOmAWw0inFkCjuHwtol0mvw4tFwi5fkqJGWDmYOmDKaQ2FQqe8SictT1dGuUKaqanSoBHhQJxaUG%2F0zz9kOOTVX52%2Fi08vK2UUW407Mk7dunDBiNf3dAUQahGA2Yhs%2F3d8jMROS2lC7KGz0WJqF7kOtUhQFL27hF9ajfLYRe9B21aa536SixtHu67JIKEzcs4FgvdDNpUo1C9Zeufrj2vf6IpWrL%2FfXYDViH8eNDLXt8vubTyH98JtRJNFEC3PuvlB8HSy69BXbIBy9DVRezDfyvLv4buiF6laErM3cJ3wPcSzLNYV3DBIvZkISD96RmnVQyqMyNOzBef%2FMNiySNTSpziYkvHrYof26H%2BBgpOAepmtKioarmicPXmQhMoxN7o7XVhdP60IDSSTGbO1O%2BfTmcBY%2FinfRZfr7QXfn7J4r7ZVy%2BbEkSM%2FGy9P6ctRquQPFdeow2%2FPMlwY6qgFglx35poZXHH7wSEe1C9zbD2oInZs%2Fxc7do0hSOFKRHgn%2FBkZ%2BEyv%2FAekkRk9ieaVAPiQ1S3CMj4MkmqGh4NhKFNQ6%2ByjJxkulaydCZMRnGDGUbZmSXmOg4oSvKiPRoX51h%2BKxKLu5GvzHT0DIsqv8wyQonwo4Gu6pnlKMi8uYlNh%2FxLROMCXHaPAO2DhuLYGzDCteTinmDfyS%2B4fGdcVidcm3dPSytlnDxQ%3D%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T053214Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDGZ7JDVMLR%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=4b4e9483fe4504dc97b18d5ed028f10233f2613148d8ced85cf46ca4900030f0

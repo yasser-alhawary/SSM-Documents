@@ -1,0 +1,19 @@
+---
+schemaVersion: "2.0"
+publisher: "Amazon AWS"
+url: "https://www.amazonaws.com/"
+packageArn: "arn:aws:ssm:::package/AWSKinesisTap"
+version: "20211019.1"
+packages:
+  windows:
+    _any:
+      x86_64:
+        file: "AWSKinesisTap.zip"
+files:
+  AWSKinesisTap.zip:
+    checksums:
+      sha256: "0880dab252cc501384b8705448041ae4c7c37f35c5ee9a5600f9765de1fc3f8d"
+    size: 30367846
+    downloadLocation: "https://s3-us-east-1.amazonaws.com/aws-kinesistap-bw-us-east-1/20211019-1/AWSKinesisTap.zip"
+	2021-10-19T19:44:31.957000+02:00	YAML	Package	17	AWSKinesisTap	Active	20211019.1
+ATTACHMENTSCONTENT	0880dab252cc501384b8705448041ae4c7c37f35c5ee9a5600f9765de1fc3f8d	Sha256	AWSKinesisTap.zip	30367846	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/fd5/266928793956/AWSKinesisTap%21de10c645-8a2a-415d-b3b4-73d40e48f8d8/17/AWSKinesisTap.zip?x-attachment-size=30367846&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENT%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIGC7bFXpIXM2HbpzEF7ZOpzMQ7xXkgPrF0rA0W%2F4nR4AAiEAwoq9SNAFwAvcpbOf5Nb%2Ba7AsglNIWrLMJKnRPJwUIksq0gQIPRADGgwxODczNDA3Njk0ODUiDGpWa5TL1rdwxVW6ISqvBBJdFOb6ISHuOD9bkcGyVL4iMqnqVAsb53d0Wx%2BOmmWcR97lVSPAutcQQ1e9goRbEuBR2BJULLJ3TT%2Bd7et2WyvE3HOLSIV3%2FxBoJGppDZufwsrV%2BS9%2F%2FS1ZkDVK4oZerLblYQLiawbPFos2oop1fB3uCdH9sJxEYt6d1PLyL9xk4N2FBpJJ7XIizp3Z0xZpBo%2FFz5sfgdD6jVnm8KzeJN7bn5SZp5fzWqFaWgz5Djqi3s3H8beiLCODCoXHcj6KaLa4YDBEIJ4rRVtwSUS1TK8C0oLBQ8hspGzTkzxoHISw64YrdOyoZWDU9JziqeqowDIwy68Q6PpHcHSHcE3U9k3RlpxbjvJIIHLrgsxdwN2WB5TGltTEzoB2gG41SoaVb4%2BJBMnwyGEC5%2FS%2B24h6xnxbit09NWAXDLiSnY1JFVdH3TPb8QmpFg%2Bn9bwg%2Fk9Sx%2FsUx1jtnmFpg%2FpJahZNLx45Jx9kjyzHQ2fyI6mi33y%2F2G78GB5dFw0SS4d%2F6uPnrWn6nYbYNCChB6%2FnC8UE0QQ1OlfylecAI%2Fgv2f2%2FT9bIJTn5uhv0FAn0u1Myyh1LkgwDeqri%2Fszw2cgCp6XRJSrcjYoqjKHF3EenfPtdziavRRhDs%2F5teX55KQty4gWwsajTA2F%2Fsjx0SckVl3Qufc7osgUKpT2bogH3U8UxVAqCdo3IJL7mUhNWM5Chq5GHFVPyWcnebjtcUAiMSduvHDiDsiSrrIfcuazCIVUvX%2Fcw8tvMlwY6qQHtSvqakN9bzuY4MOVLBkS3ANS7qKblXbyl7snA42xf0XbL6xMeALLUAs24E81l9aIhmi38pW5Fum8OFrP7oeMGl5uBby8t5RtqJlZbuiK42deEBs5K4Qf5XOkL7LN7xHmhpkcNdcjJTukTROLJTY7j1eVut4A81JBVjzWMbrE3oFYXOzK40VW%2FeKwGUZKJQWsdnFmUVw6YGR6C2zl0GHPPEpdeVddPMDNW&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T042416Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDG62YQ3K6L%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=c3d6dc8b811610ca331263ef18302454a918a7729838d94d717bbb6c4b5157c8

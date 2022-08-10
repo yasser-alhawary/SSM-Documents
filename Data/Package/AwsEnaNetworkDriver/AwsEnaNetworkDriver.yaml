@@ -1,0 +1,19 @@
+---
+schemaVersion: "2.0"
+name: "AwsEnaNetworkDriver"
+version: "2.4.0"
+packageArn: "arn:aws:ssm:::package/AwsEnaNetworkDriver"
+publisher: "Amazon AWS"
+url: "https://amazonaws.com"
+packages:
+  windows:
+    _any:
+      x86_64:
+        file: "AwsEnaNetworkDriver-2.4.0.zip"
+files:
+  AwsEnaNetworkDriver-2.4.0.zip:
+    checksums:
+      sha256: "ACC5FDD093A7EC999B894ABD6EFB6A803FF2B47759B60484A6364CAC6EDB62F5"
+    downloadLocation: "https://us-east-1-birdwatcher-prod.s3.us-east-1.amazonaws.com/316874961013/AwsEnaNetworkDriver-2.4.0.zip"
+	2022-04-28T13:08:33.227000+02:00	YAML	Package	12	AwsEnaNetworkDriver	Active	2.4.0
+ATTACHMENTSCONTENT	acc5fdd093a7ec999b894abd6efb6a803ff2b47759b60484a6364cac6edb62f5	Sha256	AwsEnaNetworkDriver-2.4.0.zip	297283	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/c4b/316874961013/AwsEnaNetworkDriver%21c1f867d0-b073-4e10-bd2b-2067389d556f/12/AwsEnaNetworkDriver-2.4.0.zip?x-attachment-size=297283&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIAJtgTyt4eGfgFOoEBL3ECoEBNDNLrlIsXb6c8i8TE5NAiEAkqjx4hpqDJyUN%2FGqCFQp1kEyNycJfWom4f6S1HZcppcq0wQIPRADGgwxODczNDA3Njk0ODUiDBWCfJOeiYKw7P%2BAmiqwBGJe%2FTGVRhkHkvUhl5aPLsCZ3xsDHU10i3RltZrKh8P1LClWxxbUhPU9LgFs6hQRoJpFveA%2B9Z4kNt4yGzQNu5GcfghSwdFNBqPzHTxmdT6kbulH0%2B15Zs4niQXWbe4VX%2Fh%2FIVSGvKCvsu7o1yrwQxrIgEkktC3ZYWTiN6gLAa5GkVFyWVqH60SKlshjp3wfbTMdLSeQYs5AvmZJelHIEXZwG0MprMuJ3pCkmeHUuLHLP4argJD6b5jrev83Fruzw4D8428oaql6YW36qBqY8jnkRy4suH9DRjEj6jN51GFMtAEuk1S5JK677Zu796XaUtAaGFCtVkG%2Fk2UT1oo9vpEnu6zLQfUCfGWIe6tLfXswXE1eOYNmahn4XJXkZkG%2F7Kym0r1EPP1NKLaponVfrrVbgKIxxYZNZHabH3S43mSoUuc0zAUqtHt71z5Y3knLghPwJKHV70oJDnuEEeHnTPFPy%2BBHh12vyo35z7SHKOY7W%2BxO9LiRSS9SPYs4Hj9qO3MMhScF3tNo5%2BLjEwEizJEU2lALJQUmhAIn75N5IdnPY40WGyqvJBslV4O1xNLK7jYhGIGBUTddOhGefeKRPKBTnoWqP%2FKfJhE%2BuFKRLA1QomHtpQycmYy%2BjQS6zv4fowCt8retaAG%2FIUs92HUvkBcIfC33L9c8znVkUGfIIJciPWHH2lbNFR%2FEW0dobkA5UtjLdI5sdKlAGr9%2F6fGt61G9HVRQoy4QOz%2F%2B0c2M%2BcYpMKjezJcGOqkBMB7uXXZDfUlNbc4fn4rutRFBFpUasrgdNkbf8g2S%2BQkxxPUiOczr5W6naQ8MF2nNdInz43dLTBWbxKaZM28Uld3R%2F6Q5uZhtn941mJi%2FtXJWwSDSXEzsGS%2FiXkTIHSFQqfAH0Cid3HKjngtilSEyQSPgdoLipzy38%2BPJmr4lsYI756psuNX%2Fm7Rrv0%2BU9tm8R4spRqBUHIGtRkfJGgFVmtgIr3lTKXl4vw%3D%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T042442Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDG5UYDD4QS%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=65b1c51f31e2933d7b502d012f5a6b8963f9d8658cab5367b0d4e1a7cedf1006

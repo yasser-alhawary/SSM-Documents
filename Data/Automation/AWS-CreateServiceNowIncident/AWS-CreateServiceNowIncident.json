@@ -1,0 +1,91 @@
+{
+  "description" : "### Document name - AWS-CreateServiceNowIncident\n\n## What does this document do?\nThis document creates an incident in the ServiceNow incident table.\n\n## Input Parameters\n* ServiceNowInstanceUsername: (Required) The name of the user the incident will be created with.\n* ServiceNowInstancePassword: (Required) The name of an encrypted SSM Parameter containing the password for the ServiceNow user.\n* ServiceNowInstanceURL: (Required) The url of the ServiceNow instance.\n* ShortDescription: (Required) A brief description of the incident.\n* Description: (Required) A detailed explanation on the incident.\n* [Impact](https://docs.servicenow.com/bundle/helsinki-it-service-management/page/product/incident-management/reference/r_PrioritizationOfIncidents.html): (Optional) The effect an incident has on business:\n  * Valid Values: High | Medium | Low\n  * Default: Low\n* [Urgency](https://docs.servicenow.com/bundle/helsinki-it-service-management/page/product/incident-management/reference/r_PrioritizationOfIncidents.html): (Optional) The extent to which the incident's resolution can bear delay:\n  * Valid Values: High | Medium | Low\n  * Default: Low\n* [Category](https://docs.servicenow.com/bundle/newyork-it-service-management/page/product/incident-management/reference/r_CategorizingIncidents.html): (Optional) The category  of the incident.\n  * Valid Values: None | Inquiry/Help | Software | Hardware | Network | Database\n  * Default: None\n* [Subcategory](https://docs.servicenow.com/bundle/newyork-it-service-management/page/product/incident-management/reference/r_CategorizingIncidents.html): (Optional) The subcategory of the incident.\n  * Valid Values: None | Antivirus | Email | Internal Application | Operating System | CPU | Disk | Keyboard | Hardware | Memory | Monitor | Mouse | DHCP | DNS | IP Address | VPN | Wireless | DB2 | MS SQL Server | Oracle\n  * Default: None\n* AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.\n\n## Output parameters\n* Push_incident.incidentID: The created incident ID.\n",
+  "schemaVersion" : "0.3",
+  "assumeRole" : "{{AutomationAssumeRole}}",
+  "parameters" : {
+    "ServiceNowInstanceUsername" : {
+      "type" : "String",
+      "description" : "(Required) The name of the user the incident will be created with."
+    },
+    "ServiceNowInstancePassword" : {
+      "type" : "String",
+      "description" : "(Required) The name of an encrypted SSM Parameter containing the password for the ServiceNow user."
+    },
+    "ServiceNowInstanceURL" : {
+      "type" : "String",
+      "description" : "(Required) The url of the ServiceNow instance."
+    },
+    "ShortDescription" : {
+      "type" : "String",
+      "description" : "(Required) A brief description of the incident."
+    },
+    "Description" : {
+      "type" : "String",
+      "description" : "(Required) A detailed explanation on the incident."
+    },
+    "Impact" : {
+      "type" : "String",
+      "default" : "Low",
+      "description" : "(Optional) The effect an incident has on business.",
+      "allowedValues" : [ "Low", "Medium", "High" ]
+    },
+    "Urgency" : {
+      "type" : "String",
+      "default" : "Low",
+      "description" : "(Optional) The extent to which the incident's resolution can bear delay.",
+      "allowedValues" : [ "Low", "Medium", "High" ]
+    },
+    "Category" : {
+      "type" : "String",
+      "default" : "None",
+      "description" : "(Optional) The category of the incident.",
+      "allowedValues" : [ "None", "Inquiry / Help", "Software", "Hardware", "Network", "Database" ]
+    },
+    "Subcategory" : {
+      "type" : "String",
+      "default" : "None",
+      "description" : "(Optional) The subcategory of the incident.",
+      "allowedValues" : [ "None", "Antivirus", "Email", "Internal Application", "Operating System", "CPU", "Disk", "Keyboard", "Hardware", "Memory", "Monitor", "Mouse", "DHCP", "DNS", "IP Address", "VPN", "Wireless", "DB2", "MS SQL Server", "Oracle" ]
+    },
+    "AutomationAssumeRole" : {
+      "type" : "String",
+      "description" : "(Optional) The ARN of the role that allows Automation to perform the actions on your behalf.",
+      "default" : ""
+    }
+  },
+  "outputs" : [ "Push_incident.incidentID" ],
+  "mainSteps" : [ {
+    "name" : "Push_incident",
+    "action" : "aws:executeScript",
+    "outputs" : [ {
+      "Name" : "incidentID",
+      "Selector" : "$.Payload.id",
+      "Type" : "String"
+    } ],
+    "inputs" : {
+      "Runtime" : "python3.8",
+      "InputPayload" : {
+        "username" : "{{ ServiceNowInstanceUsername }}",
+        "password" : "{{ ServiceNowInstancePassword }}",
+        "url" : "{{ ServiceNowInstanceURL }}",
+        "impact" : "{{ Impact }}",
+        "urgency" : "{{ Urgency }}",
+        "short_description" : "{{ ShortDescription }}",
+        "description" : "{{ Description }}",
+        "category" : "{{ Category }}",
+        "subcategory" : "{{ Subcategory }}"
+      },
+      "Handler" : "function.script_handler",
+      "Attachment" : "function.zip"
+    }
+  } ],
+  "files" : {
+    "function.zip" : {
+      "checksums" : {
+        "sha256" : "6f528ffab34b3f37c2deba99ecd5ab5f3d4b94583f4781ac3f4a95373cc41652"
+      },
+      "size" : 5809425
+    }
+  }
+}	2022-06-22T19:08:48.832000+02:00	JSON	Automation	1	AWS-CreateServiceNowIncident	Active
+ATTACHMENTSCONTENT	6f528ffab34b3f37c2deba99ecd5ab5f3d4b94583f4781ac3f4a95373cc41652	Sha256	function.zip	5809425	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/440/458218037161/Automation/AWS-CreateServiceNowIncident%21fdc6bb45-8e39-4106-82fa-b9b0cb35b2ab/6/function.zip?x-attachment-size=5809425&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENT%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJHMEUCIB7VK6NfTlz8d6KkCQgEyacBq9BNb1LZGvmLQzx0fWG4AiEAkEgM5%2B8VgZs9ZDLN5x7yll%2FFl6XLJ5CzQoFnB%2F2d880q0gQIPRADGgwxODczNDA3Njk0ODUiDLDA8Td04qHcE8Dv2CqvBNOlZY1Nv8nCaKG2n0jFUwmcwrFlCBe34SxRcS4PJ2kB2tjEudZEf%2FV%2FXbSgzul%2FnIDh%2BfhNgKG9ieLRRzcxrmjb7tdp4So4moVFeQ7t4Izaf1KUXWmFF3b%2Fiw1tFXdzn%2BnUcHsPxGbKs%2Bq9crimtjA3EESDfbNkamfahrkT%2BNDVF5u%2BfkLTCp%2FVl1VxR16Pd2F1RCOVNwQHig%2BkbqyCDJryICO%2BvmAufhupYtLag%2B6thv6Rdo71faVPVEIM%2FLkfAWaHU%2F7q7korGMXC5MzYCqKnWgPnK6cPTZ3sk2U7X6%2FFwxCghOBEqoRJGzxaYyeOuMRK4cgSDPEX8%2Bq8f6XTK2vaGoKf0SLPaYZ445DPOsfjBkefnKEcVUWS23UCwEHEiQ9Efy2%2BHJt27f3ZrQJkk7S%2Bv23IZTY8EPFmuTT%2BYkx2AmU8lcdV35nexJ%2BjNHblfZ3EzMP2kPa2QOaHr%2BYLPRcLiJG4wBYgMUEzWBeAyRibft4MDL44XmrXF1jtcoNizAa1aCX2u6Gp4ZR%2FZunzseUF2I%2Bhp3nOyX69OFp4bhqK1m9Fy9mPgwmhwnoJVfSBfPVG1N9Ork4114o%2FGEVNtXGvlO3Pb482TSnxibQK%2BW5WAcIgET6x3ag2lkuLSkJqV2LB88yOOsfPnQxne4htrY6krTICRqeaW4175z0vGCw%2BlUrzK0wlOMITDQTB%2F6LYcWZil8IauW%2B6S8vhpoK0%2B%2BYneasjSry%2Fz5VOXJcaEa0w0dTMlwY6qQFlo3zkUz%2F6jzAgDjWf41SbrV%2BTVMkG4HXn5yfEB7yh0FmXGmNNPbaeA%2BpaSVAQRYtu1QbS9wRlw4UUNeNenpybfjLjCfAHGNrxT1JfOdlYQvOjl4PiozCNuta7NICRN%2F7CYo5G%2F5fLFoLB53nSndsE%2BwTr8V8tmEnwnU%2Fnvw9xC3nFSOruEwAazPAKrUVruC%2FTh0aZU6Rh5uSFNT4vMkVIVkUL9Vdx6KAL&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T051255Z&X-Amz-SignedHeaders=host&X-Amz-Expires=86400&X-Amz-Credential=ASIASXHTBJDGXMOUHFET%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=6efa3c0870738b6bdb921d39d331bae7e557f4e72d69f06fce71033264b40f5b

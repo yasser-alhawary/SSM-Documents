@@ -1,1 +1,0 @@
-AWS-HelloWorldChangeTemplate_1.yaml

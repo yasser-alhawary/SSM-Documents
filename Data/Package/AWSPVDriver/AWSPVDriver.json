@@ -1,0 +1,26 @@
+{
+    "schemaVersion": "2.0",
+    "name": "AWSPVDriver",
+    "version": "8.4.2",
+    "packageArn": "arn:aws:ssm:::package/AWSPVDriver",
+    "publisher": "Amazon AWS",
+    "url": "https://amazonaws.com",
+    "packages": {
+        "windows": {
+            "_any": {
+                "x86_64": {
+                    "file": "AWSPVDriver-8.4.2.5.zip"
+                }
+            }
+        }
+    },
+    "files": {
+        "AWSPVDriver-8.4.2.5.zip": {
+            "checksums": {
+                "sha256": "a9063dc4bf65967d9ba34781a05b6c431ab0c48680224e78d2bbf90fe5f54a90"
+            },
+            "downloadLocation": "https://us-east-1-birdwatcher-prod.s3.amazonaws.com/316874961013/AWSPVDriver-8.4.2.zip"
+        }
+    }
+}	2022-04-14T20:36:08.457000+02:00	JSON	Package	17	AWSPVDriver	Active	8.4.2
+ATTACHMENTSCONTENT	a9063dc4bf65967d9ba34781a05b6c431ab0c48680224e78d2bbf90fe5f54a90	Sha256	AWSPVDriver-8.4.2.5.zip	6238341	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/b89/316874961013/AWSPVDriver%21243a450f-dd65-4757-a03d-86d42618d263/17/AWSPVDriver-8.4.2.5.zip?x-attachment-size=6238341&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENX%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJIMEYCIQD13yBwemJTeyPiUGR5e9JjvSQSfIPTlY1aO6yE03aTeQIhAOoN201rCO2NxlSTZLXzka6FAwMTt3gD0yNG1Z1Op8LgKtIECD4QAxoMMTg3MzQwNzY5NDg1IgyTM6DUTF%2BFGWhOidkqrwQurzOuhdTb7J7DwXUAGQ5pG5uah0kKXVwzQBsFS4J7U5vpE6r4flDjjvlKwl52jT1Weux4igPZeYfTphyvxRMdt6NH2fVLgu7Rc1w0xtzAfxLMisjqEY%2FwnzqEUo%2B1zPjYQ6jrFRkmNTsjyEBJfJfKNXaaYIIv7jnaa%2BcXl4yKRCf6%2BArO7Z7X%2Febd0ok4iTDm6D1vG6SDKIMpm0p%2BeGy2XfZIsDsdnx%2FxpBusgDXPMYO%2BMrzoPQaZ6oL6vIlwm1i89CTQP5OopoI0G15SRVL0jLYspSOxdfFUL0GlXIwx6dtv8wrommxAObrgLBip0Al%2Fj%2FNARO%2Bw%2B7H1SsNEUASIhk5AYkOLk7vDeUubL12CkVOHYC%2F%2FHMtfCRyvBMYMD5bcUqefaohD7h3BANy8UsP1gcFpvjhDrEZdr7lckm3nCPlf07Q1L%2FP2p8TnU1rnrGoBca2WYWlYW%2FETIRARAaK9ve87H6OudTIrzj0kGzDYwdhzam9eS6VbaNBfael3XNPb7eeZA89hpCVUbIOGoSgGoFgO4HekNpKAenk7UFlwQEOUKgwa5EAXtO3On5Vl36vUv6%2B8WYynqOcJrY2J%2FevKi5V8B3d%2FzA0JnOyQpvpoi5H7sFUkMjgEX5eMoSu1MbWqEy%2B90c%2Bc58HewSlmiDQsotQq37youA8juECJ1ECXmToDOS3zaUhsBAJSV2dClZEIRNd3%2BoYOvR0X5Bw2uTTBvWHd8a0Rp4CK3A9VxK42MJDuzJcGOqgBJX5Tfcc9AvFcwNrfQHGVdKysQE%2B5lgjSnkyFWoKqx1Gbzy8e7g2JRMtxG1mRAzwtfqVpUOh%2BaaCMs1Uy9I67GJMoA8q%2BkxaDA7RqkiBhDnRvko2E%2BP8fDiP7wNnWJUp9rVSufF92ZeknmbN0cx8xB48XQXKNG4MjJqfsesPCxS2wzVzKqCX35NjQpRdM5uOlw%2BntnRtWDLIK5u%2FiNYeubykXxaMiu9yd&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T053225Z&X-Amz-SignedHeaders=host&X-Amz-Expires=300&X-Amz-Credential=ASIASXHTBJDG3RA46O4U%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=ac38c71052a3170a6062f552105c83240ed978f821986f1e91e32e478ade6a47

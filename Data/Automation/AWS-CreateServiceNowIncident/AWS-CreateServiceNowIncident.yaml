@@ -1,0 +1,148 @@
+#
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#
+description: |
+  ### Document name - AWS-CreateServiceNowIncident
+
+  ## What does this document do?
+  This document creates an incident in the ServiceNow incident table.
+
+  ## Input Parameters
+  * ServiceNowInstanceUsername: (Required) The name of the user the incident will be created with.
+  * ServiceNowInstancePassword: (Required) The name of an encrypted SSM Parameter containing the password for the ServiceNow user.
+  * ServiceNowInstanceURL: (Required) The url of the ServiceNow instance.
+  * ShortDescription: (Required) A brief description of the incident.
+  * Description: (Required) A detailed explanation on the incident.
+  * [Impact](https://docs.servicenow.com/bundle/helsinki-it-service-management/page/product/incident-management/reference/r_PrioritizationOfIncidents.html): (Optional) The effect an incident has on business:
+    * Valid Values: High | Medium | Low
+    * Default: Low
+  * [Urgency](https://docs.servicenow.com/bundle/helsinki-it-service-management/page/product/incident-management/reference/r_PrioritizationOfIncidents.html): (Optional) The extent to which the incident's resolution can bear delay:
+    * Valid Values: High | Medium | Low
+    * Default: Low
+  * [Category](https://docs.servicenow.com/bundle/newyork-it-service-management/page/product/incident-management/reference/r_CategorizingIncidents.html): (Optional) The category  of the incident.
+    * Valid Values: None | Inquiry/Help | Software | Hardware | Network | Database
+    * Default: None
+  * [Subcategory](https://docs.servicenow.com/bundle/newyork-it-service-management/page/product/incident-management/reference/r_CategorizingIncidents.html): (Optional) The subcategory of the incident.
+    * Valid Values: None | Antivirus | Email | Internal Application | Operating System | CPU | Disk | Keyboard | Hardware | Memory | Monitor | Mouse | DHCP | DNS | IP Address | VPN | Wireless | DB2 | MS SQL Server | Oracle
+    * Default: None
+  * AutomationAssumeRole: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+
+  ## Output parameters
+  * Push_incident.incidentID: The created incident ID.
+schemaVersion: '0.3'
+assumeRole: '{{AutomationAssumeRole}}'
+parameters:
+  ServiceNowInstanceUsername:
+    type: String
+    description: (Required) The name of the user the incident will be created with.
+  ServiceNowInstancePassword:
+    type: String
+    description: (Required) The name of an encrypted SSM Parameter containing the password for the ServiceNow user.
+  ServiceNowInstanceURL:
+    type: String
+    description: (Required) The url of the ServiceNow instance.
+  ShortDescription:
+    type: String
+    description: (Required) A brief description of the incident.
+  Description:
+    type: String
+    description: (Required) A detailed explanation on the incident.
+  Impact:
+    type: String
+    default: Low
+    description: (Optional) The effect an incident has on business.
+    allowedValues:
+      - Low
+      - Medium
+      - High
+  Urgency:
+    type: String
+    default: Low
+    description: (Optional) The extent to which the incident's resolution can bear delay.
+    allowedValues:
+      - Low
+      - Medium
+      - High
+  Category :
+    type: String
+    default: None
+    description: (Optional) The category of the incident.
+    allowedValues:
+    - None
+    - Inquiry / Help
+    - Software
+    - Hardware
+    - Network
+    - Database
+  Subcategory:
+    type: String
+    default: None
+    description: (Optional) The subcategory of the incident.
+    allowedValues:
+    - None
+    - Antivirus
+    - Email
+    - Internal Application
+    - Operating System
+    - CPU
+    - Disk
+    - Keyboard
+    - Hardware
+    - Memory
+    - Monitor
+    - Mouse
+    - DHCP
+    - DNS
+    - IP Address
+    - VPN
+    - Wireless
+    - DB2
+    - MS SQL Server
+    - Oracle
+  AutomationAssumeRole:
+    type: String
+    description: (Optional) The ARN of the role that allows Automation to perform the actions on your behalf.
+    default: ''
+outputs:
+  - Push_incident.incidentID
+mainSteps:
+  - name: Push_incident
+    action: 'aws:executeScript'
+    outputs:
+      - Name: incidentID
+        Selector: $.Payload.id
+        Type: String
+    inputs:
+      Runtime: python3.8
+      InputPayload:
+        username: '{{ ServiceNowInstanceUsername }}'
+        password: '{{ ServiceNowInstancePassword }}'
+        url: '{{ ServiceNowInstanceURL }}'
+        impact: '{{ Impact }}'
+        urgency: '{{ Urgency }}'
+        short_description: '{{ ShortDescription }}'
+        description: '{{ Description }}'
+        category: '{{ Category }}'
+        subcategory: '{{ Subcategory }}'
+      Handler: function.script_handler
+      Attachment: function.zip
+files:
+  function.zip:
+    checksums:
+      sha256: 6f528ffab34b3f37c2deba99ecd5ab5f3d4b94583f4781ac3f4a95373cc41652
+    size: 5809425
+	2022-06-22T19:08:48.832000+02:00	YAML	Automation	1	AWS-CreateServiceNowIncident	Active
+ATTACHMENTSCONTENT	6f528ffab34b3f37c2deba99ecd5ab5f3d4b94583f4781ac3f4a95373cc41652	Sha256	function.zip	5809425	https://aws-ssm-document-attachments-us-east-1.s3.us-east-1.amazonaws.com/440/458218037161/Automation/AWS-CreateServiceNowIncident%21fdc6bb45-8e39-4106-82fa-b9b0cb35b2ab/6/function.zip?x-attachment-size=5809425&x-requester-accountId=341329434541&X-Amz-Security-Token=IQoJb3JpZ2luX2VjENL%2F%2F%2F%2F%2F%2F%2F%2F%2F%2FwEaCXVzLWVhc3QtMSJIMEYCIQCgJv8bIAdXviBg8iiR7OkGOLE5qygwwUJS9EvlI9SOnAIhAJl8m3f2cgaD20%2FfGQNeSHF5BlZ%2FM1718TjkmGBhU53cKtMECDsQAxoMMTg3MzQwNzY5NDg1IgwMEKL%2BhV7QQQROi44qsARRgeGJuWhWBBUyXCoMS%2Fk6zAX3JJj%2FluDwSG7%2Buy1NW5qCKGQz%2FgH%2BJfDh9SxDrrOf5nidcXX9XyLB7jMBIypC6tw6CAuHVuzgjDozT9Wm9lC50mDkoBHWGDo1m13JdxVt7mX%2FRLe0kWhrcEups5FzKGcgiY6OAYcmO16e0gHD4uOvash1DcVvCJ2dS0Mot5H9Rr2NYHLyf%2BMGpZO8fdS4Jl5z0qk0JRlzEJuguAJqrmaJyl4Y0wXp%2B2kBnNjQ8Jvp3PtjB8oETJVBThgl43GFhMNuEoda%2FLNSum4GWC1GT75DyJu82cKTH%2BF%2FGrMJPh%2Fs740mQuy9WN2CAKB7r6%2F7t0G0TFPZ7ehhMAIoZcvpQpGz6muLCd0RCfX4ruyHwjKxXXAbUXi7NdsGpIoewU11TpWQ5CdLeoCkotpw7Mshq%2BCOoQSBsgFS5hO3gMtMvaUxy4egGJs90vRwkG4MIgNbAMC7fbhzxQ6XtWAb2luQLVtCGs681AbUlWZCn%2Bx5FP1yHCqaIZIUVYSzKEiIFkpUiKine5vWvid1kQ9DOIgMo5g0NlzutFVmY0nyaCElqlQRrOqEjhxjaMgeLB2XCkH4T1OhafUvp627ve6UMPqpVHfvv0ui%2BAVEfImuZ7JZxB5VT2kvO13Rq7h3FWHbYaejFpBPy%2FPxkUfZg%2BEAfPZowK3agb6cwMwjplCikKwH8nyUXVDEeVxOIBL8yaAFxmk%2F%2BVGnb6oZxmtYmKwAmNuNuDDAocyXBjqoAXZvpLB2MkxdX9bt8dmEqKxdZw7jNateV4sXMzbwcuyIonO4UQzvIdtdqjhqyxO7Frv44dVy39j8y2FR6kGUF%2BOltqji7YOVI7yyzdgRL3SwtLrgfGdyD9tOyQHp6GSwRw2Tf%2BonlXb4%2Fxfm74jgCkUeHdSvXsCoWL6KBJwo3k2fXTi9tkpNK%2BZB8wnM8s8qNTa9QnumU7ZJRV7S4WWq%2F3ytzD6S6SWu5g%3D%3D&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20220810T031803Z&X-Amz-SignedHeaders=host&X-Amz-Expires=86400&X-Amz-Credential=ASIASXHTBJDGZ3QBJ343%2F20220810%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=7e5c873b71856a51c7e9e434667cf0a018500bec07ed59298747c8b3790c1511
